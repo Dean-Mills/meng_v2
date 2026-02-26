@@ -1,0 +1,42 @@
+\section{Datasets}
+
+Progress in human pose estimation and tracking has been driven by a variety of
+data sets that differ in scale, keypoint layout, media type (static images
+versus video sequences), and scene complexity. The MPII Human Pose data set
+provides roughly 25\,000 images with sixteen annotated joints collected from
+everyday activities \cite{andriluka14cvpr}, whereas MS~COCO supplies more than
+200\,000 images and 250\,000 person instances labelled with seventeen
+keypoints, covering a wide range of body sizes, viewpoints, and occlusion
+patterns \cite{lin2014microsoft}.
+
+For the present study the primary requirement is a large, widely adopted data
+set that follows the standard seventeen-joint schema and includes multi-person
+annotations; MS~COCO satisfies these criteria and therefore serves as the main
+benchmark. Additional data sets listed in Table~\ref{tab:datasets} remain
+valuable for several reasons: CrowdPose \cite{li2019crowdpose} and PoseTrack
+\cite{andriluka2018posetrack} feature dense crowds; COCO-WholeBody
+\cite{jin2020whole} and Halpe \cite{alphapose} extend the annotation to hands,
+feet, and facial landmarks, enabling experiments on fine-grained keypoints; and
+video-based sets such as JTA \cite{fabbri2018learning} and 3DPW
+\cite{vonMarcard2018} offer temporal information for sequence tracking.
+
+\begin{table}[H] \centering \begin{tabular}{|l|c|c|c|} \hline \textbf{Dataset}
+& \textbf{Images/Sequences} & \textbf{\# Keypoints} & \textbf{Multi-person} \\
+\hline MPII \cite{andriluka14cvpr} & 25K & 16 & \checkmark \\ \hline MPII-TRB
+\cite{duan2019trb} & 25K & 40 & \checkmark \\ \hline CrowdPose
+\cite{li2019crowdpose} & 20K & 14 & \checkmark \\ \hline PoseTrack
+\cite{andriluka2018posetrack} & 23K & 15 & \checkmark \\ \hline AI Challenger
+\cite{wu2017ai} & 300K & 14 & \checkmark \\ \hline COCO \cite{lin2014microsoft}
+& 200K & 17 & \checkmark \\ \hline Halpe \cite{alphapose} & 43K & 136 &
+\checkmark \\ \hline COCO-WholeBody \cite{jin2020whole} & 200K & 133 (17 body)
+& \checkmark \\ \hline FLIC \cite{sapp2013modec} & 5K & 10 & \\ \hline LSP
+\cite{johnson2010clustered} & 2K & 14 & \\ \hline Human3.6M
+\cite{ionescu2013human3} & 3.6M & 32 & \\ \hline
+%https://github.com/chaneyddtt/Generating-Multiple-Hypotheses-for-3D-Human-Pose-Estimation-with-Mixture-Density-Network/issues/12
+MPI-INF-3DHP \cite{mehta2017monocular} & 1.3M & 29 & \\ \hline SURREAL
+\cite{varol17_surreal} & 6M & 24 & \\ \hline JTA \cite{fabbri2018learning} &
+512 videos & 21 & \checkmark \\ \hline 3DPW \cite{vonMarcard2018} & 60
+sequences & 17 & \checkmark \\ \hline MARCOnI \cite{EEJTP15} & 12 sequences &
+25 & \checkmark (not all sequences) \\ \hline TUM Kitchen \cite{tenorth2009tum}
+& 20 sequences & 28 & \\ \hline \end{tabular} \caption{Summary of key human
+pose estimation datasets.} \label{tab:datasets} \end{table}

@@ -1,0 +1,35 @@
+
+   MEng / PhD Research Proposal
+   Department of Electrical, Electronic and Computer Engineering
+
+NOTE: This template is for students who HAVE completed EIN732.
+      Students who have not completed EIN732 must use the alternative
+      template available on the departmental website.
+
+Prospective MEng and PhD students must submit a document in which the
+proposed research is explained. The proposal document must adhere to
+specific formatting guidelines otherwise the proposal will not be
+considered.  This package includes a LaTeX class file and template
+document which will allow a research proposal to be generated based on
+the required format.
+
+The template requires a standard LaTeX installation such as MiTeX
+under Windows, or TexLive under Linux. In the case of MiTeX additional
+packages will need to be installed and this should happen
+automatically. The additional packages are: fancyhdr and titlesec.
+
+To create a research proposal using this template, edit the main file
+research_proposal.tex. The title page of the research proposal is
+created automatically based on macros at the top of the
+research_proposal.tex file.  These macros must be updated
+appropriately. Note that the "\rptype" macro must be either "MEng" or
+"PhD" and the study leader designation will be automatically be
+updated. The bulk of the research proposal content should be entered
+in the "content.tex" file. The file already contains all the required
+headings / sections and these should not be altered.
+
+A standard Makefile is included that will generate the output PDF
+file. A Windows TeXnicCenter project file is also included.
+
+NOTE: Remember to attach the EIN732 research proposal (final assignment)
+      to this research proposal as part of the submission.

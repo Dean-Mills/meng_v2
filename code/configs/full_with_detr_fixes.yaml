@@ -1,0 +1,65 @@
+name: "full_with_detr_fixes"
+description: "Full pipeline with orthogonal init, aux losses, query LR, count head"
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 128
+  output_dim: 128
+  num_layers: 3
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+
+detr:
+  embedding_dim: 128
+  max_people: 10
+  num_decoder_layers: 3
+  num_heads: 8
+  ffn_dim: 512
+  dropout: 0.1
+  num_joint_types: 17
+  num_null_tokens: 8                  # Learnable background tokens in memory
+
+loss:
+  lambda_existence: 1.0
+  lambda_assignment: 5.0
+  lambda_contrastive: 2.0
+  lambda_count: 2.0
+  lambda_auxiliary: 1.0          # NEW: intermediate layer supervision
+  contrastive_margin: 0.5
+  label_smoothing: 0.0
+
+trainer:
+  mode: "full"
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  warmup_epochs: 5
+  min_lr: 0.000001
+  query_lr_multiplier: 10.0      # NEW: person queries learn 10x faster
+  epochs: 200
+  batch_size: 4
+  print_every_n_epochs: 1
+  visualize_every_n_epochs: 10
+  checkpoint_every_n_epochs: 25
+  compute_clustering_metrics: true
+
+data:
+  split: "mixed"
+  test_split: "mixed_test"
+  image_size: 512
+  k_neighbors: 8
+  min_visibility: 0
+  num_workers: 4
+  shuffle: true
+
+eval:
+  existence_threshold: 0.5
+  use_count_head: false               # Don't use learned count head
+  selection_method: "confidence"       # "confidence" (best), "existence", or "all"
+  save_visualizations: true
+  max_visualizations: 20
+  compute_per_joint_metrics: true

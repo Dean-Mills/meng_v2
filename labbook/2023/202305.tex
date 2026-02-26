@@ -1,0 +1,37 @@
+\chapter[2023 May]{May 2023}
+
+\section[2023/05/01]{Someday, 1 May 2023}
+\label{sec:20230501}
+
+\lipsum
+\begin{align}
+  \m{QX} \m{a} & = \m{Qy} \notag \\
+  \therefore \quad (\m{QX})^T \m{QX} \m{a} & = (\m{QX})^T \m{Qy} \notag \\
+  \therefore \quad \m{a} & = \left( (\m{QX})^T \m{QX} \right)^{-1} (\m{QX})^T \m{Qy} \notag \\
+        & = \left( \mt{X} \mt{Q} \m{QX} \right)^{-1} \mt{X} \mt{Q} \m{Qy} \notag \\
+        & = \left( \mt{X} \m{W} \m{X} \right)^{-1} \mt{X} \m{W} \m{y}
+          \label{eqn:weightedleastsquares}
+\end{align}
+A subsection a subsection a subsection a subsection a subsection a
+subsection a subsection a subsection a subsection a subsection a
+subsection a subsection a subsection a subsection a subsection.
+$\mathcal O$
+
+\pendsign
+
+\section[2023/05/02]{Someday, 2 May 2023}
+
+\begin{lstlisting}[language=Python,title={Monte Carlo approximation of $\pi$}]
+import random
+import math
+
+count_inside = 0
+
+for count in range(0, 10000):
+    d = math.hypot(random.random(), random.random())
+    if d < 1:
+        count_inside += 1
+count += 1
+print("%0.8f" % (4.0 * count_inside / count))
+\end{lstlisting}
+

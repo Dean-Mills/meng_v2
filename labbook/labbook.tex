@@ -1,0 +1,128 @@
+%%
+%%  ISG@UP Lab Book Document Class.
+%%  Copyright (C) 2014-2023, University of Pretoria.
+%%
+
+%% Control directives for rubber LaTeX build system
+% rubber: makeidx.style isglabbook.ist
+
+\documentclass[11pt,a4paper]{isglabbook}
+
+%% Document specific overrides.
+\newcommand{\doctype}{Lab Book}
+\newcommand{\docauthor}{Dean Mills}
+\newcommand{\docstudentnumber}{13081650}
+
+\usepackage{longtable, booktabs}
+
+%% Configure PDF information
+\hypersetup{
+  pdftitle={\doctype},
+  pdfauthor={\docauthor\ - \docstudentnumber},
+  pdfsubject={\eeceup},
+  pdfkeywords={\doctype}
+}
+
+%% Custom styles for lstlisting (bash and python is probably all I'm going to need) 
+\lstdefinestyle{pythonstyle}{
+  language=Python,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{orange},
+  breaklines=true,
+  showstringspaces=false,
+  tabsize=4,
+  columns=fullflexible,
+}
+
+\lstdefinestyle{bashstyle}{
+  language=bash,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{teal},
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{orange},
+  breaklines=true,
+  showstringspaces=false,
+  tabsize=4,
+  columns=fullflexible,
+}
+
+\lstdefinestyle{jsonstyle}{
+  language=json,
+  basicstyle=\ttfamily\small,
+  stringstyle=\color{orange},
+  numberstyle=\tiny\color{gray},
+  numbers=left,
+  stepnumber=1,
+  numbersep=8pt,
+  showstringspaces=false,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{black},
+  backgroundcolor=\color{gray!5},
+  literate=
+   *{0}{{{\color{blue}0}}}{1}
+    {1}{{{\color{blue}1}}}{1}
+    {2}{{{\color{blue}2}}}{1}
+    {3}{{{\color{blue}3}}}{1}
+    {4}{{{\color{blue}4}}}{1}
+    {5}{{{\color{blue}5}}}{1}
+    {6}{{{\color{blue}6}}}{1}
+    {7}{{{\color{blue}7}}}{1}
+    {8}{{{\color{blue}8}}}{1}
+    {9}{{{\color{blue}9}}}{1}
+}
+
+%% Switch to package specific header/footer format
+\pagestyle{fancyisg}
+
+\begin{document}
+\pagenumbering{arabic}
+
+% Front Matter
+\input{title}
+
+% Table / Lists
+\pdfbookmark[1]{Contents}{sec:toc}
+{\small\cmbrfamily\tableofcontents}
+\newpage
+
+%% Document Body
+\renewcommand{\baselinestretch}{1.5}
+% \subimport{2023/}{202304}
+% \subimport{2023/}{202305}
+
+
+%% 2025
+% \subimport{2025/}{202503}
+% \subimport{2025/}{202504}
+% \subimport{2025/}{202505}
+% \subimport{2025/}{202506}
+\subimport{2025/}{202507}
+\subimport{2025/}{202508}
+\subimport{2025/}{202510}
+\subimport{2025/}{202511}
+
+%% Appendices
+\newpage
+\appendix
+\appendixpage
+\addappheadtotoc
+\input{acros}
+
+%% Bibliography
+\newpage
+\addcontentsline{toc}{chapter}{References}
+\bibliographystyle{ieeetr}
+\bibliography{references}
+
+%% Back Matter / Index
+\newpage
+\addcontentsline{toc}{chapter}{Index}
+\printindex
+
+%% The End
+\end{document}
+
+%% End of File.

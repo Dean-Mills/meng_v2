@@ -1,0 +1,39 @@
+\section{Methodology}
+
+The proposed pipeline operates on single images and proceeds in four stages:
+(1) keypoint and depth extraction, (2) graph construction, (3) depth-aware
+Graph Attention Network (GAT) training, and (4) inference and post-processing.
+
+\paragraph*{1. Keypoint and depth extraction} An off-the-shelf pose detector
+predicts the 2-D coordinates, confidence scores, and joint types for every
+visible keypoint. In parallel, a monocular depth estimator produces a dense
+depth map; the depth value at each joint location is sampled and attached to
+that joint. The pipeline is detector-agnostic: it assumes the COCO
+seventeen-joint layout only for convenience, because that schema is widely
+used. A detector trained on a different skeleton would work equally well.
+
+\paragraph*{2. Graph construction} Each joint becomes
+a node with features $\mathbf{n}_i=[x_i,\,y_i,\,d_i,\,c_i,\,\mathbf{e}_{t_i}]$,
+where $(x_i,y_i)$ are image coordinates, $d_i$ is depth, $c_i$ is detection
+confidence, and $\mathbf{e}_{t_i}$ is a learned joint-type embedding.
+Undirected edges connect node pairs whose Euclidean distance is below $\tau_r$.
+Every edge carries an affinity vector
+$\mathbf{a}_{ij}=[r_{ij},\,|d_i-d_j|,\,\cos\theta_{ij},\,c_i c_j]$ that
+summarises spatial distance, depth difference, local orientation, and combined
+confidence.
+
+\paragraph*{3. GAT training} Using annotated images that label every joint with
+a person identifier, the edge classifier inside the GAT is trained to predict
+whether two connected joints belong to the same individual. A binary
+cross-entropy loss supervises this prediction. Message passing propagates
+information along the graph, and multi-head attention weights emphasise certain
+edges. The graph representation is quite compact. Only a few values per joint
+rather than dense heat-maps which means training fits comfortably in GPU memory
+and converges quickly.
+
+\paragraph*{4. Inference and post-processing} A pose detector
+supplies the 2-D joint coordinates and a depth estimator adds a depth value to
+each joint. These joint features pass through the trained GAT, which labels the
+edges that link joints belonging to the same person. A simple grouping step
+then gathers each joint set into an individual skeleton, and the resulting
+skeletons are drawn back onto the image for visual inspection.

@@ -1,0 +1,69 @@
+%%
+%%  Department of Electrical, Electronic and Computer Engineering
+%%  MEng / PhD Research Proposal - Content
+%%  Copyright (C) 2011-2017 University of Pretoria.
+%%
+
+{\Large\bfseries Summary Page}
+\section{Research questions}
+\begin{compactitem}
+    \item \textbf{Depth utility}:  
+    To what extent does attaching monocular depth to each joint improve joint-to-person assignment accuracy compared with using 2-D coordinates alone?
+    \item \textbf{Edge design}:  
+    Which combination of edge attributes -- spatial distance, depth difference, orientation, and confidence product -- yields the best trade-off between accuracy and model size?
+    \item \textbf{Model efficiency}:  
+    How much does the compact, graph-based feature space reduce training time and inference latency relative to heat-map-based baselines of comparable accuracy?
+    \item \textbf{Detector dependence}:  
+    How sensitive is the depth-aware GAT to the choice of front-end keypoint detector (e.g. lightweight CNN head versus transformer backbone)?
+    \item \textbf{Crowded-scene robustness}:  
+    Under what crowd densities and occlusion levels does the proposed method maintain accurate tracking, and where does performance begin to degrade?
+\end{compactitem}
+
+\section{Approach} A standard pose detector first predicts the 2-D coordinates,
+confidence scores, and joint types for every keypoint in an image, while a
+monocular depth network provides a dense depth map. Each joint is then
+represented as a node feature
+$\mathbf{n}_i=[x_i,\,y_i,\,d_i,\,c_i,\,\mathbf{e}_{t_i}]$, and edges connect
+spatially close joints with an affinity vector
+$\mathbf{a}_{ij}=[r_{ij},\,|d_i-d_j|,\,\cos\theta_{ij},\,c_i c_j]$. A
+depth-aware Graph Attention Network (GAT) uses these node and edge attributes
+to predict whether neighbouring joints belong to the same person; Because the
+graph contains only a few values per joint, training fits comfortably in GPU
+memory and inference runs in real time. The framework is detector-agnostic:
+changing the keypoint front-end (or joint schema) requires only retraining the
+GAT, not redesigning the pipeline.
+
+\section{Contribution}
+
+The study will deliver
+\begin{compactitem}
+    \item a depth-augmented graph for multi-person pose tracking that unifies 2-D coordinates and monocular depth;
+    \item a lightweight, detector-agnostic GAT that performs joint grouping without dense heat-maps, reducing memory use and computation;
+    \item an analysis of depth cues, edge designs, and detector choices on tracking accuracy, runtime, and scalability;
+\end{compactitem}
+
+\section{Potential peer reviewed journal articles} \underline{Target journal:}
+Computer Vision and Image Understanding \newline \underline{Preliminary title:}
+Depth-Aware Graph Attention for Detector-Agnostic Multi-Person Pose
+Tracking\newline \underline{Description:} This article will present a
+graph-based pose-tracking framework that enriches each detected keypoint with
+monocular depth and leverages a depth-aware Graph Attention Network to assign
+joints to individuals in crowded scenes. The study will report systematic
+experiments on MS-COCO and crowd focused benchmarks, highlighting the
+trade-offs achieved by the proposed method. \newline
+
+\newpage
+
+\section*{Contact Information}
+
+\begin{center}
+\begin{tabular}{lp{11.5cm}}
+  Postal Address:   & 1179 Carter Avenue, Queenswood \\
+                    & Pretoria \\
+                    & 0181 \\[1.2ex]
+  E-mail:           & u13081650@tuks.co.za \\[1.2ex]
+  Tel number:       & 0734548579 \\[1.2ex]
+  Fax number:       & N/A \\[1.2ex]
+  Cell number:      & 0734548579 \\
+\end{tabular}
+\end{center}

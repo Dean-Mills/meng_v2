@@ -1,0 +1,104 @@
+\section{Metrics Used in Pose Estimation and Tracking}
+Evaluating the performance of pose estimation and tracking models involves a
+variety of metrics, each designed to measure the accuracy and effectiveness of
+predicted joint positions and overall tracking performance. These metrics
+revolve around the accuracy of the predicted points compared to the ground
+truth, assessing how well the model identifies and tracks keypoints across
+images or video sequences.
+
+\subsection{Pose Estimation Metrics}
+Pose estimation metrics primarily focus on the accuracy of detecting individual
+body joints. Below are some of the key metrics used in the evaluation of pose
+estimation:
+
+\textbf{Percentage of Correct Parts (PCP)} \cite{kiefel2014human}: Initially a
+standard in the field, PCP measures the accuracy of limb detection. A limb is
+considered correctly detected if the distance between the predicted and actual
+joint positions is less than half the limb's length. However, PCP has been
+criticized for its bias against shorter limbs, leading to its decline in
+popularity.
+
+\textbf{Percentage of Detected Joints (PDJ)} \cite{abobakr2016body}: PDJ was
+developed to address the limitations of PCP. It measures the accuracy of joint
+detection based on the proximity of the predicted joint to its true position,
+relative to the torso's diameter. This metric allows for different levels of
+localization precision by adjusting the acceptable error threshold.
+
+\textbf{Percentage of Correct Keypoints (PCK)} \cite{gouidis2019accurate}:
+Similar to PDJ, PCK evaluates the proximity of predicted joint locations to
+their true counterparts but uses the maximum dimension of the ground truth
+bounding box as the reference. This metric provides a measure of localization
+accuracy for body joints.
+
+\textbf{PCKh} \cite{andriluka20142d}: An adaptation of PCK, PCKh uses the head
+segment length to normalize the matching threshold, accounting for individual
+size differences. The threshold is set at 50\% of the head segment length,
+promoting a size-independent evaluation of joint detection accuracy.
+
+\textbf{Area Under the Curve (AUC)} \cite{guler2018densepose}: This metric
+reviews the model's performance across varying PCK thresholds, illustrating its
+capability to accurately localize body joints over a range of precision levels.
+
+\textbf{Object Keypoint Similarity (OKS) \cite{maji2022yolo}}: Analogous to
+Intersection over Union (IoU) \cite{rezatofighi2019generalized} in object
+detection, OKS assesses how closely the predicted keypoints match the actual
+data points, emphasizing the quality of overlap between predicted and true
+keypoints.
+
+\subsection{Pose Tracking Metrics}
+For multi-person pose tracking, additional metrics are used to evaluate the
+accuracy of tracking across frames in a video sequence. These metrics are
+derived from Multiple Object Tracking (MOT) metrics \cite{milan2016mot16} and
+focus on how well the model maintains the identity and position of detected
+joints over time:
+
+\textbf{Multiple Object Tracking Accuracy (MOTA)}
+\cite{bernardin2008evaluating}: MOTA is a metric used to evaluate the overall
+performance of a tracking system. It takes into account three key factors: false
+positives (when the system incorrectly identifies a non-existent object), false
+negatives (when the system fails to detect an actual object), and identity
+switches (when the system mistakenly assigns a different identity to an already
+tracked object). By considering these factors, MOTA provides a comprehensive
+assessment of the system's accuracy. It calculates this accuracy by averaging
+the tracking performance for each joint across all body joints, making it an
+important measure of how effectively the model tracks multiple people over time.
+
+\textbf{Multiple Object Tracking Precision (MOTP)}
+\cite{bernardin2008evaluating}: MOTP measures the precision of the predicted
+joint positions relative to the ground truth, focusing on how accurately the
+model tracks the position of each joint. High MOTP values indicate that the
+predicted joint locations are close to their true positions.
+
+\textbf{Precision and Recall}: These metrics evaluate the proportion of
+correctly identified joints (Precision) and the proportion of true joints
+correctly detected (Recall) (The Average Precision and Average Recall metrics
+used in \cite{Chen_2018_CVPR}). High precision and recall indicate that the
+model is effective at detecting and tracking body joints without missing or
+incorrectly identifying them.
+
+\textbf{Mean Average Precision (mAP)}: Mean Average Precision (mAP) is employed
+to assess frame-wise multi-person pose accuracy, as described in
+\cite{pishchulin2016deepcut}. The mAP metric evaluates how accurately each
+person is detected and localized within a frame, accounting for both detection
+and localization errors. Traditionally, mAP evaluation depends on knowing the
+location and rough scale of a group of individuals during evaluation. However,
+in realistic scenarios, particularly in video contexts, such ground-truth
+information is rarely available.
+
+These metrics collectively provide a comprehensive framework for evaluating the
+performance of multi-person pose tracking models. By combining measures of
+accuracy, precision, and recall with the mAP metric, these evaluations offer
+insights into both the localization and tracking capabilities of the models
+across complex and dynamic video sequences.
+
+\subsection{Challenges in Multi-Person Pose Tracking}
+The evaluation of multi-person pose tracking models reveals that tracking
+accuracy significantly decreases with the increased complexity of video
+sequences/images. Simple data with clearly separated individuals in upright poses
+generally result in high tracking accuracy, while data involving
+overlapping individuals, fast movements, and complex body articulations tend to
+challenge the tracking algorithms, leading to lower MOTA scores. The
+relationship between pose estimation accuracy and tracking performance often
+shows that better pose estimation corresponds to better tracking, though there
+are exceptions where accurate pose estimation does not translate to effective
+tracking due to the challenges posed by complex scenes.

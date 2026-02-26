@@ -1,0 +1,86 @@
+\section{Introduction}
+Human pose estimation refers to the task of locating the principal body
+joints—such as elbows, knees, and shoulders—within an image. The exact list of
+joints depends on the data set: \textsc{COCO-WholeBody} annotates seventeen
+body keypoints in addition to detailed hand, foot, and face landmarks
+\cite{jin2020whole}, whereas the Leeds Sports Pose data set provides fourteen
+body keypoints \cite{johnson2010clustered}. Over the past decade the field has
+converged on two broad pipelines. In a \emph{top-down} pipeline, each person is
+first enclosed in a bounding box and the keypoints are predicted inside that
+region; in a \emph{bottom-up} pipeline, every visible joint is detected in a
+single pass and a grouping stage later assembles them into individual
+skeletons. Before the deep-learning era, solutions combined handcrafted image
+descriptors with relatively shallow learners. Examples include relevance-vector
+machines \cite{tipping2001sparse}, mixtures of experts
+\cite{sigal2006predicting}, locality-constrained coding
+\cite{wang2010locality}, relevant-component analysis \cite{kanaujia2007semi},
+bag-of-words representations \cite{ning2008discriminative}, random forests
+\cite{chang2013fast}, Hough forests \cite{girshick2011efficient}, pixel- and
+superpixel-level models \cite{wang2011multi}, and motion cues
+\cite{sapp2013modec}. While these methods laid the essential groundwork,
+limited representational capacity hampered their performance and they naturally
+struggled to compete with more modern approaches.
+
+Deep convolutional networks (CNNs) \cite{lecun1998gradient} transformed the
+task by learning features directly from data. \textsc{DeepPose} (revolutionary
+at the time) \cite{toshev2014deeppose}, based on the eight-layer AlexNet
+backbone \cite{krizhevsky2012imagenet}, was the first model to show that an
+end-to-end CNN could localise human joints reliably. Subsequent architectures
+escalated both depth and representational capacity: VGGnet with 16-19 layers
+\cite{simonyan2014very}; ResNet with 50, 101, or 152 layers linked by residual
+shortcuts \cite{he2016deep}; and, later, High-Resolution Networks (HRNet) that
+maintain parallel feature streams at multiple resolutions throughout the
+network \cite{sun2019deep}. On top of these backbones, researchers introduced
+multi-stage refinement modules that progressively sharpen coarse heat-maps into
+precise keypoint locations—examples include Convolutional Pose Machines
+\cite{wei2016convolutional}, stacked hourglass networks
+\cite{newell2016stacked}, and the part-affinity field branch used by
+\textsc{OpenPose} \cite{cao2017realtime}. Additional variants (all using some
+convolution backbone), such as Cascade Feature Aggregation
+\cite{su2019cascade}, SimpleBaseline \cite{xiao2018simple}, and the Cascaded
+Pyramid Network \cite{chen2018cascaded}, improved accuracy, but each gain was
+accompanied by additional layers, parameters, and computational cost (this is a
+relatively broad statement but it does describe the trend).
+
+More recently, vision transformers have emerged as a versatile alternative to
+convolutional backbones, replacing local convolution with multi-head
+self-attention so that every image patch -- or any intermediate "token" standing
+in for a joint -- can exchange information with all others in a single layer
+\cite{vaswani2017attention}. In practice the image (or a coarse set of
+heat-maps) is converted into a token sequence, processed by stacked transformer
+blocks that model long-range dependencies, and then decoded back into keypoint
+coordinates. Variations on this theme include \textsc{TokenPose}, which
+attaches a learnable token to each joint and passes the sequence through a
+transformer encoder \cite{li2021tokenpose}; \textsc{HRFormer}, which retains
+HRNet's multi-resolution branches but fuses them with windowed attention
+\cite{yuan2021hrformer}; and \textsc{ViTPose}, which drops the convolutional
+stem entirely and shows that a plain Vision Transformer can match or surpass
+CNN baselines when enough data are available \cite{xu2022vitpose}. Transformer
+backbones are offered in graded sizes -- small models that run in real time on
+consumer GPUs, medium models that balance speed and accuracy, and large models
+whose parameter counts approach a billion or more -- so speed/accuracy trade-offs
+can be made by selecting a lighter or heavier version of the \emph{same
+architecture} rather than rebuilding the entire network.
+
+Depth cues provide a complementary signal that helps disambiguate overlapping
+limbs. Monocular predictors such as \textsc{MiDaS}, trained on a broad
+collection of real-world data sets \cite{ranftl2021robust,ranftl2022dense}, and
+\textsc{ZoeDepth}, which mixes real and synthetic images to widen scene
+coverage \cite{khattak2023zoedepth}, now produce accurate, scale-consistent
+depth maps with a single forward pass. Attaching the estimated depth value to
+each keypoint effectively lifts the 2-D skeleton into 2.5-D space, offering
+geometric context that pure image coordinates lack.
+
+Multi-person scenes remain challenging because joints belonging to different
+individuals often overlap or lie in close proximity, making \emph{pose
+tracking} -- the task of grouping detected joints into the correct person-specific
+skeletons -- non-trivial. One approach is to represent the estimated skeleton as a
+graph in which each node corresponds to a joint and each edge encodes spatial
+or geometric relationships between joints; a Graph Attention Network (GAT) then
+learns attention weights that highlight the most informative neighbours
+\cite{velivckovic2017graph}. This paper proposes a \emph{depth-aware} GAT that
+combines 2-D image coordinates with per-joint depth values, remains
+detector-agnostic -- able to consume keypoints from either a lightweight ResNet
+heat-map head or a transformer front-end (as examples) -- and is designed to
+improve the accuracy and real-time performance of pose tracking in crowded
+scenes.

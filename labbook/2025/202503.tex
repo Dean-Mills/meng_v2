@@ -1,0 +1,328 @@
+\chapter[2025 March]{March 2025}
+
+\section[2025/03/12]{Wednesday, 12 March 2025}
+\label{sec:20250312}
+
+This is some guidance on how to use the labbook
+
+\subsection{Section Labels}
+
+You can use label with sec:name to label specific sections
+
+\subsection{Notes}
+
+Use slantnote
+
+\begin{slantnote}
+	This is an example note
+\end{slantnote}
+
+\subsection{Ending day}
+
+Use pendsign to end a day
+
+\subsection{Bullet points}
+
+There are a number of ways to do this
+
+These notes use compactitem but itemize, enumerate and description
+
+CompatctItem:
+
+\begin{compactitem}
+	\item compact item 1
+	\item compact item 2
+\end{compactitem}
+
+Itemize:
+
+\begin{itemize}
+	\item itemize item 1
+	\item itemize item 2
+\end{itemize}
+
+Enumerate:
+
+\begin{enumerate}
+	\item enumerate item 1
+	\item enumerate item 2
+\end{enumerate}
+
+Description:
+
+\begin{description}
+	\item[Item 1] something about item 1
+	\item[Item 2] something about item 2
+\end{description}
+
+\subsection{Acronyms}
+
+Use ac for acronyms (add any acornyms to the acros.tex file).
+An example acronym would be \ac{EM}
+
+\subsection{Index}
+
+Use bidx for indexing terms that are important.
+You can also use index (feel like index is better suited here).
+An example of using an index is \index{SLAM}
+
+\subsection{Referencing}
+
+\begin{compactitem}
+	\item using href so \href{www.google.com}{google}
+	\item using normal cite \cite{marr_aa_2010}
+\end{compactitem}
+
+\subsection{TODO}
+
+Use todoredefined
+
+\todoredefined{This is a todo}
+
+\subsection{Equations}
+
+Equations like you normally would using begin{equation}.
+When doing label use {eqn:something}
+
+\begin{equation}
+	\Delta w_{i,j} = \alpha a_i \Delta[j]  \label{eqn:example}
+\end{equation}
+
+Use EquRef to reference equations like this \EquRef{eqn:example}
+
+You can also use align
+
+\begin{align}
+	\m{QX} \m{a}                             & = \m{Qy} \notag                                                        \\
+	\therefore \quad (\m{QX})^T \m{QX} \m{a} & = (\m{QX})^T \m{Qy} \notag                                             \\
+	\therefore \quad \m{a}                   & = \left( (\m{QX})^T \m{QX} \right)^{-1} (\m{QX})^T \m{Qy} \notag       \\
+	                                         & = \left( \mt{X} \mt{Q} \m{QX} \right)^{-1} \mt{X} \mt{Q} \m{Qy} \notag \\
+	                                         & = \left( \mt{X} \m{W} \m{X} \right)^{-1} \mt{X} \m{W} \m{y}
+	\label{eqn:weightedleastsquares}
+\end{align}
+
+\subsection{Figures}
+
+Figures done  normally using !ht to make sure it's in the correct place.
+When doing label use {fig:something}
+
+\begin{figure}[!ht]
+	\centering
+	\includegraphics[width=0.4\linewidth]{figures/example}
+	\caption{This is a figure caption}
+	\label{fig:example}
+\end{figure}
+
+Use FigRef to reference figures like this \FigRef{fig:example}
+
+\subsection{Table}
+
+Tables are done as normal. The example given in this case from the study guide
+(This is just a shortggened version). When doing label use {tab:something}.
+In general I also like to use !ht for tables so they where I want them to be
+
+\begin{table}[!ht]
+	\centering
+	\caption{Example table -- EAI732 Schedule}
+	\label{tab:example}
+	\begin{tabular}{ !{\vrule width 1.1pt}
+		c!{\vrule width 1pt}
+		c!{\vrule width 1pt}
+		c!{\vrule width 1pt}
+		p{8.6cm}!{\vrule width 1pt}}
+		\noalign{\hrule height 1pt}
+		\cellcolor[gray]{0.9} \textbf{Week}  &
+		\cellcolor[gray]{0.9} \textbf{Date}  &
+		\cellcolor[gray]{0.9} \textbf{Theme} &
+		\cellcolor[gray]{0.9} \textbf{Required reading / Assignment due date }
+		\\ \noalign{\hrule height 1pt}
+		1                                    & 2 Feb --   8 Feb  & 1 & Introduction - Bishop Chapter 1.
+		\\ \hline
+		2                                    & 9 Feb --  15 Feb  & 1 & Probability Distributions - Bishop Chapter 2.
+		\\ \hline
+		3                                    & 16 Feb --  22 Feb & 1 & Regression \& Classification - Bishop Chapter 3 \& 4
+		\\ \hline
+	\end{tabular}
+\end{table}
+
+When referencing tables use TabRef like this \TabRef{tab:example}
+
+\subsection{Redactions}
+
+You can do redactions in two ways:
+
+The first is using local redactions (st) for example the sky
+is \st{red}\textcolor{ScarletRed}{blue}
+
+The second is using mdframed
+
+\begin{mdframed}[style=redact,
+		frametitle={\textcolor{white}{Redacted,
+					see page~\pageref{sec:20250312} for correct version.}}]
+
+	\subsection{Testing block redaction}
+
+	Testing redaction of entries that contain errors or are no longer relevant.
+
+\end{mdframed}
+
+\subsection{Codeblocks}
+
+Use lstlisting package for codeblocks. probide language, title and label. For label use code:example
+
+\begin{lstlisting}[language=Python,title={Monte Carlo approximation of $\pi$},label={code:example}]
+import random
+import math
+
+count_inside = 0
+
+for count in range(0, 10000):
+    d = math.hypot(random.random(), random.random())
+    if d < 1:
+        count_inside += 1
+count += 1
+print("%0.8f" % (4.0 * count_inside / count))
+\end{lstlisting}
+
+here just use ref like this \ref{code:example}
+
+\subsection{PDF}
+
+This is how you reference a pdf (paper)
+
+\href{./papers/bishop2016pattern.pdf}{Bishop} \cite{bishop2016pattern}
+
+\pendsign
+
+\section[2025/03/24]{Monday, 24 March 2025}
+\label{sec:20250324}
+
+Had some issues with stuff but going to get pytorch working
+
+In tutorial/pytorch\_basic folder starting with quickstart.py
+
+This is an example using PytorchVision (comments are provided in the file)
+
+The main goal here is to get it to run on the GPU (using CUDA which it does)
+
+A number of steps are taken
+
+\begin{compactitem}
+	\item Do the imports
+	\item Download test and train data
+	\item Create data loaders for both test and train
+	\item Test if it's running on CPU or CUDA
+	\item create NN class
+	\item create a loss function and optimizer
+	\item create test and train function
+	\item train, test and save the model
+	\item retrieve trained model
+\end{compactitem}
+
+This is a basic setup but got it working on the GPU which was the goal
+
+\section[2025/03/26]{Wednesday , 26 March 2025}
+\label{sec:20250326}
+
+Today focused on getting some pytorch implementations done.
+
+These are in the tutorial pytorch\_basic not an amazingly productive day but I'll have considerably more time
+
+For openpose (want to use the python binding)
+
+This is the repo \href{https://github.com/CMU-Perceptual-Computing-Lab/openpose}{openpose github} so ultimately go here
+but I'm going to provide the steps I took in case I need to easily recreate this
+
+\begin{compactitem}
+	\item Download the prerequisites \href{https://github.com/CMU-Perceptual-Computing-Lab/openpose/blob/master/doc/installation/1_prerequisites.md#ubuntu-prerequisites}{githib prerequisites}
+	\begin{compactitem}
+		\item sudo apt-get install cmake-qt-gui
+		\item I'm using Pop OS so the nvidia drivers are setup
+		/item If you using normal linux do the one bellow rather do this for popos \href{https://support.system76.com/articles/cuda/}{popos cuda}
+		\item setup CUDA \href{https://docs.nvidia.com/cuda/cuda-installation-guide-linux/}{cuda install}
+		\item sudo apt-get install libopencv-dev
+	\end{compactitem}
+	\item installation \href{https://github.com/CMU-Perceptual-Computing-Lab/openpose/blob/master/doc/installation/0_index.md#cmake-configuration}{github installation}
+\end{compactitem}
+
+Actually had major issues with the above this helped \href{https://amir-yazdani.github.io/post/openpose/}{openpose install 3rd party}
+
+Issues with drivers which broke everything, cude, cuDNN and a big one was gcc
+(eventually isntalling gcc8 and setting it as default) worked
+
+while it builds I now get
+
+\begin{lstlisting}[language=Bash,title={openpose error},label={code:openpose_error}]
+Starting OpenPose demo...
+Configuring OpenPose...
+Starting thread(s)...
+Auto-detecting all available GPUs... Detected 1 GPU(s), using 1 of them starting at GPU 0.
+F0327 14:48:19.080816 52212 syncedmem.cpp:71] Check failed: error == cudaSuccess (2 vs. 0)  out of memory
+*** Check failure stack trace: ***
+@     0x7e66d66c0b03  google::LogMessage::Fail()
+@     0x7e66d66c89d1  google::LogMessage::SendToLog()
+@     0x7e66d66c07c2  google::LogMessage::Flush()
+@     0x7e66d66c278f  google::LogMessageFatal::~LogMessageFatal()
+@     0x7e66d56bcf5f  caffe::SyncedMemory::mutable_gpu_data()
+@     0x7e66d5528ab6  caffe::Blob<>::mutable_gpu_data()
+@     0x7e66d56f84e3  caffe::CuDNNConvolutionLayer<>::Forward_gpu()
+@     0x7e66d5680042  caffe::Net<>::ForwardFromTo()
+@     0x7e66d6412dbf  op::NetCaffe::forwardPass()
+@     0x7e66d642d07a  op::PoseExtractorCaffe::forwardPass()
+@     0x7e66d6427e2e  op::PoseExtractor::forwardPass()
+@     0x7e66d642602a  op::WPoseExtractor<>::work()
+@     0x7e66d645590f  op::Worker<>::checkAndWork()
+@     0x7e66d6455ad3  op::SubThread<>::workTWorkers()
+@     0x7e66d646195d  op::SubThreadQueueInOut<>::work()
+@     0x7e66d645a711  op::Thread<>::threadFunction()
+@     0x7e66d5edc253  (unknown)
+@     0x7e66d5a94ac3  (unknown)
+@     0x7e66d5b26850  (unknown)
+@              (nil)  (unknown)
+zsh: IOT instruction (core dumped)  ./build/examples/openpose/openpose.bin --image_dir examples/media/
+\end{lstlisting}
+
+The python api was working and I was going to give an image from there but now I get a CUDA error
+
+
+\section[2025/03/27]{Thursday , 27 March 2025}
+\label{sec:20250327}
+
+\todoredefined{Investigate GraphSAGE}
+
+In tutorial folder did a number of tutorials on pytorch geometric
+
+These include build GNN (basic and one using a dataset), GCN and GAT
+
+These were all done with jupiter notebooks and some comments were made for me to go back to later
+
+\section[2025/03/28]{Friday , 28 March 2025}
+\label{sec:20250328}
+
+Investigating a new idea
+
+\begin{compactitem}
+	\item Use pytorch to load data
+	\item use ResNet or HRNet to create heatmaps (probability distributions for each joint)
+	\item Use depth estimator to get depth and create a 3D probability "sphere"
+	\item This can then be used in GAT or Transformer
+\end{compactitem}
+
+The idea is that the 3D sphere will have additional features like entropy (a measure of spread),
+spatial coordinates, confidence scores from the heatmap etc
+
+The graph is easier to visualize because each node is a heatmap (sphere) and has a set of associated
+features. These nodes are then connected to each other. Transformers will have to do more research
+but the idea is that transformers view each joint detectionn (or even each person) as a token and uses
+self-attention to reason about their relationships
+
+Some example of state of the art monocular depth estimators
+
+\begin{compactitem}
+	\item MiDaS
+	\item ZoeDepth (2023)
+	\item PatchFusion (2023)
+	\item Marigold (CVPR 2024)
+\end{compactitem}
+
+

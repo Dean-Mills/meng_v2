@@ -1,0 +1,666 @@
+\chapter[2025 August]{August 2025}
+
+\section[2025/08/14]{Thursday, 14 August 2025}
+\label{sec:20250814}
+
+There are two main modifications made in  order to verify this simple GAT is working. These changes
+are made in v2
+
+\begin{compactitem}
+    \item The first is the dataset which allows for the filtering of data. A new parameter is added
+    num\_people\_required which when set to $-1$ will return the dataset as normal but when set to a number
+    it returns that many people; for now, more specifically, it returns that many full skeletons where all the 
+    keypoints are visible.
+    \item I moved all the hyperparameters to settings (one place) and added a method to write those to disk.
+    This way when training (in the trainer) I can generate a guid (a unique reference) per run and when I save
+    the results I just save the hyperparameters as well so I know what generated those results
+\end{compactitem}
+
+There are fairly few images (in the training set) that has two complete humans (100 images) so the dataset 
+is fairly small.
+
+\newcommand{\runid}{a104176f-94db-4437-8047-6b2a5c628ca2}
+
+\subsection{Run: \texttt{\runid}}
+
+This is the first run and some parameters I've chosen at random
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+\paragraph{Training Loss Dynamics} 
+The contrastive loss decreased rapidly
+during the first 10 epochs (from a high initial value down to $13.80$) and
+continued to drop sharply to $1.15$ by epoch $20$. By epoch $50$, the loss
+plateaued at approximately $0.84$, indicating early convergence. This behaviour
+suggests that the model quickly satisfied the contrastive margin constraints
+and subsequently made only marginal improvements.
+
+\paragraph{Positive and Negative Distances} 
+The average positive-pair distance
+(\textit{same person}) fell from $13.79$ at epoch $10$ to $0.40$ at epoch $50$.
+This shows that embeddings for keypoints belonging to the same person were
+pulled close together effectively.
+
+The average negative-pair distance (\textit{different persons}) also fell
+steeply, from $15.44$ at epoch $10$ to $0.64$ at epoch $50$. Ideally, negative
+distances should remain large or increase to ensure strong inter-person
+separation. Here, the reduction in negative distances caused the final
+separation 
+\[ \Delta d = d_{\mathrm{neg}} - d_{\mathrm{pos}} \approx 0.24 \]
+to be small, indicating poor discrimination between persons.
+
+\paragraph{Clustering Behaviour}
+
+PCA visualisation of embeddings at epochs $25$ and $50$ revealed that points
+were concentrated along a near one-dimensional subspace, with the first
+principal component explaining almost all variance and the second component
+contributing very little. Low variance in higher principal components indicates
+that the embeddings collapse into a narrow manifold, limiting their
+separability. This explains the small separation $\Delta d$: while intra-person
+distances are small, inter-person distances are not sufficiently larger,
+leading to overlapping clusters.
+
+\paragraph{Diagnosis}
+The small final separation, rapid early convergence, and near-1D embedding collapse suggest that:
+\begin{itemize}
+    \item The contrastive \textbf{margin} ($1.0$) is too low, allowing early satisfaction of the loss without forcing sufficient inter-person separation.
+    \item The model capacity (\texttt{hidden\_dim}=32, \texttt{output\_dim}=16, \texttt{num\_heads}=2) may be insufficient to extract richer discriminative features from the input.
+    \item The dropout rate ($0.1$) may be too low to regularise the model, contributing to embedding collapse.
+\end{itemize}
+
+\renewcommand{\runid}{46cfff8e-3db4-41ef-a0e8-925330f73c71}
+
+\subsection{Run: \texttt{\runid}}
+
+While it's probably better to make small incremental changes a number of drastic changes were made for this run
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+\paragraph{Training Loss Dynamics}
+
+The contrastive loss began extremely high ($\approx 429$) and dropped sharply
+within the first 10 epochs to $28.90$. By epoch $20$, the loss was already down
+to $2.31$, after which it decreased only slightly, plateauing near $1.90$ from
+epoch $40$ onward. This pattern indicates rapid early convergence: during the
+initial epochs, positive pairs were pulled close together and most negative
+pairs were pushed apart to at least the specified margin ($m = 2.0$). Once a
+negative pair's distance exceeds the margin, its contribution to the loss
+becomes zero, meaning it no longer exerts a repulsive force. As a result, after
+the first $\sim 20$ epochs, the majority of pairs were already within their
+target distances, leaving the model with little gradient signal to further
+increase inter-person separation, causing the loss to plateau.
+
+\paragraph{Positive and Negative Distances}
+
+The average positive-pair distance (\textit{same person}) decreased quickly
+from $28.72$ at epoch $10$ to $1.01$ by epoch $20$ and then stabilised around
+$0.58$ from epoch $40$ onwards.
+
+The average negative-pair distance (\textit{different persons}) also dropped
+rapidly from $29.62$ at epoch $10$ to $1.12$ by epoch $20$, then stabilised
+around $0.68$ by the end of training.
+
+The final separation was:
+\[
+\Delta d = d_{\mathrm{neg}} - d_{\mathrm{pos}} \approx 0.11
+\]
+
+This extremely small separation shows that negatives remain nearly as close as
+positives in embedding space, which significantly limits clustering
+performance.
+
+\paragraph{Clustering Behaviour}
+
+PCA plots at epochs $25$, $50$, and $75$ reveal a collapse of embedding
+variance into an almost single-dimensional structure. At epoch $25$, the first
+principal component explained $72.47\%$ of variance, with the second capturing
+$27.03\%$, showing some spread. By epoch $50$, PC1 explained essentially all
+variance ($100\%$), with PC2 contributing $0\%$, indicating a complete collapse
+to a line. Epoch $75$ showed a similar trend ($99.55\%$ variance in PC1,
+$0.42\%$ in PC2).
+Low variance in higher principal components means that embeddings are being
+projected into a very narrow manifold, leaving little capacity for separating
+individuals in multiple directions of the embedding space.
+
+\paragraph{Diagnosis}
+While the increased margin ($2.0$) and model capacity (64 hidden units, 32-dimensional embeddings, 4 attention heads) prevented immediate trivial collapse, the training behaviour indicates:
+\begin{itemize}
+    \item Negatives are still being pulled too close, suggesting that the loss weighting or formulation may not sufficiently penalise small negative distances.
+    \item The network may be overfitting early to a degenerate embedding pattern where both positives and negatives collapse together, satisfying the margin in minimal dimensions.
+    \item Even with more capacity, the embeddings are not making use of the additional representational space.
+\end{itemize}
+
+\subsection{PCA aside}
+
+The PCA is a way to re-express the embeddings into a new (simpler coordinate system)
+
+\begin{compactitem}
+\item The first axis (PC1) captures as much variance in the data as possible 
+\item The second axis (PC2) captures the largest amount of remaining variation, but is orthogonal (at a right angle) to PC1
+\item The third axis (PC3) captures the next largest amount of remaining variance, and is orthogonal to both PC1 and PC2
+\item etc
+\end{compactitem}
+
+This matters because
+\begin{compactitem}
+\item The eigenvalues in PCA tell you how much of the total variation in the data is captured by each principle component
+\item If PC1 is 99\% of the variance for example (like in some of the runs) it means points are almost entirely spread out along one direction in space with little spread in other directions
+\end{compactitem}
+
+Good embeddings for clustering should spread out in multiple independent directions
+
+\renewcommand{\runid}{6f93a28e-9121-40d2-bdcb-9584ffa73d66}
+
+\subsection{Run: \texttt{\runid}}
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+\paragraph{Training Loss Dynamics} 
+
+The contrastive loss started very high ($\approx 100.47$ at epoch~10) and
+dropped sharply within the first 20~epochs to $10.14$. It continued decreasing
+at a slower rate, reaching $5.85$ at epoch~30 and plateauing near $4.97$ from
+epoch~60 onward. This plateau indicates that the model reached a state where
+most negative pairs had distances exceeding the margin ($m = 5.0$), resulting
+in negligible loss contributions from them and limiting further separation.
+
+\paragraph{Positive and Negative Distances} 
+
+The average positive-pair distance decreased steadily from $99.58$ at epoch~10
+to $0.65$ at epoch~70, showing strong intra-person compactness. The average
+negative-pair distance also fell dramatically, from $100.94$ at epoch~10 to
+$0.71$ at epoch~70. This parallel decrease indicates that while positives were
+pulled together effectively, negatives were not kept far apart, leading to a
+final separation
+
+\[
+\Delta d = d_{\mathrm{neg}} - d_{\mathrm{pos}} \approx 0.0858,
+\]
+
+which is insufficient for clear inter-person discrimination.
+
+\paragraph{Clustering Behaviour} 
+
+PCA visualisations show progressive variance collapse into a single principal
+component. At epoch~25, the first two components explained $48.93\%$ and
+$36.26\%$ of the variance, suggesting a relatively balanced spread in two
+dimensions. By epoch~50, the second component’s variance dropped to $18.08\%$,
+and by epoch~75, the first component explained $99.98\%$ of the variance, with
+the second contributing almost none. This near one-dimensional collapse means
+that embeddings are aligned along a single axis, severely limiting the ability
+to form well-separated clusters in the embedding space.
+
+\paragraph{Diagnosis} 
+
+The rapid drop in both positive and negative distances, coupled with PCA
+collapse, suggests that the model learned to indiscriminately compress all
+embeddings along one dominant axis. Contributing factors likely include:
+
+\begin{itemize}
+    \item Margin $m = 5.0$ being reached quickly for negatives, halting repulsion.
+    \item A learning rate of $3 \times 10^{-4}$ allowing fast early compression without preserving inter-class variance.
+    \item Dropout $0.4$ possibly regularising too strongly, encouraging low-dimensional representations.
+\end{itemize}
+
+\renewcommand{\runid}{ae3b40be-6ed7-4fd4-862e-7f1911bf05cb}
+
+\subsection{Run: \texttt{\runid}}
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+\paragraph{Run Summary}
+
+This experiment increased the model capacity and margin relative to earlier
+runs:
+
+\begin{itemize}
+    \item \texttt{hidden\_dim} increased from $32$ to $128$, and \texttt{num\_heads} from $2$ to $8$, to enable richer multi-head attention patterns.
+    \item The contrastive loss \texttt{margin} was set to $10.0$ (previously $1.0$ or $3.0$), forcing the model to push negative pairs much further apart in embedding space.
+    \item Dropout increased to $0.4$ to counter potential overfitting from the larger model.
+\end{itemize}
+
+The training loss dropped rapidly from $\approx 250$ to $\approx 9.3$ by epoch
+$20$, then plateaued. Final metrics were:
+
+\[
+d_{\mathrm{pos}} = 2.97, \quad d_{\mathrm{neg}} = 3.95, \quad \Delta d = 0.99
+\]
+
+showing a large improvement in separation compared to earlier runs.
+
+PCA visualisations revealed that although the first principal component still
+dominates variance ($\approx 95$--$99\%$), the increased margin prevented
+complete embedding collapse: clusters for different persons were more clearly
+separated along PC1, and $\Delta d$ increased by an order of magnitude relative
+to the baseline. Also interestingly the neg distance was slowly climbing
+
+\section[2025/08/15]{Friday, 15 August 2025}
+\label{sec:20250815}
+
+This is obviously not working as expected. There are two alternative approaches to try which might improve 
+inter-person separation
+
+\subsection{Option A: L2 Distance with Squared-Hinge Loss} In the current
+setup, the contrastive loss for negative pairs uses a standard hinge
+formulation:
+
+\[
+\ell_{\text{neg}} = \max(0, m - d),
+\]
+
+where \(m\) is the contrastive margin and \(d\) is the Euclidean distance
+between embeddings. Once \(d \geq m\), the loss becomes zero, and the model
+stops pushing the negative pair apart. In prior runs, this caused many
+negatives to reach the margin quickly, removing their contribution to the
+gradient and allowing their distances to drift back down, reducing inter-person
+separation.
+
+The squared-hinge modification replaces the loss term with:
+
+\[
+\ell_{\text{neg}} = \max(0, m - d)^2,
+\]
+
+which has two key effects:
+
+\begin{enumerate}
+    \item \textbf{Stronger repulsion near the margin:} Squaring the term increases the gradient when \(d\) is close to \(m\), encouraging the model to continue pushing negatives apart instead of settling just at the margin.
+    \item \textbf{Smoother gradient decay:} The gradient reduces more gradually as \(d\) approaches \(m\), making the optimisation less abrupt and potentially more stable.
+\end{enumerate}
+
+Here the margin \(m\) will be increased (from $2.0$ to $3.0$ or $4$ etc), the
+hidden and output dimensions are enlarged to increase model capacity, and the
+negative-pair loss term is up-weighted (\texttt{neg\_weight} = 2.0) so that
+repulsion receives greater emphasis during training. Together, these changes
+are intended to prevent early “margin satisfaction,” maintain pressure on
+separating negatives, and reduce the embedding collapse into a near
+one-dimensional structure observed in PCA.
+
+
+\subsection{Option B: Cosine Margin Loss with Normalised Embeddings}
+
+In this alternative approach, the embedding vectors produced by the GAT are
+first $L_{2}$-normalised:
+
+\[
+\mathbf{z} \leftarrow \frac{\mathbf{z}}{\lVert \mathbf{z} \rVert_2},
+\]
+
+ensuring that all embeddings lie on the unit hypersphere. This normalisation
+fixes the scale of the vectors, making their relative position depend only on
+\emph{direction} (angle) rather than magnitude. In previous runs, embeddings
+often collapsed in scale and aligned along a single dominant axis, as seen in
+PCA variance results. By constraining all vectors to have the same length, the
+model is prevented from trivially shrinking embedding magnitudes to reduce
+distances, forcing it to learn meaningful angular separations.
+
+The loss function is replaced with a cosine-margin formulation:
+
+\[
+\ell_{\text{pos}} = 1 - \cos(\theta_{ij}), \quad
+\ell_{\text{neg}} = \max\big(0, \cos(\theta_{ij}) - (1 - m)\big),
+\]
+
+where $\theta_{ij}$ is the angle between two embeddings and $m$ is the cosine
+margin. Positive pairs minimise their angular distance (maximising cosine
+similarity), while negative pairs are penalised if their cosine similarity
+exceeds $1 - m$. For $m = 0.4$, negatives are encouraged to have an angular
+separation of at least $\arccos(0.6) \approx 53^\circ$.
+
+This angular-based formulation mitigates the collapse problem in two ways:
+\begin{enumerate}
+    \item \textbf{Magnitude invariance:} Because vectors are normalised, the network cannot exploit magnitude shrinkage to satisfy the loss, as occurred in earlier L2-based runs.
+    \item \textbf{Direct angular separation:} Enforcing a fixed angular margin ensures negatives remain well-separated in direction, even if their Euclidean distances would otherwise converge.
+\end{enumerate}
+
+Model capacity is also increased (\texttt{hidden\_dim} = 96, \texttt{output\_dim} = 64, \texttt{num\_heads} = 8) to provide more representational diversity, and dropout is set to $0.25$ to balance regularisation with the need to capture multi-directional structure in the embedding space.
+
+\subsection{Simplification}
+
+For a test use just x,y for node features (same metric) to see if the embeddings move apart
+
+\section[2025/08/14]{Thursday, 28 August 2025}
+\label{sec:20250828}
+
+Doing the simplification where only x,y coordinates are used for node features (same metric) to see if the embeddings move apart.
+
+\renewcommand{\runid}{25be564b-ee51-407d-a663-a7edbe0f51f6}
+
+\subsection{Run: \texttt{\runid}}
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+\paragraph{Metrics:}
+
+Loss steadily decreases from 8.55 to 6.72 (model is learning). 
+
+Positive distances decrease 5.01 to 3.28 which means the same person keypoints are getting closer in embedding space
+
+Negative distances increase 7.19 to 7.94 different person keypoints are being pushed further apart
+
+\paragraph{PCA:} The PCA output shows:
+
+\begin{compactitem}
+  \item PC1 explains around 99.9\% of the variance.
+  \item PC2 around 0.01\%
+\end{compactitem}
+
+This means that almost all structure of the embedding is in one dimension
+
+(this can be seen on the 50 epoch embeddings where the cloud looks like a line stretched along PC1 with little variance in PC2)
+
+Since PC1 dominates the model may effectively be collapsing embeddings into a 1D manifold: all useful information in one dimension
+
+This can happen for the following reasons:
+
+\begin{compactitem}
+  \item small feature input (just x and y) model might only find one discriminative axis (like left-rigth spread of the keypoints)
+  \item contrastive loss pushes/pulls distances but doesn't enforce mutli-dimensional use of embedding space 
+  \item PCA reveals that almost all vairance is captured in one linear axis
+\end{compactitem}
+
+
+\paragraph{Next steps:} To avoid "all in a line" embeddings
+
+\begin{compactitem}
+  \item Increase feature set agtain (reintroduce depth, confidence, joint type etc)
+  \item Normalize embeddings (L2 Norm) before contrastive loss - might avoid collapse 
+  \item Increase embeddings dimension so it has the capacity to spread clusters into more directions
+  \item try different loss 
+\end{compactitem}
+
+
+\renewcommand{\runid}{0211e02a-4fc1-414f-b7c9-9a8135507ca1}
+
+\subsection{Run: \texttt{\runid}}
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_100.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+similar to the last results.
+
+loss decreases from 9.10 to 6.72, pos distance decreases from 6.23 to 3.45 and negative distance increases from 7.99 to 8.53
+
+The PCA follows a similar trend.
+
+\renewcommand{\runid}{d87e9c71-c64b-40d1-9689-fd0c7be9b128}
+
+\subsection{Run: \texttt{\runid}}
+
+This run adds back depth information to the keypoints to see if that makes a difference
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_100.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+Pretty much the same results again.
+
+\renewcommand{\runid}{e7d93493-1252-4117-8060-e47dbedf497e}
+
+\subsection{Run: \texttt{\runid}}
+
+This time using L2 Norm
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_100.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+This didn't work as expected you can see from the neg - pos distance is increasing not decreasing.
+This is probably just because the margin was still set at 10 with unit-norm embeddings. L2-normalized
+vectors, Euclidean distance is bounded to $[0,2]$
+
+\renewcommand{\runid}{d6508c32-9d31-46ae-b8d5-940e9c5f5660}
+
+\subsection{Run: \texttt{\runid}}
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_100.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+This still didn't work becaause distances are capped between 0 and 2 so setting margin=1 means that any negative pair closer than 1
+contributes to losee and pairs father than 1 contribute to nothing
+
+Guess you can tune the margin so set to 1.2 or 1.5 or something else so that negatives won't saturate too early but rather use
+cosine similarity whicdh might work better then I'll try again
+
+\renewcommand{\runid}{330bce9e-2578-485b-9ed5-d4ec9ff8072c}
+
+\subsection{Run: \texttt{\runid}}
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_100.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+This does also seem to be working. The training loss keeps decreasing (there are fluctuations). The embeddings similarities green (positive pair same person)
+around 0.76 (want this close to 1 - where 1 is perfect alignment). The Red (negative pairs different people) around 0.38. There is a gap
+
+The similarity seperation is now defined as pos - neg (in eucledian you have neg - pos)
+
+\paragraph{Euclidean distance}: distances between embeddings
+
+Make pos pairs (same person) small and neg pairs (different person) large (much bigger than margin)
+
+\paragraph{Cosine similarity}: compute similarities using F.consine\_similarity
+
+Range $[-1,1]$
+
+positive pairs maximize similarity -> close to 1
+
+negative pairs minimize similarity -> close to 0 or negative
+
+so the metric becomes pos-neg (oppostive of Euclidean) and you want this to be large
+
+looking at the PCA plots
+
+\begin{compactitem}
+  \item epoch 25: embeddings are fairly well-separated into two “blobs” (good clustering).
+  \item epoch 50: points spread out more, not clean clusters
+  \item epoch 75: separation comes back (two sides again).
+  \item epoc 100: they spread into an arc shape, more variance across PC2.
+\end{compactitem}
+
+\begin{compactitem}
+  \item PCA is linear and only keeps the top 2 components.
+  \item If most of the separation is along 1 axis (say PC1), then PC2 may capture only tiny variance and look noisy. That's why the clouds look like a line or arc.
+\end{compactitem}
+
+Not sure what to think of this the logs seem fine pos sim = 0.76, neg sim = 0.38 and seperation = 0.37
+\section[2025/08/14]{Friday, 29 August 2025}
+\label{sec:20250829}
+
+The results from yesterday somewhat prove that this method does work what I'm worried about now is that I process the dataset
+meaning that there are (this is a setting thing) but 2 people where all points are visible and that by definition means that there is a naturual 
+seperation.
+
+Going to update this code v5 so that this isn't the case and it just selects 2 people even if their joints aren't all visible
+
+
+
+
+Notes:
+- use the temporal version of GUIDS (used in dbs) UILD 
+- how do people generate skeltons and animate them 

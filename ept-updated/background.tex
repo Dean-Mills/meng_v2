@@ -1,0 +1,147 @@
+\section{Background}
+
+This section reviews the key concepts underlying the proposed method -- graphs,
+graph-based neural networks, and monocular depth estimation for lifting 2-D
+joint coordinates to 2.5-D.
+
+\subsection{Graphs}
+Graphs are a versatile structure for representing complex relationships between
+entities. A graph consists of nodes (or vertices) and edges (or links) that
+connect pairs of nodes, making it particularly suitable for modeling data where
+relationships are central, such as the connections between human joints in pose
+estimation.
+
+In formal terms, a graph \( G = (V, E) \) includes:
+\begin{itemize}
+  \item A set of nodes \( V \), representing the entities.
+  \item A set of edges \( E \), where each edge \( e \in E \) connects two nodes
+  \( (u, v) \), with \( u, v \in V \).
+\end{itemize}
+
+Graphs may be directed or undirected, depending on whether the connections
+between nodes have a specific direction. This flexibility enables graphs to
+effectively capture the various types of relationships that may be beneficial 
+for pose estimation.
+
+\subsection{Graph Neural Networks}
+Graph Neural Networks (GNNs) \cite{scarselli2008graph} are a class of neural
+networks designed to operate on graph-structured data. Unlike traditional neural
+networks that work on structured data, GNNs are tailored to handle the irregular
+structure of graphs. The fundamental idea behind GNNs is the message passing
+framework, which allows nodes to iteratively exchange information with their
+neighbors to update their own representations.
+
+In the message passing framework, each node is initially assigned a feature
+vector. During each iteration, a node aggregates messages from its neighboring
+nodes. This process can be summarized in two main steps:
+\begin{itemize}
+  \item \textbf{Message Aggregation}: At each iteration \( t \), a node \( v \)
+  collects messages from its neighboring nodes \( \mathcal{N}(v) \):
+  \begin{equation}
+    m_v^{(t+1)} = \mathrm{AGGREGATE}^{(t)} \left( \{ h_u^{(t)} : u \in \mathcal{N}(v) \} \right)
+  \end{equation}
+  Here, the aggregation function could be a sum, mean, or max function, which
+  combines the features of neighboring nodes.
+  \item \textbf{Node Update}: After aggregation, the node updates its feature
+  vector based on the collected messages:
+  \begin{equation}
+    h_v^{(t+1)} = \mathrm{UPDATE}^{(t)}(h_v^{(t)}, m_v^{(t+1)})
+  \end{equation}
+  The update function often involves applying a non-linear transformation, such
+  as a neural network layer, to the aggregated messages and the node's current
+  state.
+\end{itemize}
+This iterative process allows each node to refine its representation by
+incorporating information from its neighbors, effectively capturing the
+dependencies within the graph.
+
+\subsection{Graph Convolutional Networks}
+Graph Convolutional Networks (GCNs) \cite{kipf2016semi} are a specialized type
+of GNN that extend the idea of convolution from grid-like data structures to
+graphs. In a GCN, the convolution operation is adapted to aggregate information
+from a node's local neighborhood, enabling the network to learn features that
+are informed by the local context within the graph.
+
+A typical GCN layer is defined as:
+  \begin{equation}
+    H^{(t+1)} = \sigma \left( \tilde{D}^{-1/2} \tilde{A} \tilde{D}^{-1/2} H^{(t)} W^{(t)} \right)
+  \end{equation}
+where:
+\begin{itemize}
+  \item \( \tilde{A} = A + I \) is the adjacency matrix of the graph, with added
+  self-loops to include the node's own features in the aggregation.
+  \item \( \tilde{D} \) is the degree matrix corresponding to \( \tilde{A} \),
+  used for normalization.
+  \item \( H^{(t)} \) represents the feature matrix at layer \( t \), where each
+  row corresponds to a node's features.
+  \item \( W^{(t)} \) is the trainable weight matrix for the layer.
+  \item \( \sigma \) denotes an activation function, such as ReLU, applied
+  element-wise to introduce non-linearity.
+\end{itemize}
+This layer allows the network to capture the structural information of a node's
+neighborhood, leading to more contextually informed node representations.
+
+\subsection{Graph Attention Networks}
+Graph Attention Networks (GATs) \cite{velivckovic2017graph} introduce an
+attention mechanism (this mechanism is notably used in transformers
+\cite{vaswani2017attention} which are the backbone of large language models
+\cite{zhao2023survey}) into the GNN framework, allowing the network to assign
+different levels of importance to different neighbors during the aggregation
+process. This is particularly useful in scenarios where certain neighbors
+contribute more significantly to a node's representation than others.
+
+The key steps in a GAT layer are:
+\begin{itemize}
+  \item \textbf{Self-Attention Mechanism}: For each pair of connected nodes \(
+  (u, v) \), an attention coefficient is computed to measure the importance of
+  node \( u \)’s features to node \( v \):
+  \begin{equation}
+    e_{uv} = \mathrm{LeakyReLU} \left( \mathbf{a}^T \left[ W h_u \, || \, W h_v \right] \right)
+  \end{equation}
+  Here, \( \mathbf{a} \) is a learnable weight vector, \( W \) is a shared
+  weight matrix, and \( || \) denotes concatenation.
+  \item \textbf{Normalization}: The attention coefficients are normalized across
+  all neighbors of a node using the softmax function:
+  \begin{equation}
+    \alpha_{uv} = \frac{\exp(e_{uv})}{\sum_{k \in \mathcal{N}(v)} \exp(e_{vk})}
+  \end{equation}
+  This normalization ensures that the sum of the attention weights for each node
+  is 1.
+  \item \textbf{Aggregation}: Each node’s new feature is computed as a weighted
+  sum of its neighbors’ features, with the attention coefficients serving as
+  weights:
+  \begin{equation}
+    h_v' = \sigma \left( \sum_{u \in \mathcal{N}(v)} \alpha_{uv} W h_u \right)
+  \end{equation}
+  The result is a more nuanced node representation that accounts for the varying
+  significance of different neighbors, improving the network's ability to learn
+  complex patterns in the data.
+\end{itemize}
+
+\subsection{Monocular Depth Estimation} 
+
+Monocular depth estimation infers a dense depth map $D \in \mathbb{R}^{H \times
+W}$ from a single RGB image $I \in \mathbb{R}^{H \times W \times 3}$. Because
+absolute scale is ambiguous in a single view, networks learn scene priors that
+connect image appearance to plausible metric or relative depth. Most
+contemporary methods follow an encoder–decoder pattern first popularised by
+multi-scale CNNs \cite{eigen2014depth,laina2016deeper}: an encoder extracts
+hierarchical features, and a decoder progressively upsamples them—often with
+skip connections or multi-scale refinement—to yield per-pixel depth
+predictions.
+
+Training regimes fall into two broad categories. \emph{Supervised} approaches
+optimise losses such as $\ell_1$, $\ell_2$, or scale-invariant errors against
+ground-truth depth captured with active sensors or multiview reconstruction
+\cite{laina2016deeper}. \emph{Self-supervised} approaches eliminate depth
+labels altogether and instead enforce photometric consistency across stereo
+pairs or successive video frames, using differentiable view synthesis and
+occlusion masks \cite{godard2017unsupervised,zhou2017unsupervised}.
+
+Recent sota models illustrate the maturation of the field. \textsc{MiDaS}
+combines a vision-transformer encoder with a multi-resolution decoder and is
+trained on a heterogeneous mixture of data sets to generalise across domains
+\cite{ranftl2021robust,ranftl2022dense}. \textsc{ZoeDepth} extends this idea by
+mixing real and synthetically rendered images \cite{khattak2023zoedepth}. These
+networks now deliver accurate, scale-consistent depth maps with a single
+forward pass, making depth a reliable signal for vision tasks.

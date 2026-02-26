@@ -1,0 +1,381 @@
+\chapter[2025 November]{November 2025}
+
+\section[2025/11/27]{Thursday, 27 November 2025}
+\label{sec:20251127}
+
+Again bad with checkings not going to do this properly just going to add points form for now
+
+\begin{compactitem}
+  \item get nightly build of pytorch to support sm 120 (since I upgraded to 5070 ti) 
+  \item update trained to save checkpoints this saves the optimizer state at different epochs so training can be resumed from that point (haven't tested this yet)
+  \item saves final model
+  \item evaluation script to load model and test it on test data
+\end{compactitem}
+
+I'm simplifying a lot but this is the first main test of this
+
+Training 
+
+\renewcommand{\runid}{e4a0fe23-80d7-41b7-8cec-465d24ae9d1c}
+
+\subsection{Run: \texttt{\runid}}
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_100.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+The training looks okay overall nothing special I'm probably going to have to do more hyperparameter tuning, run for longer,
+get a more diverse dataset etc but this is good for now to test the pipeline
+
+I created a three\_persons\_test dataset with 3 people
+
+I then ran an evaluation which does the following:
+
+\begin{compactitem}
+  \item Loads the saved model checkpoint from training
+  \item Runs inference on the test set to generate embeddings for each keypoint
+  \item Clusters the embeddings using HDBSCAN (a density-based clustering algorithm that automatically determines the number of clusters)
+  \item Visualizes each test image with side-by-side comparisons: predicted clusters (left) vs ground truth (right), with skeletons colored by assignment
+  \item Computes clustering quality metrics: Adjusted Rand Index (ARI) and Normalized Mutual Information (NMI)
+\end{compactitem}
+
+ARI (Adjusted Rand Index) measures how well the predicted clusters match the ground truth assignments.
+It looks at all pairs of points and checks whether they are in the same or different clusters in both the prediction and ground truth.
+The "adjusted" part means it accounts for chance - random clustering would score around 0.
+The formula is:
+
+\begin{equation}
+ARI = \frac{RI - Expected(RI)}{max(RI) - Expected(RI)}
+\label{eq:ari}
+\end{equation}
+
+where $RI$ (Rand Index) is the proportion of pairs that are either in the same cluster in both assignments or in different clusters in both.
+ARI ranges from -1 to 1, where 1 is perfect agreement, 0 is random, and negative means worse than random.
+
+NMI (Normalized Mutual Information) takes an information-theoretic approach.
+It measures how much knowing the predicted cluster tells you about the ground truth cluster (and vice versa).
+Mutual information between two clusterings $U$ and $V$ is:
+
+\begin{equation}
+MI(U, V) = \sum_{i=1}^{|U|} \sum_{j=1}^{|V|} P(i, j) \log \frac{P(i, j)}{P(i)P(j)}
+\label{eq:mi}
+\end{equation}
+
+where $P(i, j)$ is the probability that a point belongs to cluster $i$ in $U$ and cluster $j$ in $V$.
+This gets normalized by the entropy of both clusterings to give a value between 0 and 1:
+
+\begin{equation}
+NMI(U, V) = \frac{2 \cdot MI(U, V)}{H(U) + H(V)}
+\label{eq:nmi}
+\end{equation}
+
+where $H(U)$ and $H(V)$ are the entropies of the two clusterings.
+NMI of 1 means the clusters perfectly predict each other, 0 means they share no information.
+
+A more simplified version of this (from claude because this is a bit much) is:
+
+ARI (Adjusted Rand Index) and NMI (Normalized Mutual Information) both measure
+how well predicted clusters match ground truth, just from different angles.
+
+ARI looks at pairs of keypoints and asks: if two keypoints belong to the same
+person, did they end up in the same cluster? And if they belong to different
+people, did they end up in different clusters? It counts how often this is 
+right, adjusted so that random guessing scores 0. A score of 1 means perfect
+clustering.
+
+NMI asks: if I tell you which cluster a keypoint is in, how much does that tell
+you about which person it belongs to? It's based on information theory - a
+score of 1 means the clusters perfectly identify the people, 0 means they tell
+you nothing.
+
+The evaluation results on 150 test images showed:
+
+\begin{compactitem} 
+  \item \textbf{Average clusters found: 3.36} - HDBSCAN found
+    an average of 3.36 clusters per image. Since the ground truth is 3 people per
+    image, this means it's slightly over-clustering. Some people's keypoints are
+    likely getting split into multiple clusters.
+
+  \item \textbf{Average noise points: 1.37} - On average, 1.37 keypoints per
+    image couldn't be confidently assigned to any cluster. With 3 people $\times$
+    17 keypoints = 51 total keypoints per image, this is only $\sim$2.7\% noise
+    which is good.
+
+    \item \textbf{Cluster count accuracy: 51.33\%} - In just over half the images,
+      HDBSCAN found exactly 3 clusters matching the ground truth. This is a strict
+      metric since getting 2 or 4 clusters counts as wrong even if the overall
+      grouping is reasonable.
+
+    \item \textbf{Average ARI: 0.7991} - A score of 0.80 is quite good. It means
+      the clustering largely agrees with ground truth even when it doesn't get the
+      exact number of clusters right.
+
+    \item \textbf{Average NMI: 0.8434} - A score of 0.84 is strong. The clusters
+      are capturing most of the person identity information. 
+\end{compactitem}
+
+Overall the embeddings are clearly separating by person as shown by the high ARI and NMI scores.
+The main issue is HDBSCAN sometimes over-segments or under-segments, but the underlying embeddings are good.
+This could potentially be improved by tuning HDBSCAN's \texttt{min\_cluster\_size} and \texttt{min\_samples} parameters.
+
+Here are some images from the evaluations
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_1.png}
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_2.png}
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_3.png}
+  \caption{Example evaluations for run \texttt{\runid}.}
+  \label{fig:evaluations:\runid}
+\end{figure}
+
+The first image is an example of it working well, the second is an okay result with some confusion and the third is it working badly
+
+The next experiment was to use the same model but for four people to see how well it generalizes
+
+\begin{compactitem}
+\item \textbf{Average clusters found: 4.37} - HDBSCAN found an average of 4.37 clusters per image when the ground truth is 4 people. Still slightly over-clustering but closer to the target than the 3-person case relatively speaking.
+
+\item \textbf{Average noise points: 3.02} - More than double the noise compared to the 3-person test (1.37). With 4 people $\times$ 17 keypoints = 68 total keypoints, this is $\sim$4.4\% noise. The model struggles more with the additional person.
+
+\item \textbf{Cluster count accuracy: 38.67\%} - Dropped from 51.33\% on 3-person data. The model was trained on 3-person scenes so it's not surprising it struggles to generalise to 4 people.
+
+\item \textbf{Average ARI: 0.7969} - Still high despite poor visual results. ARI measures pairwise agreement, so if most keypoints from the same person end up together (even if split across clusters), it still scores well.
+
+\item \textbf{Average NMI: 0.8677} - Actually higher than the 3-person test (0.8434). This is likely because with more people there's more information to capture, and the metric is normalized.
+\end{compactitem}
+
+The high ARI/NMI scores are somewhat misleading here. These metrics measure
+pairwise relationships - whether keypoints that belong together tend to cluster
+together - but they don't heavily penalise over-segmentation or small errors.
+Visually the results look worse because even a few misassigned keypoints break
+the skeleton coherence. The drop in cluster count accuracy (from 51\% to 39\%)
+and the increase in noise points are better indicators that the model doesn't
+generalise well from 3-person training data to 4-person scenes. This suggests
+training on more diverse data (varying numbers of people) would help.
+
+Here are some images from the evaluations
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_4.png}
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_5.png}
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_6.png}
+  \caption{Example evaluations for run \texttt{\runid}.}
+  \label{fig:evaluations:\runid}
+\end{figure}
+
+Image 1 is an okay result with some confusion, image 2 and 3 get progressively worse 
+
+The next step is to train on four persons and see how that works and then see how it generalizes to three persons
+
+\renewcommand{\runid}{b1482612-89d8-479d-8faa-4fcc80aabf48}
+
+This is for a "mixed" run where I put 2,3 and 4 persons in the training data
+
+\subsection{Run: \texttt{\runid}}
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_100.png}
+  \caption{Embeddings at 25, 50, 75, 100 epochs for run \texttt{\runid}.}
+  \label{fig:embeddings_1:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_125.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_150.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_175.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_200.png}
+  \caption{Embeddings at 125, 150, 175, 200 epochs for run \texttt{\runid}.}
+  \label{fig:embeddings_2:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_225.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_250.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_275.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_300.png}
+  \caption{Embeddings at 225, 250, 275, 300 epochs for run \texttt{\runid}.}
+  \label{fig:embeddings_3:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+I didn't do this perfectly but it is okay for now. I take random images and do the PCA
+this was okay when the entire dataset had the same number of people but since it's mixed now
+maybe not as applicable but anyways the training looks decent. Interestingly it seems
+like at around 100 epochs we have a minimum and then it gets worse. 
+
+While that's the case I'm still going to use the final model (at 300 epochs) for evaluation
+now and then maybe try with the 100 and see how much improvement I get
+
+Evaluation on the two persons test set
+
+\begin{compactitem}
+\item \textbf{Average clusters found: 2.02} - Almost exactly 2 clusters per image, matching the ground truth perfectly.
+
+\item \textbf{Average noise points: 0.01} - Essentially zero noise. HDBSCAN confidently assigned nearly every keypoint to a cluster.
+
+\item \textbf{Cluster count accuracy: 98.00\%} - The model found exactly 2 clusters in 98\% of images. A massive improvement from the earlier experiments.
+
+\item \textbf{Average ARI: 0.9954} - Near perfect. The predicted clusters almost exactly match the ground truth assignments.
+
+\item \textbf{Average NMI: 0.9963} - Near perfect. The clusters capture virtually all of the person identity information.
+\end{compactitem}
+
+Some example images 
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_1.png}
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_2.png}
+  \caption{Example evaluations for run on the 2 person test set \texttt{\runid}.}
+  \label{fig:evaluations_2_persons_test:\runid}
+\end{figure}
+
+The first image is perfect (like the majority of them) and the second is an example of some "confusion" when clustering
+
+\todoredefined{I save all the images in the same folder so rerunning evaluation overwrites them - need to fix that later}
+
+Evaluation on the three persons test set
+
+\begin{compactitem}
+\item \textbf{Average clusters found: 3.45} - Slightly over-clustering, finding about 3.5 clusters instead of 3. Some people are getting split into multiple clusters.
+
+\item \textbf{Average noise points: 0.53} - Still very low noise, less than 1 keypoint per image on average.
+
+\item \textbf{Cluster count accuracy: 66.00\%} - Improved from the earlier 51.33\% when trained only on 3-person data. The mixed training helped.
+
+\item \textbf{Average ARI: 0.9456} - Strong improvement from 0.7991. The clustering is much more accurate.
+
+\item \textbf{Average NMI: 0.9624} - Up from 0.8434. The clusters capture most of the person identity information.
+\end{compactitem}
+
+some example images
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_3.png}
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_4.png}
+  \caption{Example evaluations for run on the 3 person test set (image 1 and 2) \texttt{\runid}.}
+  \label{fig:evaluations_3_persons_test_1:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_5.png}
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_6.png}
+  \caption{Example evaluations for run on the 3 person test set (image 3 and 4) \texttt{\runid}.}
+  \label{fig:evaluations_3_persons_test_2:\runid}
+\end{figure}
+
+Image 1 is an example of it performing as expected, image 2 is an example of it performing extremely well
+image 3 is an example of it performing poorly but the red blue clusters can be explained the pink, light blue 
+and then noise on the figure on the left is a problem and finally the 4th image is quite bad  
+
+Onto the 4 person test set:
+
+\begin{compactitem}
+\item \textbf{Average clusters found: 4.45} - Similar pattern to 3-person, slightly over-clustering by about 0.5 clusters on average.
+
+\item \textbf{Average noise points: 0.38} - Very low noise, even with more people in the scene.
+
+\item \textbf{Cluster count accuracy: 65.33\%} - Similar to 3-person (66\%). The model handles both equally well.
+
+\item \textbf{Average ARI: 0.9656} - Excellent. Much better than the 0.7969 when trained only on 3-person data and tested on 4-person.
+
+\item \textbf{Average NMI: 0.9772} - Near perfect information capture despite the increased scene complexity.
+\end{compactitem}
+
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_7.png}
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_8.png}
+  \caption{Example evaluations for run on the 4 person test set (image 1 and 2) \texttt{\runid}.}
+  \label{fig:evaluations_4_persons_test_1:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_9.png}
+  \includegraphics[width=1\linewidth]{figures/\runid/evaluation/test_image_10.png}
+  \caption{Example evaluations for run on the 4 person test set (image 3 and 4) \texttt{\runid}.}
+  \label{fig:evaluations_4_persons_test_2:\runid}
+\end{figure}
+
+Image 1 is an example of it performing as expected, image 2 is an example of it performing badly (the clustering is a mess),
+Image 3 is decent it seems to get the people right but has some noise on the extremities, Image 4 is a fairly impressive result
+
+Overall the mixed dataset training was a success. The model generalises well
+across 2, 3, and 4 person scenes with high ARI and NMI scores throughout. The
+2-person test set performed nearly perfectly (98\% cluster accuracy), while 3
+and 4 person scenes both hover around 65-66\% cluster accuracy but with
+excellent ARI/NMI above 0.94.
+
+The consistent over-clustering (finding ~0.5 extra clusters on average)
+suggests the issue might be with HDBSCAN's parameters rather than the
+embeddings themselves. If the embeddings were poor we'd see low ARI/NMI, but
+they're both above 0.94. What's likely happening is that some people's
+keypoints are forming slightly separated sub-clusters in embedding space
+(perhaps upper body vs lower body, or occluded limbs), and HDBSCAN is splitting
+them. Tuning \texttt{min\_cluster\_size} or using a different clustering
+approach that expects a specific number of clusters (like the joint-counting
+heuristic mentioned earlier) could help close this gap.
+
+To test this I'm going to try run 4 person evaluation using the model at 100 epochs
+which seemed to be the best for training
+
+\begin{compactitem}
+\item \textbf{Average clusters found: 4.28} - Closer to 4 than the 300 epoch model (4.45). Less over-clustering.
+
+\item \textbf{Average noise points: 0.37} - Similar to the 300 epoch model. No change here.
+
+\item \textbf{Cluster count accuracy: 75.33\%} - A 10\% improvement over the 300 epoch model (65.33\%).
+
+\item \textbf{Average ARI: 0.9794} - Up from 0.9656. Better cluster assignments.
+
+\item \textbf{Average NMI: 0.9857} - Up from 0.9772. More information captured.
+\end{compactitem}
+
+The 100 epoch model outperforms the 300 epoch model across all metrics. This
+confirms what the training curves suggested - the model reached optimal
+separation around epoch 100 and then started to overfit. The embeddings at 300
+epochs are slightly worse which leads to more over-clustering. This highlights
+the need for early stopping or a validation set to catch the best checkpoint
+rather than just training to completion. Maybe it's not just HDBSCAN's fault which 
+is what I was hoping for. A combination of both could produce fairly good results

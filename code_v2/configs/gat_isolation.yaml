@@ -1,0 +1,17 @@
+name: "gat_isolation"
+description: "GAT isolation testing - verify embeddings are separable before adding grouping head"
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4        # [x_norm, y_norm, z_norm, v_norm]
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+
+loss:
+  contrastive_margin: 0.5

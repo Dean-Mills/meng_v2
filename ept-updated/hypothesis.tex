@@ -1,0 +1,24 @@
+\section{Hypothesis}
+
+This research hypothesises that representing detected joints as nodes in a
+depth-augmented graph and processing this graph with a GAT will improve both
+the accuracy and the computational efficiency of multi-person pose tracking
+compared with approaches that rely solely on 2-D image coordinates.
+
+Attaching a monocular depth value to every joint lifts the skeleton into
+2.5-D space, giving the GAT an additional geometric cue that helps distinguish
+overlapping limbs and nearby individuals.  Message passing allows each node to
+aggregate information from its neighbours, while the attention mechanism
+assigns larger weights to edges whose combined spatial and depth attributes
+suggest that the connected joints belong to the same person.  
+
+Because the graph encodes only compact descriptors -- per-joint image
+coordinates, depth, confidence, a joint-type embedding, and a small set of
+edge attributes such as inter-joint distance, depth difference, and local
+orientation -- its feature space is far smaller than the dense heat-maps or
+pixel-level tensors used by many convolutional pipelines.  This compact
+representation lowers memory usage, shortens training time, and enables
+real-time inference on modest hardware.  At the same time, the depth channel
+and geometric edge cues supply context that pure 2-D coordinates lack,
+allowing the model to maintain or even improve joint-to-person assignment
+accuracy without resorting to deeper or wider backbones.

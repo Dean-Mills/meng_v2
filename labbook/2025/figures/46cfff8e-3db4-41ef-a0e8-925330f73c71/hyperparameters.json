@@ -1,0 +1,12 @@
+{
+    "num_people_required": 2,
+    "batch_size": 4,
+    "learning_rate": 0.0005,
+    "epochs": 75,
+    "margin": 2.0,
+    "input_dim": 5,
+    "hidden_dim": 64,
+    "output_dim": 32,
+    "num_heads": 4,
+    "dropout": 0.3
+}

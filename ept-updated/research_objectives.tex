@@ -1,0 +1,34 @@
+\section{Research Objectives}
+
+The overarching goal of this study is to design and analyse a detector-agnostic
+framework for multi-person pose tracking that couples a depth-aware graph
+representation with a Graph Attention Network (GAT).  
+Within this broad aim, the work pursues four concrete objectives:
+
+\begin{itemize}
+    \item \textbf{Depth-Aware Graph Construction}\,:  
+    Formulate a graph in which each node stores a joint’s image coordinates and
+    estimated depth while each edge encodes spatial and geometric relations;
+    analyse how the added depth channel alters feature compactness and
+    expressiveness compared with purely 2-D graphs.
+
+    \item \textbf{Accurate Joint-to-Person Assignment}\,:  
+    Investigate whether incorporating depth into the GAT improves joint
+    grouping accuracy in crowded scenes where limbs from different individuals
+    overlap or appear in close proximity.
+
+    \item \textbf{Computational Efficiency}\,:  
+    Evaluate whether the compact, graph-based feature space shortens training
+    time and sustains real-time inference, identifying trade-offs between model
+    depth, runtime, and memory footprint.
+
+    \item \textbf{Detector-Agnostic Scalability}\,:  
+    Demonstrate that the framework can ingest keypoints produced by diverse
+    detectors—ranging from lightweight CNN heads to transformer
+    architectures—without architectural changes, and analyse performance
+    sensitivity to the underlying detector.
+\end{itemize}
+
+Together, these objectives target a pose-tracking solution that is accurate in
+crowded settings, computationally practical, and readily transferable across 
+pose detection front-ends.

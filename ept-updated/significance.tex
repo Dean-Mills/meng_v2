@@ -1,0 +1,16 @@
+\section{Significance}
+
+By combining monocular depth cues with a graph-based attention model, this
+research offers a new route to multi-person pose tracking that is both accurate
+and computationally lean.  Augmenting each joint with a depth value lifts the
+skeleton into 2.5-D space, giving the Graph Attention Network (GAT) geometric
+context that pure 2-D coordinates lack.  The resulting graph encodes only a
+small set of informative features, lowering memory usage and shortening
+training time while enabling real-time inference on modest hardware.  
+
+Because the framework accepts keypoints from any detector that follows a known
+joint schema, it can track advances in front-end pose estimation without
+architectural changes. This detector-agnostic design, coupled with the compact
+feature space, creates a scalable solution for applications ranging from crowd
+analytics and sports performance to augmented reality and human-robot
+interaction.

@@ -1,0 +1,271 @@
+\chapter[2025 October]{October 2025}
+
+\section[2025/10/06]{Thursday, 06 October 2025}
+\label{sec:20251006}
+
+I've been extremely bad with the labbook but this is basically what has been happening
+
+Initially the idea was to process the dataset to simplify it substantially decreasing the number of people.
+
+Using coco I did some processing where I could specify the number of people and the natural thought was to use 2
+(also as an aside - it has been a while - but I don't think there were many example of 3 or more people so we needed to use 2).
+This lead to a problem the model would train but the results were weird see run (d6508c32-9d31-46ae-b8d5-940e9c5f5660) 
+
+So the issue (and concern) was the when doing PCA analysis the results collapsed into a single manifold (a line)
+meaning that one component explained almost all the variance. This happened time and time again and we initially 
+thought it was a pretty big problem (later I did realise why this was happening because there is only two people it would 
+make sense that the variance would be explained by a single component - basically a line between the two people - but anyways).
+
+So the idea was to build a dataset manually (this way I have complete control over the number of people, poses, camera angles etc and
+with that have a better idea of what the model is doing).
+
+I did a couple of things not going to go over all the details now but everything from trying to build this myself (but that was a massive
+was of time as it's WAY more complicated than I originally thought), using different tools and methods I eventually landed on the following
+setup:
+
+I use blender and models from mixamo (owned or built by adobe). These human models come with skeletons and meshes but importantly
+poses as well. I then use blender to load random models from mixamo (I've downloaded a few but I'll download a bunch more later)
+place them randomly around a scene (facing different directions) run their animations and take photos at different angles (around
+a circle). I then map those to a coco format (basically a coco format the only thing I do differently is I add depth into the
+annotations - whereas in the proper pipeline I use MiDAS to get depth maps) so a small custom pytorch dataset and datasetloader 
+that's almost identical to the "full" pipelines version. Also one other thing that's different is that each image has an
+annotation file rather than one large one (that just made the generation code easier but might change that later).
+
+Using this approach I was able to generate 3 daatasets (for now for testing)
+
+\begin{compactitem}
+    \item 2 people
+    \item 3 people
+    \item 4 people
+\end{compactitem}
+
+These are the results so far (all the hyper parameters stay the same between the runs):
+
+\renewcommand{\runid}{51d8f9fa-bbc8-44a1-874c-d2edbcb90b3a}
+
+\subsection{Run: \texttt{\runid}}
+
+\todoredefined{Ignore num people required that's an artifact from the dataset processing code I haven't removed}
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_100.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+This is pretty much as expected with 2 people the embeddings collapse into a line again (one component explains almost all the variance).
+
+This is the finally training after 100 epochs:
+
+Epoch 100/100
+  Loss: 0.2951
+  Pos Distance: 0.8209
+  Neg Distance: 0.1236
+  
+Now onto 3 people 
+
+\renewcommand{\runid}{1ae0a5f5-95e1-42f1-8dc2-5e9ff204ee36}
+
+\subsection{Run: \texttt{\runid}}
+
+\todoredefined{Ignore num people required that's an artifact from the dataset processing code I haven't removed}
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_100.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+Was quite happy with this if you look at keypoint embeddings at epoch 100 (figure~\ref{fig:embeddings:1ae0a5f5-95e1-42f1-8dc2-5e9ff204ee36})
+the data is nicely clustered into 3 groups and the variance is more evenly spread across the components.
+
+This is the finally training after 100 epochs:
+
+Epoch 100/100
+  Loss: 0.3874
+  Pos Distance: 0.8275
+  Neg Distance: 0.2080
+
+Then finally for 4 people
+
+\renewcommand{\runid}{2e82e604-a425-4207-8f1b-1468f2743dba}
+
+\subsection{Run: \texttt{\runid}}
+
+\todoredefined{Ignore num people required that's an artifact from the dataset processing code I haven't removed}
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_100.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+This is great (figure~\ref{fig:embeddings:2e82e604-a425-4207-8f1b-1468f2743dba}) looking at the embeddings
+at epoch 100 the data is nicely clustered into 4 groups and the variance is evenly spread (around 50 50)
+
+The final results training results look like this
+
+Epoch 100/100
+  Loss: 0.3370
+  Pos Distance: 0.8023
+  Neg Distance: 0.1710
+  
+\section[2025/10/07]{Friday, 07 October 2025}
+\label{sec:20251007}
+
+Okay now onto the results and understanding them
+
+Looking at the results there are a couple takes aways and I'm not sure this is completely correct yet but this is what I'm thinking
+
+Firstly the PCA I think I've covered and that makes sense now which is good.
+
+Secondly a higher (and slower decreasing contrastive loss) when you move from 2 to 3 to 4 people makes sense as well because
+the model has to learn to separate more people so the loss should be higher and might just mean that the model is too small (but
+this is something that's going to be verified).
+
+Since I'm using cosine similarity, postitives should be high and negatives low (in euclidean the opposite is true).
+3 people have the worst seperation at 0.208 (neg distance) which means a higher loss despite having fewer people.
+This doesn't really support the initial idea that more people = higher loss so I'm going to assume that 
+this particular dataset is just more difficult (maybe the random poses I that were chosen here are more similar (look
+alike pair) but I'm not too sure about why that would matter?)
+
+In order to test this lets do another run with 3 people and a larger model
+
+Okay so doing this you get the following results
+
+\renewcommand{\runid}{cd85fc8c-9347-432b-91f6-448a4cb8536b}
+
+\subsection{Run: \texttt{\runid}}
+
+\todoredefined{Ignore num people required that's an artifact from the dataset processing code I haven't removed}
+
+\lstinputlisting[
+    caption={Hyperparameters for run \texttt{\runid}},
+    label={code:hyperparameters:\runid}
+]{figures/\runid/hyperparameters.json}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_25.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_50.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_75.png}
+  \includegraphics[width=0.48\linewidth]{figures/\runid/embeddings_epoch_100.png}
+  \caption{Embeddings at various epochs for run \texttt{\runid}.}
+  \label{fig:embeddings:\runid}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{figures/\runid/training_summary.png}
+  \caption{Training summary for run \texttt{\runid}.}
+  \label{fig:summary:\runid}
+\end{figure}
+
+Now this is interesting looking at the embeddings at epoch 100 (figure~\ref{fig:embeddings:cd85fc8c-9347-432b-91f6-448a4cb8536b})
+the data isn't nicely clustered but the seperation is better but it's fine at 75?
+
+(I'm going to give all the results here because the neg decreases quite a bit (and then increases again))
+
+Epoch 10/100
+  Loss: 0.4092
+  Pos Distance: 0.8591
+  Neg Distance: 0.3938
+
+Epoch 20/100
+  Loss: 0.3644
+  Pos Distance: 0.8651
+  Neg Distance: 0.2112
+
+Epoch 30/100
+  Loss: 0.3366
+  Pos Distance: 0.8713
+  Neg Distance: 0.1335
+
+Epoch 40/100
+  Loss: 0.3203
+  Pos Distance: 0.8615
+  Neg Distance: 0.0890
+
+Epoch 50/100
+  Loss: 0.3017
+  Pos Distance: 0.8379
+  Neg Distance: 0.0840
+
+Epoch 60/100
+  Loss: 0.3003
+  Pos Distance: 0.8353
+  Neg Distance: 0.0825
+
+Epoch 70/100
+  Loss: 0.2930
+  Pos Distance: 0.8409
+  Neg Distance: 0.0901
+
+Epoch 80/100
+  Loss: 0.2841
+  Pos Distance: 0.8537
+  Neg Distance: 0.1457
+
+Epoch 90/100
+  Loss: 0.2872
+  Pos Distance: 0.8508
+  Neg Distance: 0.1472
+
+Epoch 100/100
+  Loss: 0.2939
+  Pos Distance: 0.8457
+  Neg Distance: 0.1441
+  
+You can see it gets down to 0.0825 at epoch 60 but then goes back up again to 0.1441 at epoch 100.
+
+This might be because of the number of heads (I set this to be 2 but for consistency I should have left it at 1)
+
+I'm going to test again and see what happens with a "large" model 64 hidden and output dim but with 1 head
