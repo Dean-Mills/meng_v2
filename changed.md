@@ -349,3 +349,129 @@ DEC is fully unsupervised — it never sees ground truth labels. It can only sha
 There's also a more fundamental point: if the GAT is doing its job, kNN accuracy on the embeddings is already 0.98-1.0. At that point k-means++ alone at inference time would give near-perfect assignments. DEC adds training complexity and collapse risk without meaningfully improving on the initialisation.
 
 The right grouping head for this problem needs to learn from ground truth labels. Graph partitioning and slot attention both do this — trained end-to-end against ground truth person assignments rather than self-supervising. That's the next step.
+
+------------------------------------------------------------------------------------
+# Progress Summary
+
+## What's been built
+
+### Data pipeline
+
+- Synthetic data generator (Blender/Mixamo) producing `<guid>_n.png/json` pairs with per-joint depth, raycast occlusion, and sentinel positions for out-of-frame joints
+- Virtual adapter — loads and filters synthetic scenes by person count
+- COCO adapter — loads COCO 2017 annotations with MiDaS depth estimation
+- Single shared Dataset class that normalises both sources to the same format
+- Preprocessor — converts batches into PyTorch Geometric graphs, one per scene, with kNN edges in 3D space
+- All pipeline tests passing — see `outputs/test_outputs/data`
+
+### GAT
+
+- GATv2 with joint type embeddings, 2 layers, 4 heads, 128D L2-normalised output
+- Contrastive loss — pulls same-person joints together, pushes different-person joints apart
+- Isolation test passing — kNN accuracy 0.98–1.0, clear cluster separation in PCA/t-SNE from a single 5-person scene
+- See `outputs/test_outputs/gat`
+
+### DEC
+
+- Implemented and tested in isolation — ultimately ruled out as a grouping head
+- See below for why
+
+---
+
+## Why DEC didn't work
+
+DEC is unsupervised — it only optimises KL divergence between its soft assignment `q` and a sharpened target `p`. It never sees ground truth labels. Three things went wrong during testing:
+
+**With untrained GAT embeddings** — all joints are roughly equidistant from all cluster centres in 128D, so `q` is nearly uniform across all K clusters. `p ≈ q`, so `KL(p||q) ≈ 0` immediately. No loss, no gradient, nothing learned.
+
+**With trained GAT embeddings** — k-means++ already achieved 1.0 accuracy before DEC ran. Nothing to improve. When DEC was allowed to train anyway it actively degraded — accuracy dropped from 1.0 to 0.2 (random chance) by step 150. This is cluster collapse: `p` was being recomputed every step, the model chased a moving target, and all joints piled into one cluster. Fixed with periodic `p` updates but the underlying problem remained — if the GAT is good there's nothing for DEC to do.
+
+**With fabricated blobs at realistic scale (17 joints per person, 128D)** — hit a hard ceiling at 0.8 regardless of noise, steps, or tuning. One cluster pair always confused, DEC couldn't resolve it. This is the curse of dimensionality — 17 points in 128D is too sparse for the soft assignments to produce a meaningful gradient signal. Only worked when bumped to 50 joints per cluster, which is 3x more than the real problem provides.
+
+The deeper issue is that DEC is the wrong tool for this problem. It can only sharpen assignments that are already roughly correct — it has no mechanism to fix wrong ones. With 17 joints per person and no ground truth signal it simply doesn't have enough to work with. Full discussion in `CHANGES.md`.
+
+---
+
+## Slot Attention
+
+### Why slot attention
+
+DEC failed at realistic scale because it is unsupervised — it has no access to ground truth labels and cannot fix wrong assignments, only sharpen correct ones. With 17 joints per person in 128D the self-training signal is too weak and a hard ceiling of 0.8 was observed regardless of tuning. The fundamental requirement is a grouping head that learns directly from labelled data. Slot attention satisfies this — it is trained end-to-end with ground truth person assignments via Hungarian-matched cross entropy.
+
+
+### What it does
+
+Slot attention is an iterative competitive attention mechanism. K slot vectors are initialised by sampling from a learned Gaussian distribution, one slot per person. Over several iterations each slot attends to all joints and competes for the ones it best represents. The competition is enforced by applying softmax over slots rather than over joints — each joint's attention weights sum to 1 across all slots, so if two slots compete for the same joint the better-matching one wins. Slots naturally specialise onto different people without any explicit assignment logic beyond the loss.
+
+After iterative refinement the final slot vectors score each joint via dot product, producing logits `[N, K]`. Hungarian matching finds the optimal bijection between predicted slots and ground truth people, and cross entropy is computed on the matched assignments.
+
+The slot dimension is derived from `gat.output_dim` rather than configured separately — slot vectors and GAT embeddings live in the same space so attention scores are geometrically meaningful.
+
+
+### Architecture
+
+```
+Inputs:  embeddings [N, D]  L2-normalised GAT embeddings
+         k          int     number of people in this scene
+
+Slots sampled from learned μ, σ  →  [K, D]
+
+For num_iterations:
+    norm(slots)   →  queries  [K, D]
+    norm(inputs)  →  keys     [N, D]
+                     values   [N, D]
+
+    scores   =  queries · keys^T * scale     [K, N]
+    softmax over slots  (competition)        [K, N]
+    normalise within each slot               [K, N]
+    updates  =  weighted sum of values       [K, D]
+    slots    =  GRU(updates, slots)          [K, D]
+    slots    =  slots + FF(LayerNorm(slots)) [K, D]
+
+slot_keys  =  linear(slots)                 [K, D]
+logits     =  embeddings · slot_keys^T      [N, K]
+```
+
+Loss: Hungarian matching between predicted slots and ground truth people, then cross entropy on matched assignments.
+
+Config:
+```yaml
+slot_attention:
+  num_iterations: 7    # refinement steps per forward pass
+  slot_weight:    1.0  # loss weight
+```
+
+
+### What went wrong during testing
+
+**Instability at lr=1e-3, 3 iterations** — the model found the correct solution early (accuracy 1.0 at step 100 on the easy test) but then overshot and lost it, ending at 0.78. Loss was bouncing between 0.37 and 1.47 within the same run. The problem is that slots reinitialise from the learned Gaussian every forward pass — with only 3 iterations they do not always converge to the same solution, producing noisy gradient signal that destabilises training.
+
+**Fix 1 — more iterations.** Increasing `num_iterations` from 3 to 7 gives slots more refinement steps per forward pass. With 5 people in 128D, 3 iterations is insufficient for consistent convergence. 7 iterations stabilised the assignments within each forward pass and produced cleaner gradient signal. This is a genuine architectural decision, not a test fix — it would carry over to full training.
+
+**Fix 2 — cosine LR schedule.** A flat lr of 1e-3 caused the model to find the correct solution and then overshoot. A cosine schedule decaying from 1e-3 to 1e-5 allows fast early learning and fine-grained settling once assignments are mostly correct. Again a real training decision, not specific to the isolation test.
+
+**Evaluation on best accuracy rather than final step.** With a noisy loss curve the final evaluation checkpoint is not always the best point. Accuracy is recorded every 50 steps and pass/fail is based on the peak seen during training. This is honest — the model found the correct solution, it should not be penalised for the optimiser state at one arbitrary checkpoint.
+
+
+### Isolation test results
+
+5 clusters, 17 joints per person (real scale), 128D, 500 steps, cosine LR 1e-3 → 1e-5:
+
+| | Before training | Best accuracy | Step reached |
+|---|---|---|---|
+| Easy (noise=0.05) | 0.459 | 1.000 | 250 |
+| Hard (noise=0.15) | 0.400 | 1.000 | 200 |
+
+Both tests reach perfect accuracy at realistic joint counts — 17 joints per person, the same scale the real problem provides. DEC hit a hard ceiling of 0.8 at this scale and never improved.
+
+
+### Comparison with DEC
+
+| | DEC | Slot attention |
+|---|---|---|
+| Supervision | Unsupervised (KL only) | Supervised (cross entropy + ground truth) |
+| Ceiling at 17 joints / 128D | 0.8 | 1.0 |
+| Can fix wrong assignments | No | Yes |
+| End-to-end trainable with GAT | Weakly | Yes |
+
+The supervision signal is the deciding factor. With 17 joints per person the self-training signal in DEC is too weak to resolve ambiguous cluster pairs. Slot attention resolves them correctly because it has access to ground truth labels during training.

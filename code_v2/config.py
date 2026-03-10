@@ -30,7 +30,13 @@ class DECConfig(BaseModel):
 
 class LossConfig(BaseModel):
     contrastive_margin: float
-    dec_weight: float = 1.0   # weight for KL divergence loss when DEC is used
+    dec_weight:   float = 1.0   # weight for KL divergence loss when DEC is used
+    slot_weight:  float = 1.0   # weight for slot attention loss
+
+
+class SlotAttentionConfig(BaseModel):
+    num_iterations: int   = 3      # refinement iterations — 3 is standard
+    slot_weight:    float = 1.0    # weight for slot attention loss
 
 
 class ExperimentConfig(BaseModel):
@@ -38,7 +44,8 @@ class ExperimentConfig(BaseModel):
     description: str = ""
     gat: GATConfig
     loss: LossConfig
-    dec: Optional[DECConfig] = None
+    dec:            Optional[DECConfig]           = None
+    slot_attention: Optional[SlotAttentionConfig]  = None
 
     @classmethod
     def from_yaml(cls, path: Path) -> "ExperimentConfig":

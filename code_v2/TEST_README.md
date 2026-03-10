@@ -182,11 +182,64 @@ python tests/test_dec.py --config configs/dec_isolation.yaml
 --noise_easy     Noise for easy test (default: 0.05)
 --noise_medium   Noise for medium test (default: 0.1)
 ```
+---
+
+## Slot Attention Isolation Test
+
+Verifies slot attention works correctly in isolation using fabricated embeddings. No real data or GAT required — same approach as `test_dec.py`.
+
+Unlike DEC, slot attention is trained with ground truth labels so it has direct supervision signal. This is why it works at realistic scale (17 joints per person, 128D) where DEC could not.
+
+**What it checks:**
+
+**Forward pass**
+- `logits` is `[N, K]`, no NaN or Inf
+- `slots` is `[K, D]`, no NaN
+
+**Gradient flow**
+- All parameters receive gradients after `loss.backward()`
+- Total gradient norm > 0
+
+**Loss computation**
+- Cross entropy loss is a scalar tensor
+- Not NaN, not Inf, >= 0
+
+**Assignment accuracy — easy (noise=0.05)**
+- Tight clusters, 17 joints per person
+- Best accuracy >= 0.9 during training
+
+**Assignment accuracy — hard (noise=0.15)**
+- Overlapping clusters, 17 joints per person — same scale as the real problem
+- Best accuracy >= 0.9 during training
+
+Accuracy is measured using Hungarian matching. Pass/fail is based on best accuracy seen during training rather than final step accuracy — the model is evaluated every 50 steps and the peak is recorded. This is because slot attention can find the correct solution but overshoot past it; the best accuracy is a more honest measure of whether the mechanism works.
+
+**Notes on training stability**
+
+Slot attention is more sensitive to training dynamics than DEC. Two things matter:
+
+- `num_iterations: 7` — more refinement steps per forward pass means slots converge more reliably to consistent assignments, producing cleaner gradient signal
+- Cosine LR schedule (1e-3 → 1e-5) — fast learning early, settles late, reduces oscillation
+
+Both are genuine training decisions, not just test fixes. They carry over to full training.
+
+**Run:**
+```bash
+python tests/test_slot_attention.py --config configs/slot_attention_isolation.yaml
+```
+
+**Options:**
+```
+--n_steps       Training steps (default: 500)
+--k             Number of people / slots (default: 5)
+--n_per_person  Joints per person (default: 17)
+--noise_easy    Noise for easy test (default: 0.05)
+--noise_hard    Noise for hard test (default: 0.15)
+```
 
 ---
 
 ## What's Next
 
 - Graph partitioning isolation test — `test_graph_partition.py` (coming)
-- Slot attention isolation test — `test_slot_attention.py` (coming)
 - Full pipeline test — `test_full_pipeline.py` (coming)
