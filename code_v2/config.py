@@ -31,7 +31,15 @@ class DECConfig(BaseModel):
 class LossConfig(BaseModel):
     contrastive_margin: float
     dec_weight:   float = 1.0   # weight for KL divergence loss when DEC is used
-    slot_weight:  float = 1.0   # weight for slot attention loss
+    slot_weight:       float = 1.0   # weight for slot attention loss
+    partition_weight:  float = 1.0   # weight for graph partitioning loss
+
+
+class GraphPartitioningConfig(BaseModel):
+    hidden_dim:      int   = 256    # MLP hidden dimension
+    dropout:         float = 0.1    # dropout in MLP
+    threshold:       float = 0.5    # affinity threshold for connected components at inference
+    partition_weight: float = 1.0   # loss weight
 
 
 class SlotAttentionConfig(BaseModel):
@@ -45,7 +53,8 @@ class ExperimentConfig(BaseModel):
     gat: GATConfig
     loss: LossConfig
     dec:            Optional[DECConfig]           = None
-    slot_attention: Optional[SlotAttentionConfig]  = None
+    slot_attention:    Optional[SlotAttentionConfig]   = None
+    graph_partitioning: Optional[GraphPartitioningConfig] = None
 
     @classmethod
     def from_yaml(cls, path: Path) -> "ExperimentConfig":

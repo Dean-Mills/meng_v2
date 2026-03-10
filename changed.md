@@ -475,3 +475,106 @@ Both tests reach perfect accuracy at realistic joint counts — 17 joints per pe
 | End-to-end trainable with GAT | Weakly | Yes |
 
 The supervision signal is the deciding factor. With 17 joints per person the self-training signal in DEC is too weak to resolve ambiguous cluster pairs. Slot attention resolves them correctly because it has access to ground truth labels during training.
+
+## Graph Partitioning
+
+### What it does
+
+Graph partitioning frames the grouping problem as binary edge classification.
+For every pair of joints (i, j) the model predicts whether they belong to the
+same person. After thresholding, connected components on the resulting affinity
+graph recover the person groups without any explicit knowledge of K.
+
+This is a fundamentally different framing from slot attention. Slot attention
+assigns joints to K pre-specified slots via competitive attention. Graph
+partitioning makes pairwise same/different decisions and lets the group
+structure emerge from the graph topology. K does not need to be specified at
+inference time — it falls out naturally from the number of connected components.
+
+### Architecture
+
+For each pair (i, j) the feature vector is:
+
+```
+f(i, j) = [e_i − e_j  ‖  e_i ⊙ e_j]   ∈ R^{2D}
+```
+
+where e_i, e_j are L2-normalised GAT embeddings. The difference captures
+direction between the two points in embedding space; the element-wise product
+captures co-activation. This is option A — a learned classifier on top of the
+embeddings rather than simply thresholding cosine similarity. The model learns
+what "same person" means in embedding space from labelled data rather than
+relying on a fixed geometric criterion.
+
+The MLP maps `R^{2D}` to a scalar logit per pair:
+
+```
+Linear(2D → H) → ReLU → LayerNorm → Dropout
+→ Linear(H → H/2) → ReLU
+→ Linear(H/2 → 1)
+```
+
+Groups are recovered at inference by thresholding predicted affinities at 0.5
+and finding connected components via union-find.
+
+Config:
+```yaml
+graph_partitioning:
+  hidden_dim:       256    # MLP hidden dimension
+  dropout:          0.1
+  threshold:        0.5    # affinity threshold at inference
+  partition_weight: 1.0    # loss weight
+```
+
+### Loss
+
+Binary cross entropy over all N*(N-1)/2 pairs. With 5 people × 17 joints
+there are 680 same-person pairs and 2890 different-person pairs — a 4:1
+class imbalance. Without correction the model collapses to predicting
+all-different and achieves high accuracy trivially. `pos_weight = n_neg / n_pos`
+(clamped at 10) upscales the positive class so same-person pairs contribute
+proportionally to the gradient.
+
+Two metrics are tracked during training:
+
+- **Edge F1** — precision/recall balance on the binary pair classification.
+  Accuracy is not used because it is misleading under class imbalance.
+- **Grouping accuracy** — end-to-end metric. Thresholded edges → connected
+  components → Hungarian matching against ground truth. This is the metric
+  that actually matters for the grouping task.
+
+### Isolation test results
+
+5 clusters, 17 joints per person (real scale), 128D, 500 steps, cosine LR
+1e-3 → 1e-5:
+
+| | Before training | Best F1 | Best grouping acc | Step reached |
+|---|---|---|---|---|
+| Easy (noise=0.05) | F1=0.083 / acc=0.212 | 1.000 | 1.000 | 50 |
+| Hard (noise=0.15) | F1=0.235 / acc=0.200 | 1.000 | 1.000 | 50 |
+
+Perfect F1 and grouping accuracy by step 50 on both tests, holding stable
+for the remaining 450 steps with loss decaying smoothly to near zero. This
+is the cleanest result of all three grouping heads tested.
+
+### Comparison across all grouping heads
+
+| | DEC | Slot attention | Graph partitioning |
+|---|---|---|---|
+| Supervision | Unsupervised | Supervised (CE) | Supervised (BCE) |
+| Ceiling at 17 joints / 128D | 0.8 | 1.0 | 1.0 |
+| Requires K at inference | Yes | Yes | No |
+| Stability | Flat (collapsed) | Noisy | Very stable |
+| Steps to converge | Never | ~200 | ~50 |
+| End-to-end trainable with GAT | Weakly | Yes | Yes |
+
+The key practical advantage of graph partitioning over slot attention is
+stability and convergence speed. Slot attention must coordinate K slot vectors
+via competitive attention across multiple iterations — the gradient signal is
+indirect and the training curve is noisy. The edge classifier receives a direct
+binary supervision signal from 3570 labelled pairs per scene, which is dense
+and unambiguous.
+
+The key theoretical advantage over slot attention is that K does not need to
+be known at inference time. This is a significant practical benefit for the
+real problem where the number of people in a scene is not known in advance.

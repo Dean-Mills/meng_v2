@@ -239,7 +239,58 @@ python tests/test_slot_attention.py --config configs/slot_attention_isolation.ya
 
 ---
 
-## What's Next
+## Graph Partitioning Isolation Test
 
-- Graph partitioning isolation test — `test_graph_partition.py` (coming)
-- Full pipeline test — `test_full_pipeline.py` (coming)
+Verifies the edge classifier works correctly in isolation using fabricated embeddings. No real data or GAT required — same approach as the other isolation tests.
+
+The edge classifier predicts for every pair of joints whether they belong to the same person. Groups are recovered by thresholding predictions and running connected components on the resulting affinity graph.
+
+**What it checks:**
+
+**Forward pass**
+- `logits` is `[E]` where E = N*(N-1)/2 — one score per pair
+- `pairs` is `[E, 2]` — the joint index pairs (i, j) with i < j
+- No NaN or Inf in logits
+
+**Gradient flow**
+- All parameters receive gradients after `loss.backward()`
+- Total gradient norm > 0
+
+**Loss computation**
+- Binary cross entropy is a scalar tensor
+- Not NaN, not Inf, >= 0
+- Reports edge F1, edge accuracy, and grouping accuracy
+
+**Assignment accuracy — easy (noise=0.05)**
+- Best edge F1 >= 0.9
+- Best grouping accuracy >= 0.9
+
+**Assignment accuracy — hard (noise=0.15)**
+- Same thresholds at realistic scale — 17 joints per person, 128D
+
+Two metrics are reported throughout training:
+
+- **Edge F1** — how well the classifier labels individual pairs as same/different person. F1 rather than accuracy because pairs are heavily class-imbalanced (far more different-person pairs than same-person pairs with 5 people).
+- **Grouping accuracy** — end-to-end metric. Predicted edges are thresholded at 0.5, connected components recover person groups, Hungarian matching scores them against ground truth. This is what actually matters.
+
+Pass/fail uses best seen during training (recorded every 50 steps) for consistency with the slot attention test.
+
+**Note on class imbalance**
+
+With 5 people × 17 joints there are 5 × C(17,2) = 680 same-person pairs and 2890 different-person pairs. The loss uses `pos_weight = n_neg / n_pos` (clamped at 10) to prevent the model collapsing to predicting all-different.
+
+**Run:**
+```bash
+python tests/test_graph_partitioning.py --config configs/graph_partitioning_isolation.yaml
+```
+
+**Options:**
+```
+--n_steps       Training steps (default: 500)
+--k             Number of people (default: 5)
+--n_per_person  Joints per person (default: 17)
+--noise_easy    Noise for easy test (default: 0.05)
+--noise_hard    Noise for hard test (default: 0.15)
+```
+
+---
