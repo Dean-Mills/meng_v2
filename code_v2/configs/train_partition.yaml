@@ -1,0 +1,36 @@
+name: "train_partition"
+description: "GAT + graph partitioning trained end-to-end on virtual data"
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+
+graph_partitioning:
+  hidden_dim:       256
+  dropout:          0.1
+  threshold:        0.5
+  partition_weight: 1.0
+
+loss:
+  contrastive_margin: 0.5
+  partition_weight:   1.0
+
+training:
+  virtual_dir:   data/virtual
+  batch_size:    4
+  num_workers:   4
+  lr:            1e-3
+  lr_min:        1e-5
+  weight_decay:  1e-4
+  epochs:        50
+  val_every:     5
+  save_dir:      outputs/checkpoints/partition
+  save_best:     true

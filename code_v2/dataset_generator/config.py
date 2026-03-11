@@ -3,7 +3,7 @@ import os
 
 # Paths
 FBX_DIRECTORY = "/home/dean/projects/mills_ds/data/mixamo"
-OUTPUT_DIR = "/home/dean/projects/mills_ds/data/virtual"
+OUTPUT_DIR = "/home/dean/projects/mills_ds/data/virtual/train"
 
 # Scene setup
 NUM_CHARACTERS = 5

@@ -578,3 +578,30 @@ and unambiguous.
 The key theoretical advantage over slot attention is that K does not need to
 be known at inference time. This is a significant practical benefit for the
 real problem where the number of people in a scene is not known in advance.
+
+## DETR — Rationale for Exclusion
+
+DETR was considered as a fourth grouping head. A preliminary implementation
+was attempted but not pursued to isolation testing. The decision was made to
+exclude it from the final comparison for the following reasons.
+
+**Architectural overlap with slot attention.** DETR's decoder is a superset
+of slot attention — it adds self-attention between queries and a heavier
+feed-forward stack, but the core mechanism is the same iterative cross-attention
+competition between learned queries and input features. For this problem the
+additional complexity adds no meaningful capability.
+
+**The null object problem.** DETR was designed for object detection where the
+number of detections varies per image. It handles this by padding predictions
+with a learned "no object" class and training the model to predict empty slots
+for unused queries. This is the source of the null value instability encountered
+in the preliminary implementation. Resolving it correctly requires careful loss
+masking and balanced sampling of empty vs occupied slots — engineering overhead
+with no benefit for this problem, where the number of people per scene is
+bounded and known at training time.
+
+**The comparison is already complete without it.** The four approaches evaluated
+— kNN on GAT embeddings, DEC, slot attention, and graph partitioning — span the
+relevant design space: unsupervised vs supervised, slot-based vs pairwise,
+K-required vs K-free. DETR would add a fifth data point that is not
+meaningfully distinct from slot attention in any of these dimensions.

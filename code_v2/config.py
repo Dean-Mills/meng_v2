@@ -47,6 +47,24 @@ class SlotAttentionConfig(BaseModel):
     slot_weight:    float = 1.0    # weight for slot attention loss
 
 
+class TrainingConfig(BaseModel):
+    # Data paths — expect train/ val/ test/ subdirectories of virtual_dir
+    virtual_dir:   str = "data/virtual"
+    # Loader
+    batch_size:    int   = 4
+    num_workers:   int   = 4
+    # Optimiser
+    lr:            float = 1e-3
+    lr_min:        float = 1e-5
+    weight_decay:  float = 1e-4
+    # Schedule
+    epochs:        int   = 50
+    val_every:     int   = 5       # validate every N epochs
+    # Checkpointing
+    save_dir:      str   = "outputs/checkpoints"
+    save_best:     bool  = True
+
+
 class ExperimentConfig(BaseModel):
     name: str = "default"
     description: str = ""
@@ -55,6 +73,7 @@ class ExperimentConfig(BaseModel):
     dec:            Optional[DECConfig]           = None
     slot_attention:    Optional[SlotAttentionConfig]   = None
     graph_partitioning: Optional[GraphPartitioningConfig] = None
+    training:           Optional[TrainingConfig]           = None
 
     @classmethod
     def from_yaml(cls, path: Path) -> "ExperimentConfig":
