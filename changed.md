@@ -605,3 +605,173 @@ bounded and known at training time.
 relevant design space: unsupervised vs supervised, slot-based vs pairwise,
 K-required vs K-free. DETR would add a fifth data point that is not
 meaningfully distinct from slot attention in any of these dimensions.
+
+## Experimental Results
+
+### Metrics
+
+**PGA (Pose Grouping Accuracy)**
+The primary metric. For each scene, predicted person groups are matched to
+ground truth people via Hungarian matching — finding the optimal bijection
+between predicted and ground truth labels. PGA is the fraction of joints
+assigned to the correct person under this optimal matching. A score of 1.0
+means every joint was grouped correctly. This metric is permutation-invariant
+— the model is not penalised for labelling people in a different order than
+the ground truth.
+
+**NMI (Normalised Mutual Information)**
+Measures the quality of the GAT embeddings independently of the grouping head.
+K-means is run on the embeddings with ground truth K, and NMI measures how
+much information the resulting clusters share with the ground truth person
+labels. A score of 1.0 means perfect correspondence. NMI is the same across
+all methods evaluated from the same checkpoint because it depends only on the
+embeddings, not the grouping head.
+
+**ARI (Adjusted Rand Index)**
+A second embedding quality metric. Measures agreement between the k-means
+clustering and ground truth, corrected for chance. Ranges from 0 (random) to
+1 (perfect). Like NMI, it is the same across all heads from the same checkpoint.
+
+**Detection F1**
+Measures whether the method correctly counts the number of people in the scene.
+For kNN this is always 1.0 because the ground truth K is provided explicitly.
+For slot attention K is also provided explicitly so F1 is close to 1.0.
+For graph partitioning K is inferred from connected components — if the edge
+threshold splits or merges groups incorrectly, F1 drops. Detection F1 therefore
+measures threshold calibration for graph partitioning.
+
+**Per-joint accuracy**
+PGA broken down by COCO joint type. Reveals whether certain joints are harder
+to group correctly — typically extremities (ankles, wrists) which are more
+likely to be occluded or close to another person's joints.
+
+---
+
+### Experiment 1 — Synthetic test set
+
+All models trained on 400 virtual scenes (100 each at 2/3/4/5 people),
+evaluated on 100 held-out virtual scenes. Training: 50 epochs, cosine LR
+1e-3 → 1e-5, AdamW.
+
+| Method | PGA | Std | NMI | ARI | Det F1 |
+|---|---|---|---|---|---|
+| kNN (contrastive GAT) | 0.994 | 0.012 | 0.987 | 0.987 | 1.000 |
+| kNN (partition GAT) | 0.995 | 0.012 | 0.987 | 0.987 | 1.000 |
+| Graph partitioning | 0.954 | 0.115 | 0.987 | 0.987 | 0.973 |
+| kNN (slot GAT) | 0.994 | 0.015 | 0.988 | 0.987 | 1.000 |
+| Slot attention | 0.858 | 0.143 | 0.988 | 0.987 | 0.935 |
+
+**Per-joint accuracy — synthetic test set (kNN / graph partitioning / slot attention):**
+
+| Joint | kNN | Graph partition | Slot attention |
+|---|---|---|---|
+| nose | 1.000 | 0.955 | 0.852 |
+| left eye | 1.000 | 0.955 | 0.852 |
+| right eye | 1.000 | 0.955 | 0.854 |
+| left ear | 1.000 | 0.955 | 0.854 |
+| right ear | 1.000 | 0.955 | 0.856 |
+| left shoulder | 1.000 | 0.955 | 0.861 |
+| right shoulder | 1.000 | 0.955 | 0.864 |
+| left elbow | 0.992 | 0.955 | 0.860 |
+| right elbow | 0.984 | 0.947 | 0.852 |
+| left wrist | 0.994 | 0.955 | 0.873 |
+| right wrist | 0.975 | 0.952 | 0.853 |
+| left hip | 1.000 | 0.955 | 0.863 |
+| right hip | 1.000 | 0.955 | 0.863 |
+| left knee | 1.000 | 0.955 | 0.868 |
+| right knee | 0.996 | 0.953 | 0.864 |
+| left ankle | 0.990 | 0.955 | 0.855 |
+| right ankle | 0.984 | 0.941 | 0.842 |
+
+On synthetic data kNN is the strongest method. The GAT with contrastive loss
+produces near-perfect embeddings — NMI 0.987, ARI 0.987 — and k-means is
+sufficient to recover the correct groups. The learned grouping heads do not
+improve on this. Graph partitioning reaches 0.954 with higher variance (std
+0.115), and slot attention reaches 0.858. The head loss going to near zero
+by epoch 36 for graph partitioning confirms that the edge classifier solved
+its task quickly and stopped contributing meaningful gradient signal — the GAT
+was already making the problem trivially easy.
+
+---
+
+### Experiment 2 — COCO val2017 (zero-shot transfer)
+
+The same trained checkpoints evaluated on COCO val2017 with no fine-tuning.
+MiDaS DPT_Hybrid provides per-joint depth estimates. 2346 images, all with
+at least one annotated person.
+
+This is a zero-shot sim-to-real transfer test — the models have never seen
+real images during training.
+
+| Method | PGA | Std | NMI | ARI | Det F1 |
+|---|---|---|---|---|---|
+| kNN — contrastive GAT | **0.838** | 0.194 | 0.754 | 0.692 | 1.000 |
+| kNN — partition GAT | 0.836 | 0.195 | 0.751 | 0.687 | 1.000 |
+| kNN — slot GAT | 0.828 | 0.202 | 0.740 | 0.675 | 1.000 |
+| Slot attention | 0.788 | 0.236 | 0.740 | 0.675 | 0.920 |
+| Graph partitioning | 0.752 | 0.266 | 0.751 | 0.687 | 0.802 |
+
+**Per-joint accuracy — COCO val2017 (kNN contrastive / graph partition / slot attention):**
+
+| Joint | kNN | Graph partition | Slot attention |
+|---|---|---|---|
+| nose | 0.832 | 0.748 | 0.786 |
+| left eye | 0.818 | 0.733 | 0.778 |
+| right eye | 0.819 | 0.741 | 0.779 |
+| left ear | 0.796 | 0.697 | 0.744 |
+| right ear | 0.807 | 0.709 | 0.761 |
+| left shoulder | 0.835 | 0.746 | 0.780 |
+| right shoulder | 0.838 | 0.747 | 0.786 |
+| left elbow | 0.841 | 0.739 | 0.780 |
+| right elbow | 0.833 | 0.748 | 0.783 |
+| left wrist | 0.848 | 0.732 | 0.780 |
+| right wrist | 0.831 | 0.740 | 0.787 |
+| left hip | 0.837 | 0.745 | 0.770 |
+| right hip | 0.835 | 0.747 | 0.769 |
+| left knee | 0.833 | 0.742 | 0.767 |
+| right knee | 0.816 | 0.741 | 0.772 |
+| left ankle | 0.775 | 0.706 | 0.749 |
+| right ankle | 0.777 | 0.714 | 0.748 |
+
+---
+
+### Conclusions
+
+**1. The contrastive loss alone is the dominant learning signal.**
+Joint training with a grouping head did not improve the GAT embeddings.
+kNN on the contrastive-only GAT (0.838) is essentially identical to kNN on
+the jointly trained GATs (0.836, 0.828). The heads add complexity without
+improving the upstream representation.
+
+**2. The sim-to-real gap is the primary open problem.**
+PGA drops from 0.994 to 0.838 on real data for kNN. NMI drops from 0.987
+to 0.754. The embeddings are less separable on COCO because the model was
+trained purely on synthetic data. The per-joint accuracy pattern on COCO
+shows ankles and ears consistently lowest — joints that are frequently
+occluded or at the edge of the image, exactly where synthetic data diverges
+most from real scenes.
+
+**3. Slot attention generalises better than graph partitioning on real data.**
+On synthetic data slot attention trails kNN by 14 points. On COCO that gap
+closes to 5 points (0.838 vs 0.788). Graph partitioning goes the other
+direction — it trails kNN by 4 points on synthetic but 8.6 points on COCO,
+and its detection F1 collapses to 0.802. The fixed threshold of 0.5
+calibrated on synthetic data does not transfer to noisier real embeddings.
+Slot attention, trained with ground truth supervision, generalises more
+gracefully.
+
+**4. kNN with a good GAT is a strong and robust baseline.**
+Given ground truth K, k-means on L2-normalised GAT embeddings is competitive
+with or better than both learned heads on both domains. It has perfect
+detection F1 by construction and lower variance than the learned heads in
+every experiment. This suggests that for deployment on synthetic data or
+data close to the training distribution, the learned grouping heads are not
+necessary.
+
+**5. Learned heads become relevant as scene complexity increases.**
+The relative improvement of slot attention over its synthetic performance on
+COCO suggests that learned grouping provides a meaningful benefit when
+embeddings are noisier. The natural next step is fine-tuning on a small
+amount of real annotated data — if slot attention can close the remaining
+5-point gap to kNN on COCO after fine-tuning, that would confirm the head
+is learning something useful beyond what the embeddings alone provide.

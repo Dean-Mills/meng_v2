@@ -290,27 +290,48 @@ class Evaluator:
 
     def evaluate(
         self,
-        virtual_dir: Path,
-        split:       str  = "test",
-        batch_size:  int  = 4,
+        virtual_dir:   Optional[Path] = None,
+        split:         str  = "test",
+        batch_size:    int  = 4,
+        coco_img_dir:  Optional[Path] = None,
+        coco_ann_file: Optional[Path] = None,
+        max_images:    Optional[int]  = None,
     ) -> Dict:
-        assert self.cfg.training is not None or True  # training cfg optional here
-        adapter  = VirtualAdapter(virtual_dir / split)
+        if coco_img_dir is not None and coco_ann_file is not None:
+            from coco_adapter import CocoAdapter
+            adapter = CocoAdapter(
+                img_dir=coco_img_dir,
+                ann_file=coco_ann_file,
+                device=self.device,
+            )
+            print(f"Evaluating on COCO: {coco_ann_file.name}")
+        elif virtual_dir is not None:
+            adapter = VirtualAdapter(virtual_dir / split)
+            print(f"Evaluating on virtual/{split}")
+        else:
+            raise ValueError("Provide either --virtual_dir or --coco_img_dir + --coco_ann_file")
+
         dataset  = PoseDataset(adapter)
         loader   = create_dataloader(dataset, batch_size=batch_size,
                                      shuffle=False, num_workers=0)
 
         agg: Dict[str, List] = {}
+        n_evaluated = 0
 
         with torch.no_grad():
             for batch in loader:
                 graphs = self.preprocessor.process_batch(batch)
                 for graph in graphs:
+                    if max_images is not None and n_evaluated >= max_images:
+                        break
                     scene_results = self._eval_graph(graph)
                     for method, metrics in scene_results.items():
                         if method not in agg:
                             agg[method] = []
                         agg[method].append(metrics)
+                    n_evaluated += 1
+                if max_images is not None and n_evaluated >= max_images:
+                    break
 
         return self._summarise(agg)
 
@@ -387,17 +408,27 @@ class Evaluator:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint", type=Path, required=True)
-    parser.add_argument("--virtual_dir", type=Path, default=Path("data/virtual"))
-    parser.add_argument("--split",      type=str,  default="test")
-    parser.add_argument("--save",       type=Path,
+    parser.add_argument("--checkpoint",    type=Path, required=True)
+    parser.add_argument("--virtual_dir",   type=Path, default=None)
+    parser.add_argument("--split",         type=str,  default="test")
+    parser.add_argument("--coco_img_dir",  type=Path, default=None)
+    parser.add_argument("--coco_ann_file", type=Path, default=None)
+    parser.add_argument("--max_images",    type=int,  default=None,
+                        help="Limit number of images evaluated (useful for quick checks)")
+    parser.add_argument("--save",          type=Path,
                         default=Path("outputs/eval_results.json"))
-    parser.add_argument("--device",     type=str,
+    parser.add_argument("--device",        type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
 
     evaluator = Evaluator(args.checkpoint, device=args.device)
-    summary   = evaluator.evaluate(args.virtual_dir, split=args.split)
+    summary   = evaluator.evaluate(
+        virtual_dir=args.virtual_dir,
+        split=args.split,
+        coco_img_dir=args.coco_img_dir,
+        coco_ann_file=args.coco_ann_file,
+        max_images=args.max_images,
+    )
 
     evaluator.print_comparison(summary)
     evaluator.save_results(summary, args.save)
