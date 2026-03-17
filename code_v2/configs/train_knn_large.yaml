@@ -1,0 +1,29 @@
+name: "train_knn_large"
+description: "Larger GAT with contrastive loss only — baseline ceiling test before training heads. 4 layers, 8 heads, 256 dim. k=16 neighbours for denser graph in crowded scenes."
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 256
+  output_dim: 256
+  num_layers: 4
+  num_heads: 8
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+
+loss:
+  contrastive_margin: 0.5
+
+training:
+  virtual_dir:   data/virtual
+  batch_size:    4
+  num_workers:   4
+  lr:            1e-3
+  lr_min:        1e-5
+  weight_decay:  1e-4
+  epochs:        100
+  val_every:     5
+  save_dir:      outputs/checkpoints/knn_large
+  save_best:     true
