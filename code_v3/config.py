@@ -69,6 +69,8 @@ class SADMoNConfig(BaseModel):
     k_max:              int   = 10     # maximum number of clusters (pool size)
     dropout:            float = 0.0    # dropout on assignment logits
     sigma_init:         float = 0.2    # initial spatial kernel bandwidth (learnable)
+    sigma_min:          float = 0.05   # clamp lower bound
+    sigma_max:          float = 0.5    # clamp upper bound
     # Sub-weights for individual loss components
     lambda_spectral:    float = 1.0    # skeleton-aware spectral modularity loss
     lambda_ortho:       float = 1.0    # orthogonality regularization

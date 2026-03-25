@@ -1258,12 +1258,136 @@ Sigma needs either a fixed value, a bounded range, or a regularisation
 term that penalises deviation from a reasonable bandwidth.
 
 
-### Next steps
+### Experiment 5 — SA-DMoN no depth, sigma clamped [0.05, 0.5]
 
-1. **Fix sigma** — either clamp to a bounded range (e.g. 0.05–0.5 in
-   normalised coordinates) or fix it at a value determined by the data
-   (e.g. median pairwise distance in training graphs).
-2. **Increase lambda_spectral** — try 0.5 or 1.0 to give the
-   skeleton-aware null actual influence on the gradient.
-3. Re-evaluate with both changes to determine whether the skeleton-aware
-   null model provides signal once properly constrained.
+Sigma clamped to $[0.05, 0.5]$ in normalised coordinate space using
+`log_sigma.clamp()` in the forward pass. This prevents divergence while
+still allowing the model to learn the bandwidth within a reasonable
+range. All other settings identical to experiment 4.
+
+| Method | PGA | Std | NMI | ARI | Det F1 |
+|---|---|---|---|---|---|
+| kNN (contrastive GAT, no depth) | 0.901 | 0.110 | 0.831 | 0.801 | 1.000 |
+| kNN (DMoN GAT, no depth) | 0.881 | 0.116 | 0.806 | 0.763 | 1.000 |
+| DMoN head (no depth) | 0.785 | 0.140 | 0.806 | 0.763 | 0.962 |
+| kNN (SA-DMoN GAT, no depth, clamped) | 0.878 | 0.123 | 0.803 | 0.759 | 1.000 |
+| SA-DMoN head (no depth, clamped) | 0.805 | 0.149 | 0.803 | 0.759 | 0.965 |
+
+**Per-joint accuracy — SA-DMoN clamped (kNN SA-DMoN GAT / SA-DMoN head):**
+
+| Joint | kNN (SA-DMoN GAT) | SA-DMoN head |
+|---|---|---|
+| nose | 0.871 | 0.791 |
+| left eye | 0.900 | 0.801 |
+| right eye | 0.885 | 0.798 |
+| left ear | 0.900 | 0.804 |
+| right ear | 0.888 | 0.820 |
+| left shoulder | 0.898 | 0.826 |
+| right shoulder | 0.899 | 0.824 |
+| left elbow | 0.907 | 0.833 |
+| right elbow | 0.898 | 0.831 |
+| left wrist | 0.897 | 0.814 |
+| right wrist | 0.890 | 0.782 |
+| left hip | 0.881 | 0.820 |
+| right hip | 0.863 | 0.829 |
+| left knee | 0.869 | 0.802 |
+| right knee | 0.869 | 0.798 |
+| left ankle | 0.791 | 0.754 |
+| right ankle | 0.820 | 0.764 |
+
+
+### Analysis — sigma clamped but spectral loss still too weak
+
+Clamping fixed the divergence — sigma settled at the upper bound of 0.5,
+confirming the optimiser is still trying to push it as high as possible.
+The clamp prevents the degenerate solution but doesn't make the spectral
+loss *useful* — it just makes it a slightly less trivial constant.
+
+The SA-DMoN head improved slightly over vanilla DMoN (0.805 vs 0.785,
++2 points). This is a small signal that the skeleton-aware null is doing
+something when forced to operate at a reasonable bandwidth. But the
+pattern is fundamentally unchanged:
+
+- The head still loses to kNN on the same embeddings (0.805 vs 0.878)
+- The GAT embeddings are still degraded vs contrastive-only (0.878 vs 0.901)
+- Sigma pushes to the upper clamp, meaning the model is still trying to
+  trivialise the spectral loss rather than learn from it
+
+The root cause is `lambda_spectral: 0.1`. At 10% of the total gradient,
+the spectral loss is a rounding error that the model ignores or works
+around. The vanilla DMoN experiments needed 0.1 because the degree-based
+spectral signal was *wrong* and needed to be suppressed. With the
+skeleton-aware null, the spectral signal should be *correct* — it needs
+to be loud enough to actually influence learning.
+
+
+### Experiment 6 — SA-DMoN no depth, sigma clamped, lambda_spectral 1.0
+
+Lambda_spectral increased from 0.1 to 1.0 — now equal weight with
+supervised CE. The hypothesis was that the skeleton-aware null provides
+correct structural signal that should improve performance when given
+more influence, unlike vanilla DMoN's degree null which needed to be
+suppressed.
+
+| Method | PGA | Std | NMI | ARI | Det F1 |
+|---|---|---|---|---|---|
+| kNN (contrastive GAT, no depth) | 0.901 | 0.110 | 0.831 | 0.801 | 1.000 |
+| DMoN head (no depth) | 0.785 | 0.140 | 0.806 | 0.763 | 0.962 |
+| SA-DMoN (clamped, λ=0.1) | 0.805 | 0.149 | 0.803 | 0.759 | 0.965 |
+| SA-DMoN (clamped, λ=1.0) | 0.790 | 0.151 | 0.788 | 0.740 | 0.950 |
+
+**Per-joint accuracy — SA-DMoN lambda 1.0 (kNN SA-DMoN GAT / SA-DMoN head):**
+
+| Joint | kNN (SA-DMoN GAT) | SA-DMoN head |
+|---|---|---|
+| nose | 0.852 | 0.785 |
+| left eye | 0.866 | 0.787 |
+| right eye | 0.873 | 0.761 |
+| left ear | 0.882 | 0.793 |
+| right ear | 0.884 | 0.784 |
+| left shoulder | 0.890 | 0.796 |
+| right shoulder | 0.893 | 0.804 |
+| left elbow | 0.890 | 0.806 |
+| right elbow | 0.880 | 0.804 |
+| left wrist | 0.879 | 0.807 |
+| right wrist | 0.858 | 0.778 |
+| left hip | 0.883 | 0.811 |
+| right hip | 0.869 | 0.811 |
+| left knee | 0.849 | 0.802 |
+| right knee | 0.865 | 0.803 |
+| left ankle | 0.809 | 0.742 |
+| right ankle | 0.810 | 0.758 |
+
+
+### Analysis — higher lambda made things worse
+
+The hypothesis was wrong. Increasing lambda_spectral from 0.1 to 1.0
+degraded performance across the board:
+
+- SA-DMoN head: 0.790 vs 0.805 (−1.5 points)
+- kNN on SA-DMoN GAT: 0.867 vs 0.878 (−1.1 points)
+- NMI: 0.788 vs 0.803 (−1.5 points)
+
+Sigma remained pinned at the upper clamp (0.5). The louder spectral
+signal actively fought the contrastive loss — the GAT loss increased
+from ~0.063 to ~0.070 mid-training (epochs 40–60) before recovering,
+showing the spectral gradient was pushing embeddings away from good
+contrastive separation.
+
+The problem is not the weight — it's that **sigma at 0.5 makes the
+null model too weak regardless of how loud it is**. At σ=0.5 in
+[0,1] normalised space, the spatial kernel is nearly uniform — most
+pairs have high P values, so the null model expects most connections.
+This leaves almost no "surprising" connections for the modularity to
+reward. Amplifying the weight of a weak signal just amplifies noise.
+
+The deeper issue is an **incentive misalignment**: the spectral loss
+always benefits from a weaker null model (easier to show modularity
+against), so the optimiser pushes sigma as high as the clamp allows.
+This is true regardless of lambda_spectral. The useful structural
+signal requires a *strong* null model (small sigma, tight spatial
+kernel), but the gradient points in the opposite direction.
+
+Sigma should not be learned through the spectral loss — the loss will
+always game it. It needs to be either fixed from data statistics or
+detached from the spectral gradient.

@@ -140,15 +140,18 @@ class SADMoNHead(nn.Module):
         self.dropout = config.dropout
         self.scale = h ** -0.5
 
-        # Spatial kernel bandwidth — learnable log(σ) for unconstrained optimisation
+        # Spatial kernel bandwidth — learnable log(σ), clamped to [sigma_min, sigma_max]
         self.log_sigma = nn.Parameter(torch.tensor(config.sigma_init).log())
+        self.log_sigma_min = torch.tensor(config.sigma_min).log().item()
+        self.log_sigma_max = torch.tensor(config.sigma_max).log().item()
 
         # Register the type affinity matrix as a buffer (moved to device with model)
         self.register_buffer("type_affinity", _TYPE_AFFINITY.clone())
 
     @property
     def sigma(self) -> torch.Tensor:
-        return self.log_sigma.exp()
+        clamped = self.log_sigma.clamp(min=self.log_sigma_min, max=self.log_sigma_max)
+        return clamped.exp()
 
     def forward(
         self,
