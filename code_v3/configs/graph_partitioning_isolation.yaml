@@ -1,0 +1,24 @@
+name: "graph_partitioning_isolation"
+description: "Graph partitioning isolation testing — verify edge classifier learns same/different person"
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+
+graph_partitioning:
+  hidden_dim:       256
+  dropout:          0.1
+  threshold:        0.5
+  partition_weight: 1.0
+
+loss:
+  contrastive_margin: 0.5
+  partition_weight:   1.0

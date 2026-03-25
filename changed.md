@@ -775,3 +775,273 @@ embeddings are noisier. The natural next step is fine-tuning on a small
 amount of real annotated data — if slot attention can close the remaining
 5-point gap to kNN on COCO after fine-tuning, that would confirm the head
 is learning something useful beyond what the embeddings alone provide.
+
+---
+
+## SA-DMoN (Skeleton-Aware Deep Modularity Networks)
+
+### What DMoN is
+
+DMoN (Deep Modularity Networks) is a differentiable graph clustering method
+from Tsitsulin et al. (2023). It learns to partition a graph into communities
+by maximizing a differentiable relaxation of the modularity objective from
+spectral graph theory.
+
+The core idea: given a graph with adjacency matrix $A$, find a soft assignment
+matrix $S \in \mathbb{R}^{N \times K}$ where $S_{ik}$ is the probability that
+node $i$ belongs to cluster $k$. The training signal comes from graph
+structure alone — nodes that are densely connected to each other should end
+up in the same cluster.
+
+DMoN optimizes three losses simultaneously:
+
+**Spectral modularity loss.** The modularity matrix is:
+
+$$B = A - \frac{dd^\top}{2m}$$
+
+where $d$ is the degree vector and $m = \frac{1}{2}\sum_i d_i$ is the total
+edge mass. The term $dd^\top / 2m$ is the null model — the expected edge
+density if edges were distributed randomly proportional to node degree.
+Modularity measures how much the actual connectivity deviates from this
+expectation. The spectral loss is:
+
+$$\mathcal{L}_{\text{spectral}} = -\frac{\text{Tr}(S^\top B S)}{2m}$$
+
+Minimizing this maximizes the trace of $S^\top B S$, which means nodes in the
+same cluster are more connected than expected under the null model.
+
+**Orthogonality regularization.** Encourages cluster assignments to be
+quasi-orthogonal — different clusters should capture different sets of nodes:
+
+$$\mathcal{L}_{\text{ortho}} = \left\| \frac{S^\top S}{\|S^\top S\|_F} - \frac{I_K}{\sqrt{K}} \right\|_F$$
+
+**Collapse prevention.** Prevents the trivial solution of assigning all nodes
+to a single cluster:
+
+$$\mathcal{L}_{\text{cluster}} = \frac{\sqrt{K}}{N} \left\| \sum_i S_i \right\|_F - 1$$
+
+This equals zero when clusters are balanced and is positive when imbalanced.
+
+
+### Why DMoN for this problem
+
+The previous experiments established two things:
+
+1. The GAT produces good embeddings (kNN accuracy 0.98+ on synthetic data)
+2. The sim-to-real gap (0.994 → 0.838 PGA) is the primary bottleneck
+3. Supervised heads (slot attention, graph partitioning) didn't improve the
+   GAT embeddings — joint training with a head loss did not help
+
+The hypothesis behind DMoN is that the modularity loss provides a
+**domain-invariant structural prior**. Unlike contrastive loss or supervised
+CE which depend on learned visual features, modularity reasons about graph
+topology — are these nodes more connected to each other than expected? This
+topological signal persists even when visual features degrade on out-of-
+distribution data (the COCO zero-shot scenario).
+
+Vanilla DMoN is fully unsupervised, which would put it in the same category
+as DEC. The contribution here is three domain-specific modifications that
+address the limitations of both vanilla DMoN and the previously tested heads.
+
+
+### Modification 1: Keypoint-Type Exclusivity Regularization
+
+In standard graph clustering any node can go in any cluster. But in pose
+grouping each person has at most one keypoint of each type — one left elbow,
+one right knee, etc. DMoN has no mechanism to enforce this, so it can assign
+three left elbows to the same person cluster.
+
+Define a type indicator matrix $M \in \mathbb{R}^{N \times T}$ where
+$M_{it} = 1$ if keypoint $i$ is of type $t$ (with $T = 17$ for COCO joints).
+Then $M^\top S \in \mathbb{R}^{T \times K}$ gives, for each cluster $k$
+and type $t$, the total soft assignment mass. For a valid pose each entry
+should be $\leq 1$. The type exclusivity loss is:
+
+$$\mathcal{L}_{\text{type}} = \| \text{ReLU}(M^\top S - 1) \|_F^2$$
+
+This penalizes any cluster that accumulates more than one keypoint of the
+same type. It is fully differentiable and directly encodes a structural
+constraint of the problem that no general-purpose graph clustering method
+captures.
+
+
+### Modification 3: Supervised-Modularity Hybrid Loss
+
+Vanilla DMoN is fully unsupervised. But we have ground truth person
+assignments in the synthetic training data. Rather than discarding the
+modularity objective in favor of pure supervision (which is what slot
+attention does), we combine both:
+
+$$\mathcal{L} = \lambda_1 \cdot \text{CE}(S, S_{\text{gt}}) + \lambda_2 \cdot \mathcal{L}_{\text{spectral}} + \lambda_3 \cdot \mathcal{L}_{\text{cluster}} + \lambda_4 \cdot \mathcal{L}_{\text{type}} + \lambda_5 \cdot \mathcal{L}_{\text{ortho}}$$
+
+where $\text{CE}(S, S_{\text{gt}})$ is Hungarian-matched cross entropy —
+the same supervised signal used by slot attention.
+
+The argument for keeping $\mathcal{L}_{\text{spectral}}$ alongside supervision:
+the modularity loss encourages the GAT to learn embeddings where graph
+structure itself is informative for grouping. This should improve
+generalization to real data because the modularity term doesn't depend on
+having seen specific visual features — it's a purely topological signal that
+persists during zero-shot transfer when learned visual features are less
+reliable.
+
+The supervised CE handles the "what to group" signal during training. The
+modularity loss handles the "how to group structurally" signal that should
+transfer across domains.
+
+
+### Implementation
+
+Standard DMoN uses a fixed-K MLP for assignments — the output dimension of
+the MLP equals the number of clusters. This doesn't work for our pipeline
+where K varies per scene (2–5 people). Slot attention handles variable K
+by sampling slots from a learned Gaussian. Graph partitioning avoids K
+entirely.
+
+The implementation uses a pool of $K_{\text{max}}$ learned cluster center
+vectors. For a scene with $K$ people, the first $K$ centers are selected.
+Soft assignments are computed via scaled dot product between encoded node
+features and the selected centers:
+
+$$S = \text{softmax}\left(\frac{h \cdot C_{:K}^\top}{\sqrt{H}}\right)$$
+
+where $h = \text{MLP}(e)$ maps GAT embeddings to a hidden space and
+$C \in \mathbb{R}^{K_{\text{max}} \times H}$ is the learned center pool.
+Hungarian matching in the loss makes this permutation-invariant — the model
+is not penalized for which center maps to which person.
+
+The adjacency matrix for the spectral loss is built from the kNN edge index
+already present in the PyG graph (symmetrized for undirected modularity).
+
+Config:
+```yaml
+dmon:
+  hidden_dim: 256
+  k_max: 10
+  dropout: 0.0
+  lambda_spectral: 0.1
+  lambda_ortho: 0.1
+  lambda_cluster: 0.1
+  lambda_type: 1.0
+  lambda_supervised: 1.0
+```
+
+The structural losses (spectral, ortho, cluster) are weighted at 0.1
+relative to supervised CE and type exclusivity at 1.0. This ensures the
+supervised signal dominates early learning while the structural terms act
+as regularizers. In the isolation test, reducing these weights was necessary
+— with equal weights the ortho loss (~1.05) dominated the total loss and
+drowned out the CE gradient, preventing convergence.
+
+
+### Design decisions during implementation
+
+**Stochastic vs deterministic centers.** The first implementation sampled
+cluster centers from a learned Gaussian distribution each forward pass
+(same approach as slot attention). This caused severe instability — accuracy
+oscillated wildly between 0.3 and 0.7 because the same input produced
+different assignments on different forward passes, creating noisy gradients.
+Slot attention overcomes this with 7 iterations of competitive refinement
+per forward pass; without that iterative convergence, the stochasticity
+kills learning.
+
+The fix was switching to deterministic learned center vectors from a fixed
+pool. Same input, same output, clean gradients. This is the critical
+difference from slot attention's assignment mechanism — slot attention
+needs stochastic initialization because the iterative refinement process
+makes centers converge regardless of starting point. DMoN's single-pass
+dot-product assignment does not have that convergence guarantee.
+
+**Loss weight balance.** With all lambda values at 1.0, the ortho loss
+(~1.05) was roughly equal to the CE loss (~1.6) and neither moved
+meaningfully — the optimizer was stuck. Setting structural loss weights
+to 0.1 let CE dominate the optimization landscape while keeping the
+modularity signal as a regularizer. The spectral loss then dropped from
+~0 to -0.75 during training, confirming that modularity was being
+actively maximized alongside the supervised objective.
+
+
+### Isolation test results
+
+5 clusters, 17 joints per person (real scale), 128D, 500 steps, cosine
+LR 1e-3 → 1e-5:
+
+| | Before training | Best accuracy | Step reached |
+|---|---|---|---|
+| Easy (noise=0.05) | 0.318 | 1.000 | 50 |
+| Hard (noise=0.15) | 0.318 | 1.000 | 50 |
+
+Perfect accuracy by step 50 on both tests, holding stable for the
+remaining 450 steps with CE decaying smoothly to near zero.
+
+The spectral loss provides real signal — it drops from ~0 to -0.746
+on easy, confirming that modularity is being actively maximized. The
+type loss stays near zero (~0.001), which is correct since the
+fabricated data has exactly one joint of each type per person. This
+term will matter more on real data with occlusions where the model
+might otherwise assign duplicate joint types to a single cluster.
+
+
+### Comparison across all grouping heads (updated)
+
+| | DEC | Slot attention | Graph partitioning | SA-DMoN |
+|---|---|---|---|---|
+| Supervision | Unsupervised | Supervised (CE) | Supervised (BCE) | Hybrid (CE + modularity) |
+| Ceiling at 17 joints / 128D | 0.8 | 1.0 | 1.0 | 1.0 |
+| Requires K at inference | Yes | Yes | No | Yes |
+| Stability | Collapsed | Noisy | Very stable | Very stable |
+| Steps to converge | Never | ~200 | ~50 | ~50 |
+| End-to-end trainable with GAT | Weakly | Yes | Yes | Yes |
+| Domain-specific constraints | None | None | None | Type exclusivity |
+| Structural regularization | None | None | None | Spectral modularity |
+
+SA-DMoN matches graph partitioning's convergence speed and stability while
+adding two things the other heads lack: a structural regularizer
+(modularity) that should provide domain-invariant signal during transfer,
+and a pose-specific constraint (type exclusivity) that encodes skeleton
+semantics.
+
+
+### What's next
+
+**1. Full training on synthetic data.**
+Train GAT + SA-DMoN end-to-end on the same 400 virtual scenes used for
+the previous experiments (50 epochs, cosine LR, AdamW). This produces the
+checkpoint for evaluation.
+
+**2. Synthetic test set evaluation.**
+Evaluate on the same 100 held-out virtual scenes. Compare SA-DMoN against
+the existing results (kNN 0.994, graph partitioning 0.954, slot attention
+0.858). The question: does the modularity regularizer improve the GAT
+embeddings compared to contrastive-only training?
+
+**3. COCO zero-shot transfer.**
+Evaluate the trained checkpoint on COCO val2017 with no fine-tuning. This
+is where the hypothesis is tested — does the spectral modularity
+regularizer improve generalization? The baseline to beat is kNN at 0.838
+PGA. If SA-DMoN's modularity-regularized GAT produces better-separable
+embeddings on real data, NMI/ARI should improve and kNN on those embeddings
+should exceed 0.838.
+
+**4. Ablation study.**
+The ablation table is the core MEng contribution. Each row adds one
+modification:
+
+| Config | Loss |
+|---|---|
+| Vanilla DMoN | $\mathcal{L}_{\text{spectral}} + \mathcal{L}_{\text{ortho}} + \mathcal{L}_{\text{cluster}}$ |
+| + type exclusivity | $+ \mathcal{L}_{\text{type}}$ |
+| + supervised CE | $+ \text{CE}(S, S_{\text{gt}})$ |
+| Full SA-DMoN | all combined |
+
+Evaluated on both synthetic test and COCO val2017, measuring PGA, NMI,
+ARI, and Detection F1.
+
+**5. (Conditional) Skeleton-aware spatial null model.**
+If modifications 1 and 3 don't close the sim-to-real gap sufficiently,
+the spatial null model replaces the degree-based null in the modularity
+matrix with a spatial proximity kernel. This is deferred because it has
+the highest implementation risk (potential signal cancellation if the
+spatial kernel too closely approximates the kNN adjacency) and adds two
+hyperparameters ($\alpha$, $\sigma$). Better to have clean results on
+two modifications than noisy results on three.

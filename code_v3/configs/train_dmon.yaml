@@ -1,0 +1,40 @@
+name: "train_dmon"
+description: "GAT + SA-DMoN trained end-to-end on virtual data"
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+
+dmon:
+  hidden_dim: 256
+  k_max: 10
+  dropout: 0.0
+  lambda_spectral: 0.1
+  lambda_ortho: 0.1
+  lambda_cluster: 0.1
+  lambda_type: 1.0
+  lambda_supervised: 1.0
+
+loss:
+  contrastive_margin: 0.5
+  dmon_weight: 1.0
+
+training:
+  virtual_dir:   data/virtual
+  batch_size:    4
+  num_workers:   4
+  lr:            1e-3
+  lr_min:        1e-5
+  weight_decay:  1e-4
+  epochs:        150
+  val_every:     5
+  save_dir:      outputs/checkpoints/dmon
+  save_best:     true

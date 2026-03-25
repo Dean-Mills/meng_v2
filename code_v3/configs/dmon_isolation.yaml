@@ -1,0 +1,28 @@
+name: "dmon_isolation"
+description: "DMoN isolation testing — verify modularity-based grouping on fabricated embeddings"
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+
+dmon:
+  hidden_dim: 256
+  k_max: 10
+  dropout: 0.0
+  lambda_spectral: 0.1
+  lambda_ortho: 0.1
+  lambda_cluster: 0.1
+  lambda_type: 1.0
+  lambda_supervised: 1.0
+
+loss:
+  contrastive_margin: 0.5
+  dmon_weight: 1.0
