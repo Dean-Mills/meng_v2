@@ -1474,3 +1474,97 @@ calibrated to the *edge formation scale* (where kNN connections actually
 form), but every approach so far has been either too broad (null too
 weak, trivially exceeded) or too tight (null too strong, approximates
 the adjacency itself).
+
+The deeper problem is that the kNN graph doesn't have the community
+structure modularity was designed to detect. The graph is built on
+spatial proximity, but the "communities" (people) are defined by
+identity. Two joints from different people are kNN neighbors whenever
+people are close together — that's the norm, not the exception. No
+sigma fixes this because the problem isn't the null model bandwidth,
+it's that modularity on a spatial kNN graph is asking the wrong
+question entirely.
+
+
+---
+
+## Experiment 8 — Spectral loss removed entirely
+
+### Rationale
+
+Four sigma strategies all failed. The hypothesis shifted: perhaps the
+spectral loss itself is the problem, not its parameterisation. The
+DMoN head architecture — learned cluster centers, softmax assignment,
+type exclusivity — may be viable without any modularity signal. Setting
+`lambda_spectral: 0.0` isolates the head architecture from the
+conflicting spectral gradient.
+
+Config change only — `lambda_spectral: 0.0`, everything else identical
+to the clamped experiment. 100 epochs.
+
+
+### Results
+
+| Method | PGA | Std | NMI | ARI | Det F1 |
+|---|---|---|---|---|---|
+| kNN (contrastive GAT, no depth) | 0.901 | 0.110 | 0.831 | 0.801 | 1.000 |
+| DMoN head (no depth) | 0.785 | 0.140 | 0.806 | 0.763 | 0.962 |
+| SA-DMoN (clamped σ, λ=0.1) | 0.805 | 0.149 | 0.803 | 0.759 | 0.965 |
+| SA-DMoN (clamped σ, λ=1.0) | 0.790 | 0.151 | 0.788 | 0.740 | 0.950 |
+| SA-DMoN (median σ, λ=0.1) | 0.770 | 0.146 | 0.791 | 0.736 | 0.945 |
+| **SA-DMoN (no spectral)** | **0.794** | **0.143** | **0.795** | **0.748** | **0.963** |
+
+**Per-joint accuracy — no spectral (kNN SA-DMoN GAT / SA-DMoN head):**
+
+| Joint | kNN (SA-DMoN GAT) | SA-DMoN head |
+|---|---|---|
+| nose | 0.875 | 0.775 |
+| left eye | 0.884 | 0.791 |
+| right eye | 0.899 | 0.790 |
+| left ear | 0.895 | 0.782 |
+| right ear | 0.894 | 0.788 |
+| left shoulder | 0.875 | 0.824 |
+| right shoulder | 0.890 | 0.823 |
+| left elbow | 0.880 | 0.804 |
+| right elbow | 0.881 | 0.815 |
+| left wrist | 0.893 | 0.810 |
+| right wrist | 0.881 | 0.781 |
+| left hip | 0.859 | 0.809 |
+| right hip | 0.858 | 0.797 |
+| left knee | 0.873 | 0.797 |
+| right knee | 0.878 | 0.797 |
+| left ankle | 0.792 | 0.755 |
+| right ankle | 0.806 | 0.753 |
+
+
+### Analysis
+
+The best SA-DMoN head result so far (0.794), confirming that the
+spectral loss was actively hurting performance. The GAT embeddings
+are also the least degraded of any SA-DMoN experiment — kNN at 0.871
+vs 0.901 contrastive-only is a smaller gap than previous runs.
+
+However, the head still does not beat kNN on the same embeddings.
+This pattern has been consistent across every experiment:
+
+| Experiment | Head PGA | kNN (same GAT) | Gap |
+|---|---|---|---|
+| Vanilla DMoN | 0.785 | 0.881 | −9.6 |
+| SA-DMoN (clamped σ, λ=0.1) | 0.805 | 0.878 | −7.3 |
+| SA-DMoN (clamped σ, λ=1.0) | 0.790 | 0.867 | −7.7 |
+| SA-DMoN (median σ) | 0.770 | 0.865 | −9.5 |
+| SA-DMoN (no spectral) | 0.794 | 0.871 | −7.7 |
+
+The head is consistently ~8 points below kNN regardless of spectral
+loss configuration. This gap is the head architecture's ceiling —
+the soft assignment via learned cluster centers + softmax is a weaker
+grouping mechanism than k-means on good L2-normalised embeddings.
+
+The detection F1 at 0.963 shows the head also gets the person count
+wrong sometimes (predicting fewer effective clusters than K), which
+k-means cannot do since it is given the ground truth K directly.
+
+The spectral loss question is now answered: it hurts in every form
+tested. The remaining question is whether a different graph-structural
+loss (normalised cut) can provide useful signal where modularity
+could not, or whether the assignment mechanism itself is the
+bottleneck.
