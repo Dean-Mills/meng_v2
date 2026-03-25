@@ -1391,3 +1391,86 @@ kernel), but the gradient points in the opposite direction.
 Sigma should not be learned through the spectral loss — the loss will
 always game it. It needs to be either fixed from data statistics or
 detached from the spectral gradient.
+
+
+### Experiment 7 — SA-DMoN no depth, sigma = median pairwise distance
+
+Sigma removed from the optimiser entirely. Instead, computed per graph
+as the median pairwise Euclidean distance between all node positions,
+detached from the computation graph. This adapts to each scene (crowded
+vs sparse) and eliminates the incentive misalignment — the spectral
+loss cannot influence sigma.
+
+100 epochs (reduced from 150 — previous experiments showed best
+checkpoints landing around epoch 60–95 with no improvement after).
+Lambda_spectral back to 0.1 to isolate the sigma change.
+
+| Method | PGA | Std | NMI | ARI | Det F1 |
+|---|---|---|---|---|---|
+| kNN (contrastive GAT, no depth) | 0.901 | 0.110 | 0.831 | 0.801 | 1.000 |
+| DMoN head (no depth) | 0.785 | 0.140 | 0.806 | 0.763 | 0.962 |
+| SA-DMoN (clamped σ=0.5, λ=0.1) | 0.805 | 0.149 | 0.803 | 0.759 | 0.965 |
+| SA-DMoN (clamped σ=0.5, λ=1.0) | 0.790 | 0.151 | 0.788 | 0.740 | 0.950 |
+| SA-DMoN (median σ, λ=0.1) | 0.770 | 0.146 | 0.791 | 0.736 | 0.945 |
+
+**Per-joint accuracy — SA-DMoN median sigma (kNN SA-DMoN GAT / SA-DMoN head):**
+
+| Joint | kNN (SA-DMoN GAT) | SA-DMoN head |
+|---|---|---|
+| nose | 0.856 | 0.758 |
+| left eye | 0.870 | 0.771 |
+| right eye | 0.876 | 0.776 |
+| left ear | 0.899 | 0.775 |
+| right ear | 0.890 | 0.769 |
+| left shoulder | 0.892 | 0.782 |
+| right shoulder | 0.908 | 0.801 |
+| left elbow | 0.899 | 0.790 |
+| right elbow | 0.885 | 0.765 |
+| left wrist | 0.892 | 0.777 |
+| right wrist | 0.868 | 0.760 |
+| left hip | 0.868 | 0.790 |
+| right hip | 0.858 | 0.770 |
+| left knee | 0.853 | 0.750 |
+| right knee | 0.851 | 0.755 |
+| left ankle | 0.772 | 0.755 |
+| right ankle | 0.776 | 0.743 |
+
+
+### Analysis — median sigma is too tight
+
+The worst SA-DMoN result yet (0.770). Sigma went from too broad to too
+tight. Measuring the training data shows:
+
+- Median pairwise distance: avg 0.21 (range 0.12–0.34)
+- Mean kNN neighbor distance: avg 0.067 (range 0.046–0.084)
+
+At σ=0.21, the spatial kernel gives `exp(-d²/(2·0.21²)) = exp(-1) ≈ 0.37`
+for the median pair. But the kNN edges connect nodes at ~0.067 distance
+— 3x closer than the median. The null model is calibrated to the global
+distance scale, not the edge distance scale. Most actual kNN edges fall
+well within the kernel peak, so the null model barely differentiates
+between "expected nearby" and "surprising far" connections.
+
+The result is that $B_{\text{pose}} \approx A$ — the null subtracts
+almost nothing from the adjacency, making the spectral loss trivially
+satisfied regardless of cluster assignments. This is the opposite failure
+mode from the diverged sigma (where the null was too weak because σ was
+too large), but the outcome is the same: the spectral loss provides no
+useful gradient.
+
+
+### Summary of sigma experiments
+
+| Sigma strategy | σ value | Problem | Head PGA |
+|---|---|---|---|
+| Learned, unconstrained | 341 (diverged) | Null too weak (P≈1 everywhere) | 0.779 |
+| Learned, clamped [0.05, 0.5] | 0.5 (hit upper) | Null still too weak | 0.805 |
+| Learned, clamped, λ=1.0 | 0.5 (hit upper) | Louder wrong signal | 0.790 |
+| Median pairwise distance | ~0.21 | Null too tight (P≈A) | 0.770 |
+
+No sigma value has produced a spectral loss that meaningfully helps
+grouping. The core tension: the spectral loss needs a null model that is
+calibrated to the *edge formation scale* (where kNN connections actually
+form), but every approach so far has been either too broad (null too
+weak, trivially exceeded) or too tight (null too strong, approximates
+the adjacency itself).

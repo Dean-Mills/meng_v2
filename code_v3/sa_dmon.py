@@ -140,18 +140,8 @@ class SADMoNHead(nn.Module):
         self.dropout = config.dropout
         self.scale = h ** -0.5
 
-        # Spatial kernel bandwidth — learnable log(σ), clamped to [sigma_min, sigma_max]
-        self.log_sigma = nn.Parameter(torch.tensor(config.sigma_init).log())
-        self.log_sigma_min = torch.tensor(config.sigma_min).log().item()
-        self.log_sigma_max = torch.tensor(config.sigma_max).log().item()
-
         # Register the type affinity matrix as a buffer (moved to device with model)
         self.register_buffer("type_affinity", _TYPE_AFFINITY.clone())
-
-    @property
-    def sigma(self) -> torch.Tensor:
-        clamped = self.log_sigma.clamp(min=self.log_sigma_min, max=self.log_sigma_max)
-        return clamped.exp()
 
     def forward(
         self,
@@ -239,8 +229,17 @@ class SADMoNHead(nn.Module):
 
         # ── Spatial proximity kernel P ─────────────────────────────────
         # P_{i,j} = exp(-||pos_i - pos_j||^2 / (2σ^2))
-        sq_dist = torch.cdist(positions, positions, p=2).pow(2)  # [N, N]
-        sigma_sq = self.sigma.pow(2)
+        # σ = median pairwise distance (computed per graph, not learned)
+        pairwise_dist = torch.cdist(positions, positions, p=2)  # [N, N]
+        sq_dist = pairwise_dist.pow(2)
+
+        # Median of upper triangle (exclude self-distances)
+        n = positions.size(0)
+        triu_idx = torch.triu_indices(n, n, offset=1, device=positions.device)
+        sigma = pairwise_dist[triu_idx[0], triu_idx[1]].median().detach()
+        sigma = sigma.clamp(min=1e-4)  # safety floor
+        sigma_sq = sigma.pow(2)
+
         P = torch.exp(-sq_dist / (2 * sigma_sq))  # [N, N]
 
         # ── Anatomical type affinity R ─────────────────────────────────
