@@ -82,6 +82,19 @@ def predict_dmon(
     return logits.argmax(dim=1)
 
 
+def predict_sa_dmon(
+    head,
+    embeddings: torch.Tensor,
+    edge_index: torch.Tensor,
+    k: int,
+    positions: torch.Tensor,
+    joint_types: torch.Tensor = None,
+) -> torch.Tensor:
+    """Run SA-DMoN head, return [N] label tensor (argmax assignment)."""
+    logits, s, *_ = head(embeddings, edge_index, k, positions, joint_types)
+    return logits.argmax(dim=1)
+
+
 def predict_partition(
     head,
     embeddings: torch.Tensor,
@@ -193,6 +206,14 @@ class Evaluator:
                 ).to(device)
                 self.head_name = "dmon"
 
+            elif self.cfg.sa_dmon is not None:
+                from sa_dmon import SADMoNHead
+                self.head = SADMoNHead(
+                    self.cfg.sa_dmon,
+                    embedding_dim=self.cfg.gat.output_dim
+                ).to(device)
+                self.head_name = "sa_dmon"
+
             if self.head is not None:
                 self.head.load_state_dict(ckpt["head_state"])
                 self.head.eval()
@@ -231,6 +252,11 @@ class Evaluator:
             head_pred = predict_dmon(
                 self.head, embeddings, graph.edge_index, k,
                 graph.joint_types,
+            )
+        elif self.head_name == "sa_dmon":
+            head_pred = predict_sa_dmon(
+                self.head, embeddings, graph.edge_index, k,
+                graph.x[:, :2], graph.joint_types,
             )
         else:
             head_pred = knn_pred

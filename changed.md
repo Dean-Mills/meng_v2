@@ -1117,3 +1117,153 @@ Two nearby shoulders from different people become expected under the null
 (high spatial proximity, anatomically adjacent types) rather than
 surprising. Two distant joints from the same person become the actual
 signal the model is rewarded for finding.
+
+
+---
+
+## SA-DMoN v1 — Skeleton-aware null model (first attempt)
+
+### Implementation
+
+A new `sa_dmon.py` module was created alongside the existing `dmon.py`.
+The architecture is identical to vanilla DMoN (same node encoder, same
+center pool, same assignment mechanism) — the only change is in
+`_spectral_loss`, which replaces the degree-based null with the
+skeleton-aware null model.
+
+The skeleton-aware null combines two terms:
+
+**Spatial proximity kernel P.** For each pair of nodes:
+
+$$P_{i,j} = \exp\left(-\frac{\|pos_i - pos_j\|^2}{2\sigma^2}\right)$$
+
+where $pos_i$ is the normalised 2D position $(x, y) \in [0, 1]^2$.
+Sigma is learnable — stored as $\log(\sigma)$ for unconstrained
+optimisation, initialised at 0.2.
+
+**Anatomical type affinity T.** A fixed $17 \times 17$ matrix derived
+from the COCO skeleton topology via BFS:
+- Directly connected joints: 1.0 (e.g. left_shoulder ↔ left_elbow)
+- Two hops: 0.5 (e.g. left_shoulder ↔ left_wrist)
+- Three hops: 0.25 (e.g. left_shoulder ↔ left_hip)
+- Further or unconnected: 0.0
+
+**Combined null R.** For keypoints $i$ (type $a$) and $j$ (type $b$):
+
+$$R_{i,j} = T_{a,b} \cdot P_{i,j}$$
+
+Normalised to match the total edge mass: $R_{\text{norm}} = R \cdot (2m / \sum R)$
+
+**Modified modularity matrix:**
+
+$$B_{\text{pose}} = A - R_{\text{norm}}$$
+
+The spectral loss maximises $\text{Tr}(S^\top B_{\text{pose}} S) / (2m)$,
+which rewards grouping joints that are connected beyond what spatial
+proximity and anatomical adjacency would explain.
+
+New files and changes:
+- `sa_dmon.py` — SA-DMoN head with skeleton-aware spectral loss
+- `config.py` — added `SADMoNConfig` with `sigma_init` parameter
+- `losses.py` — added `SADMoNLoss` (same structure as `DMoNLoss`)
+- `trainer.py` — wired up SA-DMoN head building, forward, and validation
+- `evaluator.py` — added `predict_sa_dmon` and checkpoint loading
+
+Config:
+```yaml
+sa_dmon:
+  hidden_dim: 256
+  k_max: 10
+  dropout: 0.0
+  sigma_init: 0.2
+  lambda_spectral: 0.1
+  lambda_ortho: 0.1
+  lambda_cluster: 0.1
+  lambda_type: 1.0
+  lambda_supervised: 1.0
+```
+
+
+### Experiment 4 — SA-DMoN no depth, learnable sigma
+
+Trained on virtual data without depth, 150 epochs. Same setup as the
+vanilla DMoN no-depth experiment.
+
+| Method | PGA | Std | NMI | ARI | Det F1 |
+|---|---|---|---|---|---|
+| kNN (contrastive GAT, no depth) | 0.901 | 0.110 | 0.831 | 0.801 | 1.000 |
+| kNN (DMoN GAT, no depth) | 0.881 | 0.116 | 0.806 | 0.763 | 1.000 |
+| DMoN head (no depth) | 0.785 | 0.140 | 0.806 | 0.763 | 0.962 |
+| kNN (SA-DMoN GAT, no depth) | 0.870 | 0.123 | 0.796 | 0.748 | 1.000 |
+| SA-DMoN head (no depth) | 0.779 | 0.140 | 0.796 | 0.748 | 0.953 |
+
+**Per-joint accuracy — SA-DMoN no depth (kNN SA-DMoN GAT / SA-DMoN head):**
+
+| Joint | kNN (SA-DMoN GAT) | SA-DMoN head |
+|---|---|---|
+| nose | 0.864 | 0.770 |
+| left eye | 0.879 | 0.769 |
+| right eye | 0.883 | 0.783 |
+| left ear | 0.900 | 0.777 |
+| right ear | 0.891 | 0.781 |
+| left shoulder | 0.885 | 0.783 |
+| right shoulder | 0.898 | 0.797 |
+| left elbow | 0.895 | 0.796 |
+| right elbow | 0.903 | 0.759 |
+| left wrist | 0.886 | 0.806 |
+| right wrist | 0.893 | 0.777 |
+| left hip | 0.865 | 0.801 |
+| right hip | 0.862 | 0.791 |
+| left knee | 0.841 | 0.777 |
+| right knee | 0.848 | 0.787 |
+| left ankle | 0.787 | 0.745 |
+| right ankle | 0.808 | 0.746 |
+
+
+### Analysis — sigma divergence
+
+SA-DMoN performs essentially the same as vanilla DMoN — the head scores
+0.779 vs 0.785, kNN on the SA-DMoN GAT scores 0.870 vs 0.881. The
+skeleton-aware null model provided no improvement.
+
+The reason: **sigma diverged to 341.** The learned spatial kernel
+bandwidth exploded from the initial 0.2 to 340.9, making the spatial
+kernel $\exp(-d^2 / (2 \cdot 341^2)) \approx 1.0$ for all pairs. With
+$P$ uniform, $R_{\text{norm}}$ collapses to the type affinity matrix
+broadcast uniformly — a constant null model with no spatial
+discrimination.
+
+This happened because the spectral loss gradient pushes sigma in the
+direction that makes modularity easiest to maximise. A flat kernel
+creates a weak null model that the adjacency trivially exceeds, so the
+spectral loss is trivially minimised. The optimiser found a degenerate
+solution that minimises the spectral loss without providing any useful
+structural signal.
+
+Two contributing factors:
+
+**1. Lambda_spectral is too low.** At 0.1 relative to CE at 1.0, the
+spectral loss contributes ~10% of the total gradient. This was necessary
+for vanilla DMoN because the *wrong* spectral signal needed to be
+suppressed. But with the skeleton-aware null model, the spectral signal
+should be *correct* — suppressing it means the new null model barely
+influences training and sigma has no incentive to stay at a useful value.
+
+**2. Sigma should not be unconstrained.** Learnable sigma with no bounds
+allows the optimiser to take the path of least resistance. The spectral
+loss has a degenerate global minimum at $\sigma \to \infty$ where the
+null model approaches uniform and $B_{\text{pose}} \approx A$ — any
+non-trivial clustering maximises modularity against a near-zero null.
+Sigma needs either a fixed value, a bounded range, or a regularisation
+term that penalises deviation from a reasonable bandwidth.
+
+
+### Next steps
+
+1. **Fix sigma** — either clamp to a bounded range (e.g. 0.05–0.5 in
+   normalised coordinates) or fix it at a value determined by the data
+   (e.g. median pairwise distance in training graphs).
+2. **Increase lambda_spectral** — try 0.5 or 1.0 to give the
+   skeleton-aware null actual influence on the gradient.
+3. Re-evaluate with both changes to determine whether the skeleton-aware
+   null model provides signal once properly constrained.

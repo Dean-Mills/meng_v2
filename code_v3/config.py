@@ -37,6 +37,7 @@ class LossConfig(BaseModel):
     slot_weight:       float = 1.0   # weight for slot attention loss
     partition_weight:  float = 1.0   # weight for graph partitioning loss
     dmon_weight:       float = 1.0   # weight for DMoN loss
+    sa_dmon_weight:    float = 1.0   # weight for SA-DMoN loss
 
 
 class GraphPartitioningConfig(BaseModel):
@@ -61,6 +62,19 @@ class DMoNConfig(BaseModel):
     lambda_cluster:     float = 1.0    # collapse prevention
     lambda_type:        float = 1.0    # type exclusivity (modification 1)
     lambda_supervised:  float = 1.0    # supervised CE (modification 3)
+
+
+class SADMoNConfig(BaseModel):
+    hidden_dim:         int   = 256    # encoder hidden dimension
+    k_max:              int   = 10     # maximum number of clusters (pool size)
+    dropout:            float = 0.0    # dropout on assignment logits
+    sigma_init:         float = 0.2    # initial spatial kernel bandwidth (learnable)
+    # Sub-weights for individual loss components
+    lambda_spectral:    float = 1.0    # skeleton-aware spectral modularity loss
+    lambda_ortho:       float = 1.0    # orthogonality regularization
+    lambda_cluster:     float = 1.0    # collapse prevention
+    lambda_type:        float = 1.0    # type exclusivity
+    lambda_supervised:  float = 1.0    # supervised CE
 
 
 class TrainingConfig(BaseModel):
@@ -90,6 +104,7 @@ class ExperimentConfig(BaseModel):
     slot_attention:     Optional[SlotAttentionConfig]     = None
     graph_partitioning: Optional[GraphPartitioningConfig] = None
     dmon:               Optional[DMoNConfig]              = None
+    sa_dmon:            Optional[SADMoNConfig]            = None
     training:           Optional[TrainingConfig]          = None
 
     @classmethod

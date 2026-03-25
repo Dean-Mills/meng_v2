@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Any, Dict, List
 
-from config import LossConfig, DMoNConfig
+from config import LossConfig, DMoNConfig, SADMoNConfig
 
 
 class GATOnlyLoss(nn.Module):
@@ -332,6 +332,92 @@ class DMoNLoss(nn.Module):
         accuracy = (pred == targets).float().mean().item()
 
         # ── Combined loss ─────────────────────────────────────────────────
+        total = self.weight * (
+            self.lambda_supervised * ce_loss
+            + self.lambda_spectral * spectral_loss
+            + self.lambda_ortho    * ortho_loss
+            + self.lambda_cluster  * cluster_loss
+            + self.lambda_type     * type_loss
+        )
+
+        return {
+            "total_loss":     total,
+            "accuracy":       accuracy,
+            "ce_loss":        ce_loss.item(),
+            "spectral_loss":  spectral_loss.item(),
+            "ortho_loss":     ortho_loss.item(),
+            "cluster_loss":   cluster_loss.item(),
+            "type_loss":      type_loss.item(),
+        }
+
+
+class SADMoNLoss(nn.Module):
+    """
+    Combined loss for SA-DMoN grouping head.
+
+    Identical structure to DMoNLoss — combines structural losses from the head
+    with supervised Hungarian-matched cross entropy. The difference is that
+    the spectral loss passed in comes from the skeleton-aware null model
+    rather than the degree-based null.
+
+    Args:
+        config:       LossConfig — uses sa_dmon_weight for overall scaling.
+        sadmon_config: SADMoNConfig — sub-weights for individual loss components.
+    """
+
+    def __init__(self, config: LossConfig, sadmon_config: SADMoNConfig):
+        super().__init__()
+        self.weight            = config.sa_dmon_weight
+        self.lambda_spectral   = sadmon_config.lambda_spectral
+        self.lambda_ortho      = sadmon_config.lambda_ortho
+        self.lambda_cluster    = sadmon_config.lambda_cluster
+        self.lambda_type       = sadmon_config.lambda_type
+        self.lambda_supervised = sadmon_config.lambda_supervised
+
+    def forward(
+        self,
+        logits:        torch.Tensor,
+        person_labels: torch.Tensor,
+        spectral_loss: torch.Tensor,
+        ortho_loss:    torch.Tensor,
+        cluster_loss:  torch.Tensor,
+        type_loss:     torch.Tensor,
+    ) -> Dict[str, Any]:
+        n, k = logits.shape
+        device = logits.device
+
+        # ── Hungarian-matched cross entropy ────────────────────────────────
+        unique_labels = torch.unique(person_labels)
+        num_people    = len(unique_labels)
+
+        label_map     = {v.item(): i for i, v in enumerate(unique_labels)}
+        mapped_labels = torch.tensor(
+            [label_map[l.item()] for l in person_labels],
+            device=device, dtype=torch.long,
+        )
+
+        probs = F.softmax(logits, dim=1)
+
+        cost = torch.zeros(num_people, k, device=device)
+        for p in range(num_people):
+            mask = (mapped_labels == p).float()
+            cost[p] = -(probs * mask.unsqueeze(1)).sum(dim=0)
+
+        cost_np = cost.detach().cpu().numpy()
+        from scipy.optimize import linear_sum_assignment
+        row_idx, col_idx = linear_sum_assignment(cost_np)
+
+        slot_for_person = torch.zeros(num_people, dtype=torch.long, device=device)
+        for r, c in zip(row_idx, col_idx):
+            slot_for_person[r] = c
+
+        targets = slot_for_person[mapped_labels]
+        ce_loss = F.cross_entropy(logits, targets)
+
+        pred     = logits.argmax(dim=1)
+        accuracy = (pred == targets).float().mean().item()
+
+        # ── Combined loss ──────────────────────────────────────────────────
         total = self.weight * (
             self.lambda_supervised * ce_loss
             + self.lambda_spectral * spectral_loss

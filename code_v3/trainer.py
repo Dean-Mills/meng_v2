@@ -25,7 +25,7 @@ import torch.optim as optim
 
 from config import ExperimentConfig
 from gat import GATEmbedding
-from losses import GATOnlyLoss, SlotAttentionLoss, GraphPartitioningLoss, DMoNLoss
+from losses import GATOnlyLoss, SlotAttentionLoss, GraphPartitioningLoss, DMoNLoss, SADMoNLoss
 from preprocessor import PosePreprocessor
 from dataset import PoseDataset
 from dataloader import create_dataloader
@@ -46,6 +46,10 @@ def _build_head(cfg: ExperimentConfig, embedding_dim: int):
         from dmon import DMoNHead
         return DMoNHead(cfg.dmon, embedding_dim=embedding_dim)
 
+    if cfg.sa_dmon is not None:
+        from sa_dmon import SADMoNHead
+        return SADMoNHead(cfg.sa_dmon, embedding_dim=embedding_dim)
+
     return None
 
 
@@ -57,6 +61,8 @@ def _build_head_loss(cfg: ExperimentConfig):
         return GraphPartitioningLoss(cfg.loss)
     if cfg.dmon is not None:
         return DMoNLoss(cfg.loss, cfg.dmon)
+    if cfg.sa_dmon is not None:
+        return SADMoNLoss(cfg.loss, cfg.sa_dmon)
     return None
 
 
@@ -86,6 +92,15 @@ def _head_forward(head, embeddings, graph):
         k = int(graph.num_people)
         logits, s, spec, ortho, clust, type_l = head(
             embeddings, graph.edge_index, k, joint_types=graph.joint_types,
+        )
+        return (logits, s), (logits, graph.person_labels, spec, ortho, clust, type_l)
+
+    from sa_dmon import SADMoNHead
+    if isinstance(head, SADMoNHead):
+        k = int(graph.num_people)
+        positions = graph.x[:, :2]  # x_norm, y_norm
+        logits, s, spec, ortho, clust, type_l = head(
+            embeddings, graph.edge_index, k, positions, graph.joint_types,
         )
         return (logits, s), (logits, graph.person_labels, spec, ortho, clust, type_l)
 
@@ -129,6 +144,7 @@ def train(cfg: ExperimentConfig, device: str):
         "slot_attention"     if cfg.slot_attention     is not None else
         "graph_partitioning" if cfg.graph_partitioning is not None else
         "dmon"               if cfg.dmon               is not None else
+        "sa_dmon"            if cfg.sa_dmon             is not None else
         "knn_only"
     )
     print(f"\nTraining: {cfg.name}")
@@ -248,7 +264,7 @@ def train(cfg: ExperimentConfig, device: str):
 def _validate(gat, head, head_name, loader, preprocessor,
               gat_loss_fn, head_loss_fn, device, cfg) -> float:
     """Run validation, return mean PGA."""
-    from evaluator import compute_pga, predict_knn, predict_slot, predict_partition, predict_dmon
+    from evaluator import compute_pga, predict_knn, predict_slot, predict_partition, predict_dmon, predict_sa_dmon
 
     gat.eval()
     if head is not None:
@@ -275,6 +291,11 @@ def _validate(gat, head, head_name, loader, preprocessor,
                     pred_labels = predict_dmon(
                         head, embeddings, graph.edge_index, k,
                         graph.joint_types,
+                    )
+                elif head_name == "sa_dmon":
+                    pred_labels = predict_sa_dmon(
+                        head, embeddings, graph.edge_index, k,
+                        graph.x[:, :2], graph.joint_types,
                     )
                 else:
                     pred_labels = predict_knn(embeddings, k)
