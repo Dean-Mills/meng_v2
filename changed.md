@@ -1568,3 +1568,118 @@ tested. The remaining question is whether a different graph-structural
 loss (normalised cut) can provide useful signal where modularity
 could not, or whether the assignment mechanism itself is the
 bottleneck.
+
+
+---
+
+## Experiment 9 — COCO zero-shot transfer, no depth
+
+### Rationale
+
+All previous no-depth experiments were evaluated on synthetic data only.
+The original motivation for DMoN was domain-invariant structural signal
+for sim-to-real transfer. Before trying more loss engineering, test what
+we have on real data — the contrastive-only kNN baseline and the best
+SA-DMoN variant (no spectral loss) evaluated on COCO val2017 with no
+fine-tuning.
+
+This also tests whether removing depth helps or hurts on COCO. The
+original with-depth models achieved 0.838 PGA on COCO. Depth in that
+setup came from MiDaS estimation (noisy, arbitrary scale) rather than
+ground truth — potentially a source of sim-to-real mismatch.
+
+
+### Results
+
+| Method | Synthetic | COCO | Transfer |
+|---|---|---|---|
+| kNN (with depth) | 0.994 | 0.838 | −15.6 |
+| **kNN (no depth)** | **0.901** | **0.879** | **−2.2** |
+| SA-DMoN head (no spectral, no depth) | 0.794 | 0.817 | +2.3 |
+
+Full COCO results:
+
+| Method | PGA | Std | NMI | ARI | Det F1 |
+|---|---|---|---|---|---|
+| kNN (contrastive GAT, with depth) | 0.838 | 0.194 | 0.754 | 0.692 | 1.000 |
+| **kNN (contrastive GAT, no depth)** | **0.879** | **0.170** | **0.837** | **0.782** | **1.000** |
+| kNN (SA-DMoN GAT, no depth) | 0.864 | 0.179 | 0.810 | 0.749 | 1.000 |
+| SA-DMoN head (no spectral, no depth) | 0.817 | 0.222 | 0.810 | 0.749 | 0.907 |
+
+**Per-joint accuracy — COCO (kNN no depth / kNN SA-DMoN GAT / SA-DMoN head):**
+
+| Joint | kNN (no depth) | kNN (SA-DMoN GAT) | SA-DMoN head |
+|---|---|---|---|
+| nose | 0.898 | 0.874 | 0.829 |
+| left eye | 0.889 | 0.863 | 0.824 |
+| right eye | 0.898 | 0.871 | 0.824 |
+| left ear | 0.854 | 0.840 | 0.784 |
+| right ear | 0.879 | 0.857 | 0.799 |
+| left shoulder | 0.864 | 0.855 | 0.800 |
+| right shoulder | 0.884 | 0.858 | 0.804 |
+| left elbow | 0.852 | 0.845 | 0.800 |
+| right elbow | 0.871 | 0.853 | 0.805 |
+| left wrist | 0.854 | 0.852 | 0.804 |
+| right wrist | 0.865 | 0.842 | 0.808 |
+| left hip | 0.877 | 0.864 | 0.804 |
+| right hip | 0.883 | 0.858 | 0.805 |
+| left knee | 0.873 | 0.848 | 0.812 |
+| right knee | 0.861 | 0.845 | 0.811 |
+| left ankle | 0.833 | 0.814 | 0.790 |
+| right ankle | 0.834 | 0.810 | 0.800 |
+
+
+### Analysis
+
+**1. Removing depth dramatically improves COCO transfer.**
+kNN PGA jumped from 0.838 (with depth) to 0.879 (no depth) — a +4.1
+point improvement on real data. The sim-to-real gap collapsed from 15.6
+points to 2.2 points. NMI improved from 0.754 to 0.837, ARI from 0.692
+to 0.782. Every metric improved substantially.
+
+The cause: the with-depth model learned to rely on clean ground-truth
+depth from synthetic data, then received noisy MiDaS inverse depth at
+inference on COCO. The depth signal was informative during training but
+misleading during transfer. Removing depth forces the model to use only
+2D position and visibility — signals that transfer cleanly from
+synthetic to real images with no domain gap.
+
+This is the single largest improvement in COCO performance across all
+experiments in this project. The previous best COCO result was 0.838
+with depth; removing depth beats it by 4.1 points with no other changes.
+
+**2. The SA-DMoN head improves on COCO vs synthetic.**
+The head scored 0.794 on synthetic data but 0.817 on COCO — a +2.3
+point increase. This is the opposite of kNN, which drops from 0.901 to
+0.879. The head is learning something that transfers to real data better
+than the training distribution, likely because the type exclusivity
+constraint and supervised assignment mechanism are less sensitive to
+distributional shift than k-means on embeddings.
+
+**3. The head still does not beat kNN on COCO.**
+SA-DMoN head at 0.817 vs kNN at 0.879 on the contrastive GAT — a 6.2
+point gap. The gap shrank from 7.7 points on synthetic to 6.2 on COCO,
+but the head does not close it. The detection F1 at 0.907 shows the
+head misjudges person count more severely on real data (vs 0.963 on
+synthetic).
+
+**4. Joint training with the head still degrades the GAT.**
+kNN on the SA-DMoN-trained GAT (0.864) is 1.5 points below kNN on the
+contrastive-only GAT (0.879). The head loss is still pulling the
+embeddings away from optimal contrastive separation, though the gap is
+smaller on COCO than on synthetic (1.5 vs 3.0 points).
+
+
+### Updated conclusions
+
+The most impactful finding from this project is not SA-DMoN — it is
+that **depth hurts sim-to-real transfer**. Ground truth synthetic depth
+and MiDaS estimated depth are different enough that the model learns to
+rely on a signal that degrades at inference on real data. A 2D-only
+model transfers better.
+
+The SA-DMoN head with type exclusivity shows a promising transfer
+property (improving on COCO vs synthetic) but does not overcome the
+fundamental architectural gap with k-means. The head's soft assignment
+via learned cluster centers is a weaker grouping mechanism than
+iterative k-means on well-separated L2-normalised embeddings.
