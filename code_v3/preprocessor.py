@@ -33,6 +33,7 @@ class PosePreprocessor:
         image_size:  Target image size used in dataset transform (for x,y normalisation).
         k_neighbors: Number of kNN neighbours per node.
         device:      Device to place graph tensors on.
+        use_depth:   If False, z is excluded from node features and kNN edges.
     """
 
     def __init__(
@@ -40,10 +41,12 @@ class PosePreprocessor:
         image_size: int = 512,
         k_neighbors: int = 8,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        use_depth: bool = True,
     ):
         self.image_size  = image_size
         self.k_neighbors = k_neighbors
         self.device      = device
+        self.use_depth   = use_depth
 
     # ── kNN graph ─────────────────────────────────────────────────────────────
 
@@ -146,13 +149,20 @@ class PosePreprocessor:
         # ── Normalise v ───────────────────────────────────────────────────
         v_norm    = x_raw[:, 3] / 2.0   # 0→0.0, 1→0.5, 2→1.0
 
-        # ── Final node feature matrix [N, 4] ──────────────────────────────
-        node_x = torch.stack([x_norm, y_norm, z_norm, v_norm], dim=1).to(self.device)
+        # ── Final node feature matrix ──────────────────────────────────────
+        if self.use_depth:
+            node_x = torch.stack([x_norm, y_norm, z_norm, v_norm], dim=1)  # [N, 4]
+        else:
+            node_x = torch.stack([x_norm, y_norm, v_norm], dim=1)          # [N, 3]
+        node_x = node_x.to(self.device)
         jt     = jt.to(self.device)
         pl     = pl.to(self.device)
 
         # ── kNN edges on spatial coords ───────────────────────────────────
-        spatial    = node_x[:, :3]   # x_norm, y_norm, z_norm
+        if self.use_depth:
+            spatial = node_x[:, :3]   # x_norm, y_norm, z_norm
+        else:
+            spatial = node_x[:, :2]   # x_norm, y_norm
         edge_index = self._knn_edges(spatial, k=self.k_neighbors)
 
         return Data(

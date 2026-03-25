@@ -1002,46 +1002,118 @@ and a pose-specific constraint (type exclusivity) that encodes skeleton
 semantics.
 
 
-### What's next
+---
 
-**1. Full training on synthetic data.**
-Train GAT + SA-DMoN end-to-end on the same 400 virtual scenes used for
-the previous experiments (50 epochs, cosine LR, AdamW). This produces the
-checkpoint for evaluation.
+## Removing depth — isolating the grouping problem
 
-**2. Synthetic test set evaluation.**
-Evaluate on the same 100 held-out virtual scenes. Compare SA-DMoN against
-the existing results (kNN 0.994, graph partitioning 0.954, slot attention
-0.858). The question: does the modularity regularizer improve the GAT
-embeddings compared to contrastive-only training?
+### Why remove depth
 
-**3. COCO zero-shot transfer.**
-Evaluate the trained checkpoint on COCO val2017 with no fine-tuning. This
-is where the hypothesis is tested — does the spectral modularity
-regularizer improve generalization? The baseline to beat is kNN at 0.838
-PGA. If SA-DMoN's modularity-regularized GAT produces better-separable
-embeddings on real data, NMI/ARI should improve and kNN on those embeddings
-should exceed 0.838.
+The previous experiments showed kNN on contrastive GAT embeddings at 0.994
+PGA on synthetic data. That's near-perfect — the problem was too easy.
+Depth (per-joint z from ground truth camera distance) was doing most of
+the work separating people in 3D space. With depth, the GAT barely needs
+to learn anything beyond spatial proximity, and a grouping head has no
+room to add value over simple k-means.
 
-**4. Ablation study.**
-The ablation table is the core MEng contribution. Each row adds one
-modification:
+This is also why DMoN's spectral loss was ineffective — it's trying to
+improve on an already-solved problem. The degree-based null model's
+weakness is masked when depth makes the kNN graph nearly perfect to
+begin with.
 
-| Config | Loss |
-|---|---|
-| Vanilla DMoN | $\mathcal{L}_{\text{spectral}} + \mathcal{L}_{\text{ortho}} + \mathcal{L}_{\text{cluster}}$ |
-| + type exclusivity | $+ \mathcal{L}_{\text{type}}$ |
-| + supervised CE | $+ \text{CE}(S, S_{\text{gt}})$ |
-| Full SA-DMoN | all combined |
+Removing depth creates a harder, more realistic baseline. On COCO the
+depth signal comes from MiDaS estimation (noisy, arbitrary scale) rather
+than ground truth metric distance, so the with-depth synthetic results
+were artificially inflated relative to what the model faces at inference
+on real data. Training without depth forces the GAT and any grouping head
+to work with 2D position and visibility only — the same signal quality
+available on real images without a depth estimator.
 
-Evaluated on both synthetic test and COCO val2017, measuring PGA, NMI,
-ARI, and Detection F1.
+### Implementation
 
-**5. (Conditional) Skeleton-aware spatial null model.**
-If modifications 1 and 3 don't close the sim-to-real gap sufficiently,
-the spatial null model replaces the degree-based null in the modularity
-matrix with a spatial proximity kernel. This is deferred because it has
-the highest implementation risk (potential signal cancellation if the
-spatial kernel too closely approximates the kNN adjacency) and adds two
-hyperparameters ($\alpha$, $\sigma$). Better to have clean results on
-two modifications than noisy results on three.
+A `use_depth` flag was added to `GATConfig` and threaded through the
+preprocessor, trainer, and evaluator. When `use_depth: false`:
+
+- Node features become `[x_norm, y_norm, v_norm]` (3 values, not 4)
+- kNN edges are built on `[x_norm, y_norm]` only
+- The GAT `input_dim` is computed accordingly (one fewer raw feature)
+- Depth is never computed, stored, or seen by the model
+
+This is a config-level change — the same codebase runs both with-depth
+and without-depth experiments via different YAML configs.
+
+
+### Experiment 3 — Synthetic test set, no depth
+
+All models trained on virtual data without depth, evaluated on 100
+held-out virtual scenes. Training: 50 epochs for kNN-only, 150 epochs
+for DMoN, cosine LR 1e-3 → 1e-5, AdamW.
+
+| Method | PGA | Std | NMI | ARI | Det F1 |
+|---|---|---|---|---|---|
+| kNN (contrastive GAT, depth) | 0.994 | 0.012 | 0.987 | 0.987 | 1.000 |
+| **kNN (contrastive GAT, no depth)** | **0.901** | **0.110** | **0.831** | **0.801** | **1.000** |
+| kNN (DMoN GAT, no depth) | 0.881 | 0.116 | 0.806 | 0.763 | 1.000 |
+| DMoN head (no depth) | 0.785 | 0.140 | 0.806 | 0.763 | 0.962 |
+
+**Per-joint accuracy — no depth (kNN contrastive / kNN DMoN GAT / DMoN head):**
+
+| Joint | kNN (contrastive) | kNN (DMoN GAT) | DMoN head |
+|---|---|---|---|
+| nose | 0.871 | 0.876 | 0.764 |
+| left eye | 0.895 | 0.891 | 0.768 |
+| right eye | 0.903 | 0.886 | 0.765 |
+| left ear | 0.930 | 0.899 | 0.768 |
+| right ear | 0.908 | 0.897 | 0.776 |
+| left shoulder | 0.932 | 0.903 | 0.839 |
+| right shoulder | 0.925 | 0.912 | 0.818 |
+| left elbow | 0.934 | 0.904 | 0.828 |
+| right elbow | 0.890 | 0.910 | 0.796 |
+| left wrist | 0.910 | 0.901 | 0.775 |
+| right wrist | 0.886 | 0.876 | 0.764 |
+| left hip | 0.923 | 0.894 | 0.814 |
+| right hip | 0.922 | 0.887 | 0.813 |
+| left knee | 0.884 | 0.862 | 0.766 |
+| right knee | 0.890 | 0.862 | 0.786 |
+| left ankle | 0.850 | 0.804 | 0.755 |
+| right ankle | 0.864 | 0.817 | 0.751 |
+
+
+### Analysis
+
+**1. Removing depth creates a meaningfully harder problem.**
+kNN drops from 0.994 to 0.901. NMI drops from 0.987 to 0.831. The
+embeddings are genuinely less separable with only 2D position and
+visibility. Extremities suffer most — ankles drop to 0.850/0.864,
+consistent with the intuition that limbs from different people overlap
+more in 2D when depth can't separate them.
+
+**2. DMoN does not beat kNN — the vanilla spectral loss hurts.**
+The DMoN head (0.785) is worse than kNN on the same embeddings (0.881),
+and kNN on the DMoN-trained GAT (0.881) is worse than kNN on the
+contrastive-only GAT (0.901). The vanilla spectral loss degrades
+performance in two ways: the head itself groups worse than k-means,
+and backprop through the spectral loss pushes the GAT toward embeddings
+that satisfy the wrong clustering criterion.
+
+**3. The degree-based null model is the root cause.**
+The modularity matrix $B = A - dd^\top / (2m)$ asks "are these keypoints
+more connected than their degree would predict?" For a kNN graph built
+on 2D position this is the wrong question. Two shoulders from different
+people that happen to be spatially close will be kNN neighbours — the
+degree null treats this as evidence for same-cluster because both nodes
+have similar degree. The spectral loss rewards grouping them together.
+Meanwhile, a left wrist and left ankle from the same person that are far
+apart in 2D get little credit for being grouped together because they
+share few edges. The loss optimizes the wrong objective and drags the
+GAT with it.
+
+**4. This directly motivates the skeleton-aware null model.**
+The fix is not to remove the spectral loss — the hypothesis that
+topological structure provides domain-invariant signal is still sound.
+The fix is to replace what the spectral loss measures. Instead of asking
+"connected more than degree predicts," the skeleton-aware null asks
+"connected more than spatial proximity and anatomical adjacency predict."
+Two nearby shoulders from different people become expected under the null
+(high spatial proximity, anatomically adjacent types) rather than
+surprising. Two distant joints from the same person become the actual
+signal the model is rewarded for finding.

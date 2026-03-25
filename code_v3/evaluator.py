@@ -198,7 +198,8 @@ class Evaluator:
                 self.head.eval()
 
         k_neighbors = 16 if self.cfg.gat.output_dim >= 256 else 8
-        self.preprocessor = PosePreprocessor(device=device, k_neighbors=k_neighbors)
+        self.preprocessor = PosePreprocessor(device=device, k_neighbors=k_neighbors,
+                                             use_depth=self.cfg.gat.use_depth)
         print(f"Loaded checkpoint (epoch {ckpt.get('epoch','?')}, "
               f"val PGA {ckpt.get('val_pga', 0):.4f})")
         print(f"Head: {self.head_name}")

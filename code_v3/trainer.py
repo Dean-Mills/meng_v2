@@ -116,7 +116,8 @@ def train(cfg: ExperimentConfig, device: str):
     val_loader   = _make_loader(virtual_dir, "val",   tc.batch_size, 0)
 
     k_neighbors  = 16 if cfg.gat.output_dim >= 256 else 8
-    preprocessor = PosePreprocessor(device=device, k_neighbors=k_neighbors)
+    preprocessor = PosePreprocessor(device=device, k_neighbors=k_neighbors,
+                                    use_depth=cfg.gat.use_depth)
 
     # ── Models ────────────────────────────────────────────────────────────────
     gat  = GATEmbedding(cfg.gat).to(device)

@@ -15,11 +15,14 @@ class GATConfig(BaseModel):
     dropout: float
     use_layer_norm: bool
     l2_normalize: bool
+    use_depth: bool = True  # False → drop z from node features and kNN
 
     @computed_field
     @property
     def input_dim(self) -> int:
-        return self.raw_feature_dim + self.joint_embedding_dim
+        # raw_feature_dim is the base (with depth), subtract 1 when depth disabled
+        feat_dim = self.raw_feature_dim if self.use_depth else self.raw_feature_dim - 1
+        return feat_dim + self.joint_embedding_dim
 
 
 class DECConfig(BaseModel):
