@@ -24,7 +24,7 @@ coco_adapter.py    virtual_adapter.py
 
 Two reasons for this:
 \begin{compactitem}
-  \item After the adapter we don't care where the data came from, the rest of the pipeline is identical
+  \item After the adapter it doesn't matter where the data came from, the rest of the pipeline is identical
   \item Can train on synthetic data first then swap to COCO without changing anything downstream
 \end{compactitem}
 
@@ -35,7 +35,7 @@ Keypoint format changed from $[x,y,v]$ to $[x,y,z,v]$ per joint (51 $\to$ 68 val
 
 Visibility changed from $0/2$ to $0/1/2$ with raycast occlusion detection. Occluded joints are real training signal --- marking them as invisible was losing information.
 
-\texttt{calculate\_distance\_to\_camera} was removed --- redundant now that we have per-joint $z$.
+\texttt{calculate\_distance\_to\_camera} was removed --- redundant now that there is per-joint $z$.
 
 Out-of-frame joints position changed from $[0.0, 0.0]$ to $[-1.0, -1.0]$. Zero is a real pixel location (top-left corner), $-1$ is an unambiguous sentinel meaning ``no valid position''. The GAT uses visibility $v=0$ to ignore these joints during message passing but the position itself should also signal invalidity explicitly.
 
@@ -227,7 +227,7 @@ DEC takes embeddings and learns $K$ cluster centres in the same embedding space.
 Cluster centres are initialised with k-means++ before training. One important detail: $p$ is updated every \texttt{update\_interval} steps rather than every step. Updating every step causes cluster collapse --- the model chases a moving target and all joints pile into one cluster by step 150. Periodic updates let the centres stabilise between target refreshes.
 
 
-\subsubsection{What we tried and why it kept failing}
+\subsubsection{What I tried and why it kept failing}
 
 \textbf{Attempt 1 --- random GAT embeddings.}
 With an untrained GAT all joints are roughly equidistant from all cluster centres, so $q$ is nearly uniform across all $K$ clusters. $p$ is computed from $q$ so $p \approx q$, which means $\text{KL}(p \| q) \approx 0$ immediately --- no loss, no gradient, no learning.
@@ -622,7 +622,7 @@ This penalises any cluster that accumulates more than one keypoint of the same t
 
 \subsubsection{Modification 2: Supervised-modularity hybrid loss}
 
-Rather than discarding the modularity objective in favour of pure supervision, we combine both:
+Rather than discarding the modularity objective in favour of pure supervision, the approach combines both:
 \begin{equation}
 \mathcal{L} = \lambda_1 \cdot \text{CE}(S, S_{\text{gt}}) + \lambda_2 \cdot \mathcal{L}_{\text{spectral}} + \lambda_3 \cdot \mathcal{L}_{\text{cluster}} + \lambda_4 \cdot \mathcal{L}_{\text{type}} + \lambda_5 \cdot \mathcal{L}_{\text{ortho}}
 \end{equation}
@@ -631,7 +631,7 @@ where $\text{CE}(S, S_{\text{gt}})$ is Hungarian-matched cross entropy. The supe
 
 \subsubsection{Implementation}
 
-Standard DMoN uses a fixed-$K$ MLP for assignments. This doesn't work for our pipeline where $K$ varies per scene (2--5 people). The implementation uses a pool of $K_{\text{max}}$ learned cluster centre vectors. For a scene with $K$ people, the first $K$ centres are selected. Soft assignments are computed via scaled dot product:
+Standard DMoN uses a fixed-$K$ MLP for assignments. This doesn't work for this pipeline where $K$ varies per scene (2--5 people). The implementation uses a pool of $K_{\text{max}}$ learned cluster centre vectors. For a scene with $K$ people, the first $K$ centres are selected. Soft assignments are computed via scaled dot product:
 \begin{equation}
 S = \text{softmax}\left(\frac{h \cdot C_{:K}^\top}{\sqrt{H}}\right)
 \end{equation}
@@ -951,7 +951,7 @@ The spectral loss question is now answered: it hurts in every form tested. The r
 % ────────────────────────────────────────────────────────────
 \subsection{Experiment 9 --- COCO Zero-Shot Transfer, No Depth}
 
-All previous no-depth experiments were evaluated on synthetic data only. Before trying more loss engineering, test what we have on real data.
+All previous no-depth experiments were evaluated on synthetic data only. Before trying more loss engineering, I tested what I had on real data.
 
 \begin{center}
 \begin{tabular}{lccc}
@@ -1261,3 +1261,130 @@ SA-DMoN (best) & 0.794 & 0.817 & No & Soft penalty \\
 \end{table}
 
 The progression tells a clear story: soft type penalties (DMoN/SA-DMoN) cannot overcome the fundamental limitations of clustering-based formulations. Hard type constraints via structured optimal transport (SCOT) reframe the problem correctly --- as assignment rather than clustering --- and achieve the first head-beats-kNN result in this project.
+
+
+\subsubsection{Qualitative example --- COCO val2017}
+
+An end-to-end demo was built (\texttt{demo.py}) that takes a COCO image, runs the full pipeline (COCO adapter $\to$ dataset $\to$ preprocessor $\to$ GAT $\to$ SCOT), and draws predicted skeletons coloured by person assignment. Figure~\ref{fig:demo_example_1} shows a challenging 3-person scene with heavy occlusion.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{figures/demo_example_1.png}
+  \caption{End-to-end demo on a COCO val2017 image with 3 heavily overlapping people. Left: ground truth person assignments. Centre: SCOT prediction (PGA=0.656). Right: kNN prediction (PGA=0.594). Skeleton edges are coloured by predicted person assignment.}
+  \label{fig:demo_example_1}
+\end{figure}
+
+This is a hard scene --- three people seated close together with significant occlusion, exactly the scenario where pose grouping is most difficult. Neither method achieves high PGA, but SCOT outperforms kNN by 6.2 points (0.656 vs 0.594).
+
+The failure mode for kNN is visible in the right panel: the seated person in the front and the person behind them are merged --- their body joints are mixed across the red and green clusters. kNN groups by embedding similarity, and when people overlap in 2D their embeddings are similar enough that k-means cannot separate them cleanly.
+
+SCOT does better because the type constraint is active. The two overlapping people each have a left shoulder, left hip, left knee, etc. SCOT forces these same-type joints into different person slots --- it is structurally impossible for two left shoulders to be assigned to the same person. The blue person (seated front) is more coherent in the SCOT panel than in kNN.
+
+This illustrates the core argument for SCOT over clustering-based approaches: in crowded scenes with spatially overlapping people, the skeleton type structure provides disambiguating signal that embedding similarity alone cannot. The type constraint does not help in easy scenes (well-separated people) or for joints where types are already distinct (face keypoints), but it provides a meaningful advantage in exactly the hard cases where pose grouping matters most.
+
+
+\subsubsection{Experiment 12 --- SCOT with depth}
+
+To complete the comparison, SCOT was trained with depth enabled (\texttt{use\_depth: true}). This uses the same GAT configuration as the original experiments from Experiments 1--2: node features are $[x, y, z, v]$ and kNN edges are built in 3D space. The question: does SCOT's type constraint add value when depth already makes the problem easy?
+
+\paragraph{Synthetic results.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (contrastive GAT, depth) & 0.994 & 0.022 & 0.990 & 0.988 & 1.000 \\
+SCOT head (depth) & 0.901 & 0.134 & 0.990 & 0.988 & 0.969 \\
+\midrule
+kNN (contrastive GAT, no depth) & 0.901 & 0.110 & 0.831 & 0.801 & 1.000 \\
+SCOT head (no depth) & 0.923 & 0.105 & 0.803 & 0.767 & 0.997 \\
+\bottomrule
+\end{tabular}
+\caption{SCOT with and without depth on synthetic test set.}
+\end{table}
+
+With depth, SCOT (0.901) does not beat kNN (0.994) --- a 9.3 point gap. This is the opposite of the no-depth result where SCOT beat kNN by 3.7 points. Depth makes the problem so easy for kNN that the embeddings are near-perfect (NMI 0.990) and k-means trivially recovers the correct groups. There are no type collisions to resolve because people are already well-separated in 3D. The type constraint cannot add value when the problem is already solved, and the Sinkhorn approximation is less precise than exact k-means on clean embeddings.
+
+The training dynamics confirm this: the GAT loss drops to 0.002 (vs 0.050 without depth) and the head loss to 0.006 (vs 0.024). The model converges much faster but to a worse solution than kNN because the transport plan introduces noise that k-means does not have.
+
+\paragraph{COCO transfer results.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (contrastive GAT, depth) & 0.839 & 0.194 & 0.758 & 0.696 & 1.000 \\
+SCOT head (depth) & 0.812 & 0.210 & 0.758 & 0.696 & 0.982 \\
+\midrule
+kNN (contrastive GAT, no depth) & 0.879 & 0.170 & 0.837 & 0.782 & 1.000 \\
+SCOT head (no depth) & 0.862 & 0.174 & 0.835 & 0.779 & 0.988 \\
+\bottomrule
+\end{tabular}
+\caption{COCO val2017 results with and without depth.}
+\end{table}
+
+Per-joint accuracy on COCO with depth:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Joint & kNN (depth) & SCOT (depth) & SCOT (no depth) \\
+\midrule
+nose & 0.845 & 0.799 & 0.846 \\
+left eye & 0.827 & 0.778 & 0.818 \\
+right eye & 0.831 & 0.759 & 0.797 \\
+left ear & 0.797 & 0.721 & 0.766 \\
+right ear & 0.821 & 0.710 & 0.733 \\
+left shoulder & 0.842 & 0.819 & 0.879 \\
+right shoulder & 0.842 & 0.823 & 0.885 \\
+left elbow & 0.835 & 0.792 & 0.830 \\
+right elbow & 0.841 & 0.788 & 0.830 \\
+left wrist & 0.839 & 0.776 & 0.804 \\
+right wrist & 0.843 & 0.774 & 0.802 \\
+left hip & 0.827 & 0.817 & 0.878 \\
+right hip & 0.827 & 0.816 & 0.878 \\
+left knee & 0.820 & 0.784 & 0.834 \\
+right knee & 0.811 & 0.777 & 0.832 \\
+left ankle & 0.764 & 0.742 & 0.794 \\
+right ankle & 0.770 & 0.737 & 0.790 \\
+\bottomrule
+\end{tabular}
+\caption{Per-joint accuracy on COCO. No-depth SCOT beats with-depth SCOT on every joint.}
+\end{table}
+
+
+\paragraph{Analysis.}
+
+\textbf{1. Depth hurts SCOT on COCO even more than it hurts kNN.} SCOT drops from 0.862 (no depth) to 0.812 (with depth) on COCO --- a 5.0 point penalty. kNN's depth penalty is 4.0 points (0.879 $\to$ 0.839). The depth domain gap compounds with SCOT's existing transfer sensitivity because the Sinkhorn transport plan is more affected by noisy features than k-means.
+
+\textbf{2. No-depth is strictly better for COCO transfer regardless of method.} The complete ranking on COCO:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lc}
+\toprule
+Method & COCO PGA \\
+\midrule
+kNN (no depth) & \textbf{0.879} \\
+SCOT (no depth) & 0.862 \\
+kNN (with depth) & 0.839 \\
+SCOT (with depth) & 0.812 \\
+\bottomrule
+\end{tabular}
+\caption{All methods ranked by COCO PGA.}
+\end{table}
+
+No-depth beats with-depth by $\sim$4--5 points across the board. This confirms the depth finding from Experiment~9: ground truth synthetic depth and MiDaS estimated depth are different enough that the model learns to rely on a signal that degrades at inference on real data.
+
+\textbf{3. SCOT's advantage only exists when the problem is hard.} With depth, kNN at 0.994 leaves no room for improvement --- the type constraint is solving a problem that does not exist. Without depth, kNN drops to 0.901 and the type constraint provides genuine value (SCOT 0.923). This is the correct interpretation of SCOT: it is not a universally better grouping method, it is a method that adds value specifically when spatial proximity alone is insufficient to separate people.
+
+\textbf{4. Per-joint accuracy confirms no-depth SCOT dominates across every joint.} No-depth SCOT beats with-depth SCOT on all 17 joints on COCO, with the largest gains on the joints where depth should theoretically help most: shoulders (+6.0/+6.2), hips (+6.1/+6.2), knees (+5.0/+5.5). The depth signal is so unreliable on COCO that even joints where 3D separation would be most informative are better served by a 2D-only model with hard type constraints.
