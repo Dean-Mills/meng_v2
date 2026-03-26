@@ -38,6 +38,7 @@ class LossConfig(BaseModel):
     partition_weight:  float = 1.0   # weight for graph partitioning loss
     dmon_weight:       float = 1.0   # weight for DMoN loss
     sa_dmon_weight:    float = 1.0   # weight for SA-DMoN loss
+    scot_weight:       float = 1.0   # weight for SCOT loss
 
 
 class GraphPartitioningConfig(BaseModel):
@@ -62,6 +63,13 @@ class DMoNConfig(BaseModel):
     lambda_cluster:     float = 1.0    # collapse prevention
     lambda_type:        float = 1.0    # type exclusivity (modification 1)
     lambda_supervised:  float = 1.0    # supervised CE (modification 3)
+
+
+class SCOTConfig(BaseModel):
+    hidden_dim:         int   = 256    # encoder hidden dimension
+    k_max:              int   = 10     # maximum number of people (prototype pool size)
+    sinkhorn_iters:     int   = 10     # Sinkhorn iterations
+    sinkhorn_tau:       float = 0.1    # temperature (lower = harder assignments)
 
 
 class SADMoNConfig(BaseModel):
@@ -104,6 +112,7 @@ class ExperimentConfig(BaseModel):
     graph_partitioning: Optional[GraphPartitioningConfig] = None
     dmon:               Optional[DMoNConfig]              = None
     sa_dmon:            Optional[SADMoNConfig]            = None
+    scot:               Optional[SCOTConfig]              = None
     training:           Optional[TrainingConfig]          = None
 
     @classmethod

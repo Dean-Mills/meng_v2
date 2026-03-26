@@ -82,6 +82,17 @@ def predict_dmon(
     return logits.argmax(dim=1)
 
 
+def predict_scot(
+    head,
+    embeddings: torch.Tensor,
+    k: int,
+    joint_types: torch.Tensor,
+) -> torch.Tensor:
+    """Run SCOT head, return [N] label tensor (argmax assignment)."""
+    logits, T = head(embeddings, k, joint_types)
+    return logits.argmax(dim=1)
+
+
 def predict_sa_dmon(
     head,
     embeddings: torch.Tensor,
@@ -214,6 +225,14 @@ class Evaluator:
                 ).to(device)
                 self.head_name = "sa_dmon"
 
+            elif self.cfg.scot is not None:
+                from ot_head import SCOTHead
+                self.head = SCOTHead(
+                    self.cfg.scot,
+                    embedding_dim=self.cfg.gat.output_dim
+                ).to(device)
+                self.head_name = "scot"
+
             if self.head is not None:
                 self.head.load_state_dict(ckpt["head_state"])
                 self.head.eval()
@@ -257,6 +276,11 @@ class Evaluator:
             head_pred = predict_sa_dmon(
                 self.head, embeddings, graph.edge_index, k,
                 graph.x[:, :2], graph.joint_types,
+            )
+        elif self.head_name == "scot":
+            head_pred = predict_scot(
+                self.head, embeddings, k,
+                graph.joint_types,
             )
         else:
             head_pred = knn_pred

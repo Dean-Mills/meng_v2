@@ -1,0 +1,37 @@
+name: "train_scot_no_depth"
+description: "GAT + SCOT (Skeleton-Constrained Optimal Transport) end-to-end, no depth"
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+
+scot:
+  hidden_dim: 256
+  k_max: 10
+  sinkhorn_iters: 10
+  sinkhorn_tau: 0.1
+
+loss:
+  contrastive_margin: 0.5
+  scot_weight: 1.0
+
+training:
+  virtual_dir:   data/virtual
+  batch_size:    4
+  num_workers:   4
+  lr:            1e-3
+  lr_min:        1e-5
+  weight_decay:  1e-4
+  epochs:        100
+  val_every:     5
+  save_dir:      outputs/checkpoints/scot_no_depth
+  save_best:     true
