@@ -1627,3 +1627,104 @@ Adaptive (learned $\tau$) & 0.928 & 0.863 & Predicts $\tau$ $\to$ marginal synth
 \end{table}
 
 The conclusion across all three variants: \textbf{vanilla SCOT with fixed $\tau = 0.1$ is the right choice}. The adaptive variant adds complexity for a 0.5 point synthetic gain that does not transfer. The residual variant actively hurts by diluting the learned cost with redundant spatial information. The core contribution --- hard type constraints via structured optimal transport --- is what matters, not the temperature parameterisation or cost decomposition.
+
+
+\subsubsection{Experiment 15 --- Unbalanced SCOT (K-free assignment)}
+
+\paragraph{Motivation.}
+
+All previous SCOT variants require the number of people $K$ as input. In practice $K$ is unknown at inference. Unbalanced optimal transport addresses this by relaxing the target marginal constraint via a KL divergence penalty. Instead of requiring every person-type slot to be filled, unused slots naturally receive near-zero assignment mass.
+
+The formulation uses $K_{\max} = 20$ person templates (well above the expected maximum). The unbalanced Sinkhorn algorithm modifies the column normalisation step:
+\[
+\text{standard: } \log v = \log c - \text{logsumexp}(\ldots)
+\]
+\[
+\text{unbalanced: } \log v = \frac{\rho}{\rho + \tau} \cdot (\log c - \text{logsumexp}(\ldots))
+\]
+
+The scaling factor $\rho / (\rho + \tau) < 1$ dampens column normalisation, allowing target slots to deviate from their marginal. As $\rho \to \infty$, standard Sinkhorn is recovered. The number of people emerges from the solution: person $k$ exists if $\sum_i T_{i,(k,\cdot)} > \text{threshold}$.
+
+Implemented in \texttt{ot\_head\_unbalanced.py} with $\rho = 1.0$, $K_{\max} = 20$, 20 Sinkhorn iterations, person threshold 0.5. During training, ground truth $K$ is still provided so the loss operates on the correct number of logit columns.
+
+
+\paragraph{Results.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (no depth) & 0.901 & 0.110 & 0.831 & 0.801 & 1.000 \\
+SCOT (vanilla) & 0.923 & 0.105 & 0.803 & 0.767 & 0.997 \\
+Unbalanced SCOT & 0.886 & 0.123 & 0.826 & 0.792 & 0.979 \\
+\bottomrule
+\end{tabular}
+\caption{Synthetic test set. Unbalanced SCOT underperforms vanilla SCOT.}
+\end{table}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lcccc}
+\toprule
+Method & Synthetic & COCO & Transfer \\
+\midrule
+kNN (no depth) & 0.901 & 0.879 & $-2.2$ \\
+SCOT (vanilla) & 0.923 & 0.862 & $-6.1$ \\
+Residual SCOT & 0.909 & 0.859 & $-5.0$ \\
+Adaptive SCOT & 0.928 & 0.863 & $-6.5$ \\
+Unbalanced SCOT & 0.886 & 0.842 & $-4.4$ \\
+\bottomrule
+\end{tabular}
+\caption{Full SCOT variant comparison.}
+\end{table}
+
+COCO results:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (no depth) & 0.879 & 0.170 & 0.837 & 0.782 & 1.000 \\
+SCOT (vanilla) & 0.862 & 0.174 & 0.835 & 0.779 & 0.988 \\
+Unbalanced SCOT & 0.842 & 0.203 & 0.828 & 0.770 & 0.921 \\
+\bottomrule
+\end{tabular}
+\caption{COCO val2017 results. Unbalanced SCOT is the weakest variant.}
+\end{table}
+
+
+\paragraph{Analysis.}
+
+\textbf{1. Unbalanced SCOT (0.886) does not beat kNN on synthetic data.} It falls 3.7 points below vanilla SCOT (0.923). The training is noticeably noisier --- the head loss oscillates between 0.3 and 1.5 in the first 20 epochs, and the val PGA bounces between 0.70 and 0.86 without stabilising. With 20 person templates and only 2--5 people per scene, the solver has too many degrees of freedom. The KL relaxation at $\rho = 1.0$ allows person slots to partially empty even when they should be filled, weakening the assignment.
+
+\textbf{2. On COCO (0.842) it is the worst SCOT variant.} Detection F1 at 0.921 confirms the unbalanced solver gets person count wrong more often. Even though ground truth $K$ is provided during evaluation, the relaxed target marginal distributes mass less sharply than vanilla Sinkhorn.
+
+\textbf{3. Vanilla SCOT's tight constraints are an advantage, not a limitation.} Knowing $K$ and enforcing exact marginals constrains the problem, which means fewer solutions to search over and more reliable convergence. Every variant that adds flexibility (adaptive $\tau$, spatial prior, unbalanced marginals) trades accuracy for generality that does not pay off in the current evaluation setup.
+
+
+\subsubsection{Updated SCOT ablation summary}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccl}
+\toprule
+SCOT variant & Synthetic & COCO & What it changes \\
+\midrule
+Vanilla (fixed $\tau$=0.1) & 0.923 & 0.862 & Baseline \\
+Residual (spatial prior) & 0.909 & 0.859 & Adds spatial cost $\to$ hurts \\
+Adaptive (learned $\tau$) & 0.928 & 0.863 & Predicts $\tau$ $\to$ marginal synthetic gain \\
+Unbalanced (K-free) & 0.886 & 0.842 & Relaxed marginals $\to$ hurts significantly \\
+\bottomrule
+\end{tabular}
+\caption{Complete SCOT ablation. Vanilla SCOT remains the best formulation.}
+\end{table}
+
+Vanilla SCOT remains the strongest formulation. The ablation shows that the core contribution is the type-constrained structured assignment via OT, not the specific parameterisation of temperature, cost, or marginal constraints. That said, K-free inference remains a valuable direction for future work --- the unbalanced formulation is the right idea but likely needs tighter $\rho$ values, better initialisation of the prototype pool, or a curriculum that starts with known $K$ and gradually relaxes to unbalanced.

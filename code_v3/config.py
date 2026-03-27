@@ -73,6 +73,15 @@ class SCOTConfig(BaseModel):
     sinkhorn_tau:       float = 0.1    # temperature (lower = harder assignments)
 
 
+class UnbalancedSCOTConfig(BaseModel):
+    hidden_dim:         int   = 256
+    k_max:              int   = 20     # generous upper bound on person count
+    sinkhorn_iters:     int   = 20     # more iters needed for unbalanced convergence
+    sinkhorn_tau:       float = 0.1    # entropy regularisation
+    rho:                float = 1.0    # KL penalty on target marginal (lower = more relaxed)
+    person_threshold:   float = 0.5    # minimum total mass to count as active person
+
+
 class AdaptiveSCOTConfig(BaseModel):
     hidden_dim:         int   = 256
     k_max:              int   = 10
@@ -132,6 +141,7 @@ class ExperimentConfig(BaseModel):
     scot:               Optional[SCOTConfig]              = None
     residual_scot:      Optional[ResidualSCOTConfig]      = None
     adaptive_scot:      Optional[AdaptiveSCOTConfig]      = None
+    unbalanced_scot:    Optional[UnbalancedSCOTConfig]    = None
     training:           Optional[TrainingConfig]          = None
 
     @classmethod

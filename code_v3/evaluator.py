@@ -82,6 +82,17 @@ def predict_dmon(
     return logits.argmax(dim=1)
 
 
+def predict_unbalanced_scot(
+    head,
+    embeddings: torch.Tensor,
+    k: int,
+    joint_types: torch.Tensor,
+) -> torch.Tensor:
+    """Run Unbalanced SCOT head with known K, return [N] label tensor."""
+    logits, T = head(embeddings, joint_types, k=k)
+    return logits.argmax(dim=1)
+
+
 def predict_adaptive_scot(
     head,
     embeddings: torch.Tensor,
@@ -256,6 +267,14 @@ class Evaluator:
                 ).to(device)
                 self.head_name = "scot"
 
+            elif self.cfg.unbalanced_scot is not None:
+                from ot_head_unbalanced import UnbalancedSCOTHead
+                self.head = UnbalancedSCOTHead(
+                    self.cfg.unbalanced_scot,
+                    embedding_dim=self.cfg.gat.output_dim
+                ).to(device)
+                self.head_name = "unbalanced_scot"
+
             elif self.cfg.adaptive_scot is not None:
                 from ot_head_adaptive import AdaptiveSCOTHead
                 self.head = AdaptiveSCOTHead(
@@ -318,6 +337,11 @@ class Evaluator:
             )
         elif self.head_name == "scot":
             head_pred = predict_scot(
+                self.head, embeddings, k,
+                graph.joint_types,
+            )
+        elif self.head_name == "unbalanced_scot":
+            head_pred = predict_unbalanced_scot(
                 self.head, embeddings, k,
                 graph.joint_types,
             )
