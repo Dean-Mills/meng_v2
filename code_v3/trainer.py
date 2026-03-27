@@ -58,6 +58,10 @@ def _build_head(cfg: ExperimentConfig, embedding_dim: int):
         from ot_head_residual import ResidualSCOTHead
         return ResidualSCOTHead(cfg.residual_scot, embedding_dim=embedding_dim)
 
+    if cfg.adaptive_scot is not None:
+        from ot_head_adaptive import AdaptiveSCOTHead
+        return AdaptiveSCOTHead(cfg.adaptive_scot, embedding_dim=embedding_dim)
+
     return None
 
 
@@ -74,7 +78,9 @@ def _build_head_loss(cfg: ExperimentConfig):
     if cfg.scot is not None:
         return SCOTLoss(cfg.loss)
     if cfg.residual_scot is not None:
-        return SCOTLoss(cfg.loss)  # same loss structure
+        return SCOTLoss(cfg.loss)
+    if cfg.adaptive_scot is not None:
+        return SCOTLoss(cfg.loss)
     return None
 
 
@@ -129,6 +135,12 @@ def _head_forward(head, embeddings, graph):
         logits, T = head(embeddings, k, positions, graph.joint_types)
         return (logits, T), (logits, graph.person_labels)
 
+    from ot_head_adaptive import AdaptiveSCOTHead
+    if isinstance(head, AdaptiveSCOTHead):
+        k = int(graph.num_people)
+        logits, T = head(embeddings, k, graph.joint_types)
+        return (logits, T), (logits, graph.person_labels)
+
     return None, None
 
 
@@ -172,6 +184,7 @@ def train(cfg: ExperimentConfig, device: str):
         "sa_dmon"            if cfg.sa_dmon             is not None else
         "scot"               if cfg.scot               is not None else
         "residual_scot"      if cfg.residual_scot       is not None else
+        "adaptive_scot"      if cfg.adaptive_scot       is not None else
         "knn_only"
     )
     print(f"\nTraining: {cfg.name}")
@@ -291,7 +304,7 @@ def train(cfg: ExperimentConfig, device: str):
 def _validate(gat, head, head_name, loader, preprocessor,
               gat_loss_fn, head_loss_fn, device, cfg) -> float:
     """Run validation, return mean PGA."""
-    from evaluator import compute_pga, predict_knn, predict_slot, predict_partition, predict_dmon, predict_sa_dmon, predict_scot, predict_residual_scot
+    from evaluator import compute_pga, predict_knn, predict_slot, predict_partition, predict_dmon, predict_sa_dmon, predict_scot, predict_residual_scot, predict_adaptive_scot
 
     gat.eval()
     if head is not None:
@@ -332,6 +345,10 @@ def _validate(gat, head, head_name, loader, preprocessor,
                     pred_labels = predict_residual_scot(
                         head, embeddings, k, graph.x[:, :2],
                         graph.joint_types,
+                    )
+                elif head_name == "adaptive_scot":
+                    pred_labels = predict_adaptive_scot(
+                        head, embeddings, k, graph.joint_types,
                     )
                 else:
                     pred_labels = predict_knn(embeddings, k)

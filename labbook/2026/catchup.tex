@@ -1500,3 +1500,130 @@ Residual SCOT ($\lambda$=0.2) & 0.859 & 0.177 & 0.828 & 0.770 & 0.990 \\
 \textbf{3. The spatial prior doesn't help because it's redundant.} The k-means centroids computed from 2D positions encode the same information that the kNN graph edges already provide. The GAT has already absorbed spatial proximity through message passing --- the contrastive loss then separates the embeddings by person identity. Adding spatial centroids back into the cost matrix is giving the model information it already has, weighted against the learned signal that provides something new.
 
 \textbf{4. Vanilla SCOT is the better formulation.} The learned cost from GAT embeddings is the right signal on its own. The spatial prior dilutes it without meaningful benefit on either synthetic or COCO data. This is a useful ablation result --- it confirms that SCOT's performance comes from the learned cost and hard type constraints, not from spatial proximity which kNN already captures optimally.
+
+
+\subsubsection{Experiment 14 --- Adaptive SCOT (scene-predicted temperature)}
+
+\paragraph{Motivation.}
+
+The Sinkhorn temperature $\tau$ controls how ``soft'' the transport plan is. High $\tau$ gives smooth, spread-out assignments (global OT reasoning). Low $\tau$ approaches hard, greedy assignment (kNN-like). Vanilla SCOT fixes $\tau = 0.1$, which may not be optimal for all scenes --- easy scenes with well-separated people might benefit from lower $\tau$ (sharper), while hard scenes with overlapping people might benefit from higher $\tau$ (more global).
+
+The adaptive variant predicts $\tau$ from the scene:
+\[
+\tau = \sigma(\text{MLP}(\text{graph\_summary})) \cdot (\tau_{\max} - \tau_{\min}) + \tau_{\min}
+\]
+
+where the graph summary is computed from cost matrix statistics (mean, standard deviation, row-wise entropy) and mean-pooled GAT embeddings. The model learns when to trust local assignments and when to invoke global reasoning. Implemented in a separate file (\texttt{ot\_head\_adaptive.py}) with $\tau_{\min} = 0.01$, $\tau_{\max} = 0.5$.
+
+
+\paragraph{Results.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (no depth) & 0.901 & 0.110 & 0.831 & 0.801 & 1.000 \\
+SCOT (fixed $\tau$=0.1) & 0.923 & 0.105 & 0.803 & 0.767 & 0.997 \\
+Residual SCOT ($\lambda$=0.2) & 0.909 & 0.106 & 0.801 & 0.766 & 0.994 \\
+\textbf{Adaptive SCOT} & \textbf{0.928} & \textbf{0.098} & 0.803 & 0.764 & 0.994 \\
+\bottomrule
+\end{tabular}
+\caption{Synthetic test set. Adaptive SCOT achieves the highest PGA of any method.}
+\end{table}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lcccc}
+\toprule
+Method & Synthetic & COCO & Transfer \\
+\midrule
+kNN (no depth) & 0.901 & 0.879 & $-2.2$ \\
+SCOT (fixed $\tau$=0.1) & 0.923 & 0.862 & $-6.1$ \\
+Residual SCOT ($\lambda$=0.2) & 0.909 & 0.859 & $-5.0$ \\
+Adaptive SCOT & 0.928 & 0.863 & $-6.5$ \\
+\bottomrule
+\end{tabular}
+\caption{Transfer comparison across all SCOT variants.}
+\end{table}
+
+COCO results:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (no depth) & 0.879 & 0.170 & 0.837 & 0.782 & 1.000 \\
+SCOT (fixed $\tau$=0.1) & 0.862 & 0.174 & 0.835 & 0.779 & 0.988 \\
+Residual SCOT ($\lambda$=0.2) & 0.859 & 0.177 & 0.828 & 0.770 & 0.990 \\
+Adaptive SCOT & 0.863 & 0.176 & 0.832 & 0.775 & 0.991 \\
+\bottomrule
+\end{tabular}
+\caption{COCO val2017 results.}
+\end{table}
+
+Per-joint accuracy on synthetic data:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Joint & kNN & SCOT & Adaptive SCOT \\
+\midrule
+nose & 0.891 & 0.895 & 0.926 \\
+left eye & 0.903 & 0.907 & 0.906 \\
+right eye & 0.904 & 0.878 & 0.918 \\
+left ear & 0.919 & 0.902 & 0.935 \\
+right ear & 0.897 & 0.915 & 0.949 \\
+left shoulder & 0.910 & 0.950 & 0.963 \\
+right shoulder & 0.910 & 0.950 & 0.934 \\
+left elbow & 0.921 & 0.965 & 0.942 \\
+right elbow & 0.887 & 0.931 & 0.949 \\
+left wrist & 0.906 & 0.939 & 0.925 \\
+right wrist & 0.874 & 0.891 & 0.876 \\
+left hip & 0.881 & 0.968 & 0.956 \\
+right hip & 0.882 & 0.944 & 0.953 \\
+left knee & 0.862 & 0.947 & 0.922 \\
+right knee & 0.870 & 0.919 & 0.925 \\
+left ankle & 0.809 & 0.897 & 0.901 \\
+right ankle & 0.817 & 0.896 & 0.893 \\
+\bottomrule
+\end{tabular}
+\caption{Per-joint accuracy. Adaptive SCOT improves on some joints, trades off on others.}
+\end{table}
+
+
+\paragraph{Analysis.}
+
+\textbf{1. Adaptive SCOT achieves the highest synthetic PGA (0.928).} A small improvement over vanilla SCOT (0.923, +0.5 points). The best checkpoint is at epoch 15 --- even faster convergence than vanilla SCOT (epoch 30). The scene-adaptive temperature is providing marginal benefit on synthetic data where the tau predictor can learn the difficulty distribution.
+
+\textbf{2. On COCO, adaptive SCOT (0.863) is essentially identical to vanilla SCOT (0.862).} The adaptive temperature does not help with transfer. The tau predictor was trained on synthetic scene difficulty patterns and does not generalise to real data where the difficulty distribution is different. The same face-joint weakness persists (ears 0.711/0.787 vs kNN 0.851/0.878).
+
+\textbf{3. The transfer gap is slightly larger ($-6.5$ vs $-6.1$).} The adaptive tau adds a learned component (the MLP predictor) that is sensitive to distributional shift. On synthetic data this component helps; on COCO it is miscalibrated and slightly hurts.
+
+
+\subsubsection{SCOT ablation summary}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccl}
+\toprule
+SCOT variant & Synthetic & COCO & What it changes \\
+\midrule
+Vanilla (fixed $\tau$=0.1) & 0.923 & 0.862 & Baseline \\
+Residual (spatial prior) & 0.909 & 0.859 & Adds spatial cost $\to$ hurts \\
+Adaptive (learned $\tau$) & 0.928 & 0.863 & Predicts $\tau$ $\to$ marginal synthetic gain \\
+\bottomrule
+\end{tabular}
+\caption{SCOT ablation. Vanilla SCOT is the best balance of performance and simplicity.}
+\end{table}
+
+The conclusion across all three variants: \textbf{vanilla SCOT with fixed $\tau = 0.1$ is the right choice}. The adaptive variant adds complexity for a 0.5 point synthetic gain that does not transfer. The residual variant actively hurts by diluting the learned cost with redundant spatial information. The core contribution --- hard type constraints via structured optimal transport --- is what matters, not the temperature parameterisation or cost decomposition.

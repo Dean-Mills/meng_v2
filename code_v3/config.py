@@ -73,6 +73,14 @@ class SCOTConfig(BaseModel):
     sinkhorn_tau:       float = 0.1    # temperature (lower = harder assignments)
 
 
+class AdaptiveSCOTConfig(BaseModel):
+    hidden_dim:         int   = 256
+    k_max:              int   = 10
+    sinkhorn_iters:     int   = 10
+    tau_min:            float = 0.01   # minimum temperature (sharp, kNN-like)
+    tau_max:            float = 0.5    # maximum temperature (soft, global OT)
+
+
 class ResidualSCOTConfig(BaseModel):
     hidden_dim:         int   = 256
     k_max:              int   = 10
@@ -123,6 +131,7 @@ class ExperimentConfig(BaseModel):
     sa_dmon:            Optional[SADMoNConfig]            = None
     scot:               Optional[SCOTConfig]              = None
     residual_scot:      Optional[ResidualSCOTConfig]      = None
+    adaptive_scot:      Optional[AdaptiveSCOTConfig]      = None
     training:           Optional[TrainingConfig]          = None
 
     @classmethod
