@@ -1388,3 +1388,115 @@ No-depth beats with-depth by $\sim$4--5 points across the board. This confirms t
 \textbf{3. SCOT's advantage only exists when the problem is hard.} With depth, kNN at 0.994 leaves no room for improvement --- the type constraint is solving a problem that does not exist. Without depth, kNN drops to 0.901 and the type constraint provides genuine value (SCOT 0.923). This is the correct interpretation of SCOT: it is not a universally better grouping method, it is a method that adds value specifically when spatial proximity alone is insufficient to separate people.
 
 \textbf{4. Per-joint accuracy confirms no-depth SCOT dominates across every joint.} No-depth SCOT beats with-depth SCOT on all 17 joints on COCO, with the largest gains on the joints where depth should theoretically help most: shoulders (+6.0/+6.2), hips (+6.1/+6.2), knees (+5.0/+5.5). The depth signal is so unreliable on COCO that even joints where 3D separation would be most informative are better served by a 2D-only model with hard type constraints.
+
+
+\subsubsection{Experiment 13 --- Residual SCOT (spatial prior + learned correction)}
+
+\paragraph{Motivation.}
+
+SCOT beats kNN on synthetic data but loses on COCO. One hypothesis for why: kNN is a local, greedy method --- each keypoint independently picks its nearest cluster centre. On easy scenes where people are well-separated, greedy is optimal. OT is a global method --- it finds the best overall assignment considering all keypoints simultaneously. That global reasoning helps on hard scenes (overlapping people) but on easy scenes it introduces noise from the Sinkhorn entropy regularisation, which smears assignments that should be sharp.
+
+The idea: decompose the cost matrix into a spatial prior and a learned correction:
+\[
+C_{\text{final}} = C_{\text{spatial}} + \lambda \cdot C_{\text{learned}}
+\]
+
+$C_{\text{spatial}}$ is the squared distance from each keypoint to $K$ spatial centroids computed via k-means on 2D positions (detached, not learned). This encodes geometric proximity --- equivalent to what kNN uses. $C_{\text{learned}}$ is the squared distance from encoded GAT embeddings to learned prototypes --- the same cost as vanilla SCOT.
+
+On easy scenes, $C_{\text{spatial}}$ already has the right answer and the learned residual barely matters. On hard scenes, $C_{\text{spatial}}$ is ambiguous and $C_{\text{learned}}$ provides the discriminative correction. The spatial prior anchors easy cases, the learned cost handles hard cases.
+
+This was implemented in a separate file (\texttt{ot\_head\_residual.py}) to preserve the original SCOT head for ablation. The $\lambda$ parameter was set to 0.2, meaning the spatial cost contributes 80\% and the learned cost 20\%.
+
+\paragraph{Synthetic results.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (no depth) & 0.901 & 0.110 & 0.831 & 0.801 & 1.000 \\
+kNN (Residual SCOT GAT) & 0.884 & 0.119 & 0.801 & 0.766 & 1.000 \\
+SCOT (no depth) & 0.923 & 0.105 & 0.803 & 0.767 & 0.997 \\
+Residual SCOT ($\lambda$=0.2) & 0.909 & 0.106 & 0.801 & 0.766 & 0.994 \\
+\bottomrule
+\end{tabular}
+\caption{Residual SCOT vs vanilla SCOT on synthetic test set.}
+\end{table}
+
+Per-joint comparison on synthetic data:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Joint & kNN & SCOT & Residual SCOT \\
+\midrule
+nose & 0.888 & 0.895 & 0.872 \\
+left eye & 0.889 & 0.907 & 0.891 \\
+right eye & 0.891 & 0.878 & 0.885 \\
+left ear & 0.905 & 0.902 & 0.875 \\
+right ear & 0.900 & 0.915 & 0.896 \\
+left shoulder & 0.924 & 0.950 & 0.942 \\
+right shoulder & 0.911 & 0.950 & 0.953 \\
+left elbow & 0.900 & 0.965 & 0.945 \\
+right elbow & 0.899 & 0.931 & 0.923 \\
+left wrist & 0.905 & 0.939 & 0.908 \\
+right wrist & 0.864 & 0.891 & 0.893 \\
+left hip & 0.889 & 0.968 & 0.919 \\
+right hip & 0.886 & 0.944 & 0.932 \\
+left knee & 0.872 & 0.947 & 0.921 \\
+right knee & 0.886 & 0.919 & 0.920 \\
+left ankle & 0.818 & 0.897 & 0.911 \\
+right ankle & 0.805 & 0.896 & 0.870 \\
+\bottomrule
+\end{tabular}
+\caption{Per-joint accuracy. Residual SCOT falls between kNN and SCOT on most joints.}
+\end{table}
+
+\paragraph{COCO transfer results.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lcccc}
+\toprule
+Method & Synthetic & COCO & Transfer \\
+\midrule
+kNN (no depth) & 0.901 & 0.879 & $-2.2$ \\
+SCOT (no depth) & 0.923 & 0.862 & $-6.1$ \\
+Residual SCOT ($\lambda$=0.2) & 0.909 & 0.859 & $-5.0$ \\
+\bottomrule
+\end{tabular}
+\caption{Transfer comparison. Residual SCOT's gap is slightly smaller but the difference is marginal.}
+\end{table}
+
+Full COCO results:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (no depth) & 0.879 & 0.170 & 0.837 & 0.782 & 1.000 \\
+SCOT (no depth) & 0.862 & 0.174 & 0.835 & 0.779 & 0.988 \\
+Residual SCOT ($\lambda$=0.2) & 0.859 & 0.177 & 0.828 & 0.770 & 0.990 \\
+\bottomrule
+\end{tabular}
+\caption{COCO val2017 results.}
+\end{table}
+
+
+\paragraph{Analysis.}
+
+\textbf{1. Residual SCOT beats kNN but underperforms vanilla SCOT on synthetic data.} At 0.909, Residual SCOT is 2.5 points above kNN (0.884) but 1.4 points below SCOT (0.923). The spatial prior anchors assignments toward k-means centroids, which helps on easy scenes but constrains the learned cost from making the corrections that SCOT makes on hard scenes. The per-joint pattern confirms this --- SCOT gets 0.968 on left hip vs 0.919 for Residual SCOT, 0.965 on left elbow vs 0.945. The spatial prior is holding back the learned signal on exactly the joints where SCOT excels.
+
+\textbf{2. On COCO the difference is negligible.} Residual SCOT (0.859) is within noise of SCOT (0.862). The transfer gap is slightly smaller ($-5.0$ vs $-6.1$), which was the hypothesis --- the spatial prior should be more robust to domain shift. But the improvement is marginal and not worth the added complexity (k-means centroid computation per forward pass, extra hyperparameter $\lambda$).
+
+\textbf{3. The spatial prior doesn't help because it's redundant.} The k-means centroids computed from 2D positions encode the same information that the kNN graph edges already provide. The GAT has already absorbed spatial proximity through message passing --- the contrastive loss then separates the embeddings by person identity. Adding spatial centroids back into the cost matrix is giving the model information it already has, weighted against the learned signal that provides something new.
+
+\textbf{4. Vanilla SCOT is the better formulation.} The learned cost from GAT embeddings is the right signal on its own. The spatial prior dilutes it without meaningful benefit on either synthetic or COCO data. This is a useful ablation result --- it confirms that SCOT's performance comes from the learned cost and hard type constraints, not from spatial proximity which kNN already captures optimally.

@@ -54,6 +54,10 @@ def _build_head(cfg: ExperimentConfig, embedding_dim: int):
         from ot_head import SCOTHead
         return SCOTHead(cfg.scot, embedding_dim=embedding_dim)
 
+    if cfg.residual_scot is not None:
+        from ot_head_residual import ResidualSCOTHead
+        return ResidualSCOTHead(cfg.residual_scot, embedding_dim=embedding_dim)
+
     return None
 
 
@@ -69,6 +73,8 @@ def _build_head_loss(cfg: ExperimentConfig):
         return SADMoNLoss(cfg.loss, cfg.sa_dmon)
     if cfg.scot is not None:
         return SCOTLoss(cfg.loss)
+    if cfg.residual_scot is not None:
+        return SCOTLoss(cfg.loss)  # same loss structure
     return None
 
 
@@ -116,6 +122,13 @@ def _head_forward(head, embeddings, graph):
         logits, T = head(embeddings, k, graph.joint_types)
         return (logits, T), (logits, graph.person_labels)
 
+    from ot_head_residual import ResidualSCOTHead
+    if isinstance(head, ResidualSCOTHead):
+        k = int(graph.num_people)
+        positions = graph.x[:, :2]
+        logits, T = head(embeddings, k, positions, graph.joint_types)
+        return (logits, T), (logits, graph.person_labels)
+
     return None, None
 
 
@@ -158,6 +171,7 @@ def train(cfg: ExperimentConfig, device: str):
         "dmon"               if cfg.dmon               is not None else
         "sa_dmon"            if cfg.sa_dmon             is not None else
         "scot"               if cfg.scot               is not None else
+        "residual_scot"      if cfg.residual_scot       is not None else
         "knn_only"
     )
     print(f"\nTraining: {cfg.name}")
@@ -277,7 +291,7 @@ def train(cfg: ExperimentConfig, device: str):
 def _validate(gat, head, head_name, loader, preprocessor,
               gat_loss_fn, head_loss_fn, device, cfg) -> float:
     """Run validation, return mean PGA."""
-    from evaluator import compute_pga, predict_knn, predict_slot, predict_partition, predict_dmon, predict_sa_dmon, predict_scot
+    from evaluator import compute_pga, predict_knn, predict_slot, predict_partition, predict_dmon, predict_sa_dmon, predict_scot, predict_residual_scot
 
     gat.eval()
     if head is not None:
@@ -313,6 +327,11 @@ def _validate(gat, head, head_name, loader, preprocessor,
                 elif head_name == "scot":
                     pred_labels = predict_scot(
                         head, embeddings, k, graph.joint_types,
+                    )
+                elif head_name == "residual_scot":
+                    pred_labels = predict_residual_scot(
+                        head, embeddings, k, graph.x[:, :2],
+                        graph.joint_types,
                     )
                 else:
                     pred_labels = predict_knn(embeddings, k)

@@ -82,6 +82,18 @@ def predict_dmon(
     return logits.argmax(dim=1)
 
 
+def predict_residual_scot(
+    head,
+    embeddings: torch.Tensor,
+    k: int,
+    positions: torch.Tensor,
+    joint_types: torch.Tensor,
+) -> torch.Tensor:
+    """Run Residual SCOT head, return [N] label tensor."""
+    logits, T = head(embeddings, k, positions, joint_types)
+    return logits.argmax(dim=1)
+
+
 def predict_scot(
     head,
     embeddings: torch.Tensor,
@@ -233,6 +245,14 @@ class Evaluator:
                 ).to(device)
                 self.head_name = "scot"
 
+            elif self.cfg.residual_scot is not None:
+                from ot_head_residual import ResidualSCOTHead
+                self.head = ResidualSCOTHead(
+                    self.cfg.residual_scot,
+                    embedding_dim=self.cfg.gat.output_dim
+                ).to(device)
+                self.head_name = "residual_scot"
+
             if self.head is not None:
                 self.head.load_state_dict(ckpt["head_state"])
                 self.head.eval()
@@ -281,6 +301,11 @@ class Evaluator:
             head_pred = predict_scot(
                 self.head, embeddings, k,
                 graph.joint_types,
+            )
+        elif self.head_name == "residual_scot":
+            head_pred = predict_residual_scot(
+                self.head, embeddings, k,
+                graph.x[:, :2], graph.joint_types,
             )
         else:
             head_pred = knn_pred

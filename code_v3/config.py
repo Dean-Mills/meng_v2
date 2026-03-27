@@ -39,6 +39,7 @@ class LossConfig(BaseModel):
     dmon_weight:       float = 1.0   # weight for DMoN loss
     sa_dmon_weight:    float = 1.0   # weight for SA-DMoN loss
     scot_weight:       float = 1.0   # weight for SCOT loss
+    residual_scot_weight: float = 1.0
 
 
 class GraphPartitioningConfig(BaseModel):
@@ -70,6 +71,14 @@ class SCOTConfig(BaseModel):
     k_max:              int   = 10     # maximum number of people (prototype pool size)
     sinkhorn_iters:     int   = 10     # Sinkhorn iterations
     sinkhorn_tau:       float = 0.1    # temperature (lower = harder assignments)
+
+
+class ResidualSCOTConfig(BaseModel):
+    hidden_dim:         int   = 256
+    k_max:              int   = 10
+    sinkhorn_iters:     int   = 10
+    sinkhorn_tau:       float = 0.1
+    lambda_residual:    float = 0.2    # weight of learned cost relative to spatial
 
 
 class SADMoNConfig(BaseModel):
@@ -113,6 +122,7 @@ class ExperimentConfig(BaseModel):
     dmon:               Optional[DMoNConfig]              = None
     sa_dmon:            Optional[SADMoNConfig]            = None
     scot:               Optional[SCOTConfig]              = None
+    residual_scot:      Optional[ResidualSCOTConfig]      = None
     training:           Optional[TrainingConfig]          = None
 
     @classmethod
