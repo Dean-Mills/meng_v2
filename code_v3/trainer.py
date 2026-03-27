@@ -66,6 +66,10 @@ def _build_head(cfg: ExperimentConfig, embedding_dim: int):
         from ot_head_unbalanced import UnbalancedSCOTHead
         return UnbalancedSCOTHead(cfg.unbalanced_scot, embedding_dim=embedding_dim)
 
+    if cfg.dustbin_scot is not None:
+        from ot_head_dustbin import DustbinSCOTHead
+        return DustbinSCOTHead(cfg.dustbin_scot, embedding_dim=embedding_dim)
+
     return None
 
 
@@ -86,6 +90,8 @@ def _build_head_loss(cfg: ExperimentConfig):
     if cfg.adaptive_scot is not None:
         return SCOTLoss(cfg.loss)
     if cfg.unbalanced_scot is not None:
+        return SCOTLoss(cfg.loss)
+    if cfg.dustbin_scot is not None:
         return SCOTLoss(cfg.loss)
     return None
 
@@ -150,7 +156,12 @@ def _head_forward(head, embeddings, graph):
     from ot_head_unbalanced import UnbalancedSCOTHead
     if isinstance(head, UnbalancedSCOTHead):
         k = int(graph.num_people)
-        # During training, pass GT k so logits have the right shape for CE
+        logits, T = head(embeddings, graph.joint_types, k=k)
+        return (logits, T), (logits, graph.person_labels)
+
+    from ot_head_dustbin import DustbinSCOTHead
+    if isinstance(head, DustbinSCOTHead):
+        k = int(graph.num_people)
         logits, T = head(embeddings, graph.joint_types, k=k)
         return (logits, T), (logits, graph.person_labels)
 
@@ -199,6 +210,7 @@ def train(cfg: ExperimentConfig, device: str):
         "residual_scot"      if cfg.residual_scot       is not None else
         "adaptive_scot"      if cfg.adaptive_scot       is not None else
         "unbalanced_scot"    if cfg.unbalanced_scot     is not None else
+        "dustbin_scot"       if cfg.dustbin_scot        is not None else
         "knn_only"
     )
     print(f"\nTraining: {cfg.name}")
@@ -318,7 +330,7 @@ def train(cfg: ExperimentConfig, device: str):
 def _validate(gat, head, head_name, loader, preprocessor,
               gat_loss_fn, head_loss_fn, device, cfg) -> float:
     """Run validation, return mean PGA."""
-    from evaluator import compute_pga, predict_knn, predict_slot, predict_partition, predict_dmon, predict_sa_dmon, predict_scot, predict_residual_scot, predict_adaptive_scot, predict_unbalanced_scot
+    from evaluator import compute_pga, predict_knn, predict_slot, predict_partition, predict_dmon, predict_sa_dmon, predict_scot, predict_residual_scot, predict_adaptive_scot, predict_unbalanced_scot, predict_dustbin_scot
 
     gat.eval()
     if head is not None:
@@ -366,6 +378,10 @@ def _validate(gat, head, head_name, loader, preprocessor,
                     )
                 elif head_name == "unbalanced_scot":
                     pred_labels = predict_unbalanced_scot(
+                        head, embeddings, k, graph.joint_types,
+                    )
+                elif head_name == "dustbin_scot":
+                    pred_labels = predict_dustbin_scot(
                         head, embeddings, k, graph.joint_types,
                     )
                 else:

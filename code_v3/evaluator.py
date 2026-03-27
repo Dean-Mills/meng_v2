@@ -82,6 +82,17 @@ def predict_dmon(
     return logits.argmax(dim=1)
 
 
+def predict_dustbin_scot(
+    head,
+    embeddings: torch.Tensor,
+    k: int,
+    joint_types: torch.Tensor,
+) -> torch.Tensor:
+    """Run Dustbin SCOT head with known K, return [N] label tensor."""
+    logits, T = head(embeddings, joint_types, k=k)
+    return logits.argmax(dim=1)
+
+
 def predict_unbalanced_scot(
     head,
     embeddings: torch.Tensor,
@@ -267,6 +278,14 @@ class Evaluator:
                 ).to(device)
                 self.head_name = "scot"
 
+            elif self.cfg.dustbin_scot is not None:
+                from ot_head_dustbin import DustbinSCOTHead
+                self.head = DustbinSCOTHead(
+                    self.cfg.dustbin_scot,
+                    embedding_dim=self.cfg.gat.output_dim
+                ).to(device)
+                self.head_name = "dustbin_scot"
+
             elif self.cfg.unbalanced_scot is not None:
                 from ot_head_unbalanced import UnbalancedSCOTHead
                 self.head = UnbalancedSCOTHead(
@@ -337,6 +356,11 @@ class Evaluator:
             )
         elif self.head_name == "scot":
             head_pred = predict_scot(
+                self.head, embeddings, k,
+                graph.joint_types,
+            )
+        elif self.head_name == "dustbin_scot":
+            head_pred = predict_dustbin_scot(
                 self.head, embeddings, k,
                 graph.joint_types,
             )

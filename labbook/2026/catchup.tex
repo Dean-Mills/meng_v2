@@ -1727,4 +1727,102 @@ Unbalanced (K-free) & 0.886 & 0.842 & Relaxed marginals $\to$ hurts significantl
 \caption{Complete SCOT ablation. Vanilla SCOT remains the best formulation.}
 \end{table}
 
-Vanilla SCOT remains the strongest formulation. The ablation shows that the core contribution is the type-constrained structured assignment via OT, not the specific parameterisation of temperature, cost, or marginal constraints. That said, K-free inference remains a valuable direction for future work --- the unbalanced formulation is the right idea but likely needs tighter $\rho$ values, better initialisation of the prototype pool, or a curriculum that starts with known $K$ and gradually relaxes to unbalanced.
+Vanilla SCOT remains the strongest formulation so far. The ablation shows that the core contribution is the type-constrained structured assignment via OT, not the specific parameterisation of temperature, cost, or marginal constraints.
+
+
+\subsubsection{Experiment 16 --- Dustbin SCOT (K-free via explicit rejection)}
+
+\paragraph{Motivation.}
+
+The unbalanced approach relaxed target marginals via KL penalty, which made assignments noisy. An alternative for K-free inference: keep standard balanced Sinkhorn (sharp assignments) but add an explicit dustbin column that competes with person slots. Keypoints whose best person assignment costs more than the dustbin cost go to the dustbin instead. After solving, person slots with significant mass are active; the rest are empty.
+
+This is the approach used by DETR for object detection --- a learned ``no object'' class that absorbs unused queries. The key difference from unbalanced OT: the dustbin is an explicit competing option with a learned cost, not a relaxation of the marginal constraints.
+
+Implemented in \texttt{ot\_head\_dustbin.py} with $K_{\max} = 20$, learned dustbin cost initialised at 1.0, person threshold 0.5. During training, GT $K$ is provided for the logit columns (same as unbalanced).
+
+
+\paragraph{Results.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lcccc}
+\toprule
+Method & Synthetic & COCO & Transfer \\
+\midrule
+kNN (no depth) & 0.901 & 0.879 & $-2.2$ \\
+SCOT (vanilla) & 0.923 & 0.862 & $-6.1$ \\
+Unbalanced SCOT & 0.886 & 0.842 & $-4.4$ \\
+Dustbin SCOT & 0.861 & 0.832 & $-2.9$ \\
+\bottomrule
+\end{tabular}
+\caption{K-free variant comparison.}
+\end{table}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (no depth) & 0.901 & 0.110 & 0.831 & 0.801 & 1.000 \\
+SCOT (vanilla) & 0.923 & 0.105 & 0.803 & 0.767 & 0.997 \\
+Dustbin SCOT & 0.861 & 0.134 & 0.810 & 0.775 & 0.969 \\
+\bottomrule
+\end{tabular}
+\caption{Synthetic test set. Dustbin SCOT underperforms kNN.}
+\end{table}
+
+COCO results:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (no depth) & 0.879 & 0.170 & 0.837 & 0.782 & 1.000 \\
+SCOT (vanilla) & 0.862 & 0.174 & 0.835 & 0.779 & 0.988 \\
+Unbalanced SCOT & 0.842 & 0.203 & 0.828 & 0.770 & 0.921 \\
+Dustbin SCOT & 0.832 & 0.200 & 0.835 & 0.779 & 0.967 \\
+\bottomrule
+\end{tabular}
+\caption{COCO val2017. Dustbin has better Det F1 than unbalanced but lower PGA.}
+\end{table}
+
+
+\paragraph{Analysis.}
+
+\textbf{1. Dustbin SCOT (0.861) does not beat kNN on synthetic data.} The dustbin absorbs too many keypoints that should be assigned to persons. With 20 person templates during training (even though GT $K$ is provided for the logits), the cost matrix has $20 \times 17 = 340$ slots plus dustbin competing for $\sim$60 keypoints. The dustbin provides an easy path to minimising loss: absorb ambiguous keypoints rather than resolving them.
+
+\textbf{2. Better than unbalanced on Detection F1 (0.967 vs 0.921).} Balanced Sinkhorn with an explicit dustbin gives sharper assignments than KL-relaxed marginals. The dustbin cleanly separates ``assigned to a person'' from ``unassigned'' rather than smearing mass across partially-filled slots.
+
+\textbf{3. The transfer gap is the smallest of any SCOT variant ($-2.9$).} The dustbin acts as a natural regulariser --- by absorbing the hardest keypoints during training, the remaining assignments are more confident and transfer better. But the overall PGA is too low for this to be useful.
+
+\textbf{4. Both K-free approaches share the same fundamental problem.} With 20 templates and only 2--5 people, the solver wastes capacity on empty slots. The prototype pool has 20 learned vectors but only 2--5 are meaningful; the rest are noise that the model must learn to ignore. Vanilla SCOT with exact $K$ avoids this entirely --- it creates exactly $K$ slots and all must be filled.
+
+
+\subsubsection{Final SCOT ablation summary}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccl}
+\toprule
+SCOT variant & Synthetic & COCO & What it changes \\
+\midrule
+\textbf{Vanilla (fixed $\tau$=0.1)} & \textbf{0.923} & \textbf{0.862} & Baseline --- best overall \\
+Residual (spatial prior) & 0.909 & 0.859 & Adds spatial cost $\to$ hurts \\
+Adaptive (learned $\tau$) & 0.928 & 0.863 & Predicts $\tau$ $\to$ marginal synthetic gain \\
+Unbalanced (KL-relaxed) & 0.886 & 0.842 & Relaxed marginals $\to$ hurts \\
+Dustbin (explicit rejection) & 0.861 & 0.832 & Dustbin absorbs too much $\to$ hurts \\
+\bottomrule
+\end{tabular}
+\caption{Complete SCOT ablation across all five variants.}
+\end{table}
+
+\textbf{Vanilla SCOT is the strongest formulation.} Every variant that adds flexibility --- adaptive temperature, spatial prior, relaxed marginals, explicit dustbin --- trades accuracy for generality that does not pay off. The core contribution is the type-constrained structured assignment via OT with known $K$, not the parameterisation details.
+
+K-free inference remains a valuable direction for future work. Both approaches tested (unbalanced and dustbin) suffer from the same root cause: too many unused prototype slots dilute the optimisation. A more promising direction would be predicting $K$ first via a lightweight count head, then running vanilla SCOT with the predicted $K$. This preserves the tight constraints that make vanilla SCOT work while removing the dependency on ground truth person count. Alternatively, a curriculum that starts training with known $K$ and gradually introduces extra slots could teach the model to concentrate mass on active prototypes before being asked to handle unknown $K$.

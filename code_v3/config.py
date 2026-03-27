@@ -73,6 +73,15 @@ class SCOTConfig(BaseModel):
     sinkhorn_tau:       float = 0.1    # temperature (lower = harder assignments)
 
 
+class DustbinSCOTConfig(BaseModel):
+    hidden_dim:         int   = 256
+    k_max:              int   = 20
+    sinkhorn_iters:     int   = 10
+    sinkhorn_tau:       float = 0.1
+    dustbin_cost_init:  float = 1.0    # initial cost for rejecting a keypoint
+    person_threshold:   float = 0.5    # min mass to count as active person
+
+
 class UnbalancedSCOTConfig(BaseModel):
     hidden_dim:         int   = 256
     k_max:              int   = 20     # generous upper bound on person count
@@ -142,6 +151,7 @@ class ExperimentConfig(BaseModel):
     residual_scot:      Optional[ResidualSCOTConfig]      = None
     adaptive_scot:      Optional[AdaptiveSCOTConfig]      = None
     unbalanced_scot:    Optional[UnbalancedSCOTConfig]    = None
+    dustbin_scot:       Optional[DustbinSCOTConfig]       = None
     training:           Optional[TrainingConfig]          = None
 
     @classmethod
