@@ -58,20 +58,28 @@ def load_model(checkpoint_path: Path, device: str):
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     cfg = ExperimentConfig(**ckpt["config"])
 
-    gat = GATEmbedding(cfg.gat).to(device)
+    if cfg.sa_gat is not None:
+        from sa_gat import SAGATEmbedding
+        gat = SAGATEmbedding(cfg.sa_gat).to(device)
+        embedding_dim = cfg.sa_gat.output_dim
+        use_depth = cfg.sa_gat.use_depth
+    else:
+        gat = GATEmbedding(cfg.gat).to(device)
+        embedding_dim = cfg.gat.output_dim
+        use_depth = cfg.gat.use_depth
     gat.load_state_dict(ckpt["gat_state"])
     gat.eval()
 
     head = None
     if ckpt.get("head_state") is not None and cfg.scot is not None:
         from ot_head import SCOTHead
-        head = SCOTHead(cfg.scot, embedding_dim=cfg.gat.output_dim).to(device)
+        head = SCOTHead(cfg.scot, embedding_dim=embedding_dim).to(device)
         head.load_state_dict(ckpt["head_state"])
         head.eval()
 
-    k_neighbors = 16 if cfg.gat.output_dim >= 256 else 8
+    k_neighbors = 16 if embedding_dim >= 256 else 8
     preprocessor = PosePreprocessor(
-        device=device, k_neighbors=k_neighbors, use_depth=cfg.gat.use_depth,
+        device=device, k_neighbors=k_neighbors, use_depth=use_depth,
     )
 
     return gat, head, preprocessor, cfg

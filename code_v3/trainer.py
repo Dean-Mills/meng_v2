@@ -203,17 +203,25 @@ def train(cfg: ExperimentConfig, device: str):
 
     virtual_dir = Path(tc.virtual_dir)
 
+    # ── Models ────────────────────────────────────────────────────────────────
+    if cfg.sa_gat is not None:
+        from sa_gat import SAGATEmbedding
+        gat = SAGATEmbedding(cfg.sa_gat).to(device)
+        embedding_dim = cfg.sa_gat.output_dim
+        use_depth = cfg.sa_gat.use_depth
+    else:
+        gat = GATEmbedding(cfg.gat).to(device)
+        embedding_dim = cfg.gat.output_dim
+        use_depth = cfg.gat.use_depth
+
     # ── Data ──────────────────────────────────────────────────────────────────
     train_loader = _make_loader(virtual_dir, "train", tc.batch_size, tc.num_workers)
     val_loader   = _make_loader(virtual_dir, "val",   tc.batch_size, 0)
 
-    k_neighbors  = 16 if cfg.gat.output_dim >= 256 else 8
+    k_neighbors  = 16 if embedding_dim >= 256 else 8
     preprocessor = PosePreprocessor(device=device, k_neighbors=k_neighbors,
-                                    use_depth=cfg.gat.use_depth)
-
-    # ── Models ────────────────────────────────────────────────────────────────
-    gat  = GATEmbedding(cfg.gat).to(device)
-    head = _build_head(cfg, embedding_dim=cfg.gat.output_dim)
+                                    use_depth=use_depth)
+    head = _build_head(cfg, embedding_dim=embedding_dim)
     if head is not None:
         head = head.to(device)
 

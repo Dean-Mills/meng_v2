@@ -25,6 +25,31 @@ class GATConfig(BaseModel):
         return feat_dim + self.joint_embedding_dim
 
 
+class SAGATConfig(BaseModel):
+    num_joint_types: int
+    joint_embedding_dim: int
+    raw_feature_dim: int
+    hidden_dim: int
+    output_dim: int
+    num_layers: int
+    num_heads: int
+    dropout: float
+    use_layer_norm: bool
+    l2_normalize: bool
+    use_depth: bool = True
+    # SA-GAT modifications (each independently toggleable)
+    use_type_pair_attention: bool = True    # Mod 1: category-specific attention
+    use_position_encoding: bool = True      # Mod 2: skeleton-relative pos encoding
+    use_repulsion_heads: bool = True        # Mod 3: dedicated same-type heads
+    n_repulsion_heads: int = 1              # how many heads reserved for same-type
+
+    @computed_field
+    @property
+    def input_dim(self) -> int:
+        feat_dim = self.raw_feature_dim if self.use_depth else self.raw_feature_dim - 1
+        return feat_dim + self.joint_embedding_dim
+
+
 class DECConfig(BaseModel):
     n_clusters:      int   # K — number of people, passed explicitly per scene at inference
     alpha:           float = 1.0    # degrees of freedom for Student's t-distribution
@@ -156,6 +181,7 @@ class ExperimentConfig(BaseModel):
     name: str = "default"
     description: str = ""
     gat: GATConfig
+    sa_gat:             Optional[SAGATConfig]             = None
     loss: LossConfig
     dec:                Optional[DECConfig]               = None
     slot_attention:     Optional[SlotAttentionConfig]     = None

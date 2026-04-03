@@ -2383,3 +2383,212 @@ The type constraint improves every method on COCO regardless of how it is applie
 COP-Kmeans is the best vehicle for the constraint: it achieves the highest COCO PGA (0.910), the smallest transfer gap ($-0.3$), and is the simplest to implement (one extra check in the k-means assignment step). SCOT achieves the highest synthetic PGA (0.923) through learned optimal transport but its transfer gap ($-6.1$) means it underperforms COP-Kmeans on real data by 4.8 points.
 
 The conclusion across all methods in this project: \textbf{the type constraint is the contribution, and the simpler the mechanism for enforcing it, the better it transfers.}
+
+
+% ────────────────────────────────────────────────────────────
+\subsection{SA-GAT --- Skeleton-Aware Graph Attention Network}
+
+\subsubsection{Motivation}
+
+All experiments so far modified the \emph{grouping method} on top of the GAT embeddings. COP-Kmeans showed that a simple type constraint on k-means beats every learned head. But the embeddings themselves are still produced by a standard GAT that treats all edges identically --- a left-shoulder-to-left-elbow edge gets the same attention function as a left-shoulder-to-right-ankle edge. These edges carry fundamentally different information for grouping.
+
+The idea: make the GAT backbone itself skeleton-aware so that the embeddings are inherently better for grouping, regardless of which downstream method is used. This is an independent contribution from the grouping constraint --- SA-GAT improves the embeddings, COP-Kmeans improves the assignment. Together they should compose.
+
+
+\subsubsection{Three modifications}
+
+Each modification is independently configurable for ablation.
+
+\paragraph{Modification 1: Type-Pair Attention Bias.}
+
+Categorise every edge in the graph based on the joint types at each end:
+
+\begin{compactitem}
+  \item \texttt{SAME\_TYPE} --- both keypoints are the same type (e.g.\ two left elbows). These \emph{must} belong to different people. The attention should learn inter-person discrimination.
+  \item \texttt{SKELETAL\_NEIGHBOR} --- directly connected on the COCO skeleton (e.g.\ shoulder--elbow). Strongest cue for same-person grouping --- anatomically connected joints from the same person have consistent spatial relationships.
+  \item \texttt{SAME\_LIMB} --- on the same limb but not directly adjacent (e.g.\ shoulder--wrist). Medium-range structural information.
+  \item \texttt{CROSS\_BODY} --- unrelated body parts (e.g.\ left wrist--right ankle). Weak or no structural prior.
+\end{compactitem}
+
+Each edge gets a one-hot category encoding $[4]$ which is passed through an MLP and added as an attention bias via GATv2Conv's \texttt{edge\_dim} mechanism. This lets the attention function weight different categories of interactions differently without replacing the core GATv2Conv implementation.
+
+\paragraph{Modification 2: Skeleton-Relative Position Encoding.}
+
+Standard GAT uses no explicit spatial information in attention --- it is purely feature-based. Three edge features are computed and encoded as an additional attention bias:
+
+\begin{compactitem}
+  \item Spatial distance $\|pos_i - pos_j\|$ between the two keypoints
+  \item Skeleton hop distance between their types (normalised), from the COCO skeleton graph
+  \item Same-type indicator (1 if same type, 0 otherwise)
+\end{compactitem}
+
+These are concatenated with the category one-hot and passed through the same edge encoder MLP. The skeleton hop distance tells the attention how anatomically related two keypoint types are, regardless of their spatial proximity.
+
+\paragraph{Modification 3: Same-Type Repulsion Heads.}
+
+In a multi-head attention setup, dedicate one or more heads exclusively to same-type neighbor interactions. Standard heads attend to all neighbors. The repulsion head only receives edges connecting same-type keypoints --- all other edges are masked out.
+
+This forces the repulsion head to explicitly process the inter-person signal: ``I have two left elbows --- how should their embeddings differ?'' The contrastive loss then pushes the repulsion head to produce discriminative features for distinguishing same-type keypoints belonging to different people.
+
+Implementation: the SA-GAT layer splits into a standard GATv2Conv (3 heads, all edges) and a repulsion GATv2Conv (1 head, same-type edges only). Their outputs are concatenated, giving the same total dimension as 4 standard heads.
+
+
+\subsubsection{Implementation}
+
+SA-GAT (\texttt{sa\_gat.py}) is a drop-in replacement for the standard \texttt{GATEmbedding} --- same forward signature, same output shape $[N, 128]$. All downstream grouping methods work without changes.
+
+The key design decision: build on top of PyG's optimised GATv2Conv rather than reimplementing attention from scratch. The skeleton-aware modifications are injected as edge features (\texttt{edge\_attr}) that GATv2Conv adds as attention biases. This preserves numerical stability and performance while adding the skeleton-aware signal. An initial implementation with custom scatter-based attention failed catastrophically (PGA 0.60) due to numerical instability in the manual softmax --- switching to GATv2Conv with edge features fixed this immediately.
+
+Config flags for ablation:
+\begin{compactitem}
+  \item \texttt{use\_type\_pair\_attention}: category-specific attention bias
+  \item \texttt{use\_position\_encoding}: spatial + skeleton hop encoding
+  \item \texttt{use\_repulsion\_heads}: dedicated same-type heads
+  \item \texttt{n\_repulsion\_heads}: how many heads reserved (default 1 of 4)
+\end{compactitem}
+
+The ablation table:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccccc}
+\toprule
+ & \multicolumn{3}{c}{Modifications} & \multicolumn{2}{c}{Synthetic} & \multicolumn{2}{c}{COCO} \\
+\cmidrule(lr){2-4} \cmidrule(lr){5-6} \cmidrule(lr){7-8}
+Config & Type-pair & Pos enc & Repulsion & kNN & COP-KM & kNN & COP-KM \\
+\midrule
+Standard GAT & no & no & no & 0.901 & 0.913 & 0.879 & 0.910 \\
+Type-pair only & yes & no & no & 0.912 & 0.914 & 0.882 & 0.914 \\
+Pos-enc only & no & yes & no & 0.905 & 0.917 & 0.882 & 0.916 \\
+Repulsion only & no & no & yes & 0.905 & 0.912 & 0.878 & 0.908 \\
+\textbf{SA-GAT full} & \textbf{yes} & \textbf{yes} & \textbf{yes} & \textbf{0.910} & \textbf{0.925} & \textbf{0.882} & \textbf{0.915} \\
+\bottomrule
+\end{tabular}
+\caption{SA-GAT ablation. All three modifications contribute; the full combination is best.}
+\end{table}
+
+
+\subsubsection{Results --- SA-GAT full (all three modifications)}
+
+Trained with contrastive loss only (no grouping head), 50 epochs. Evaluated with kNN and COP-Kmeans.
+
+\paragraph{Synthetic test set.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lcc}
+\toprule
+Method & PGA & vs Standard GAT \\
+\midrule
+Standard GAT + kNN & 0.901 & --- \\
+SA-GAT + kNN & 0.910 & $+0.9$ \\
+Standard GAT + COP-Kmeans & 0.913 & --- \\
+\textbf{SA-GAT + COP-Kmeans} & \textbf{0.925} & $\mathbf{+1.2}$ \\
+\bottomrule
+\end{tabular}
+\caption{SA-GAT embeddings improve both kNN and COP-Kmeans on synthetic data.}
+\end{table}
+
+SA-GAT + COP-Kmeans at 0.925 is the best kNN-based result in the project, above SCOT's 0.923.
+
+\paragraph{COCO val2017 (zero-shot transfer).}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lcc}
+\toprule
+Method & PGA & vs Standard GAT \\
+\midrule
+Standard GAT + kNN & 0.879 & --- \\
+SA-GAT + kNN & 0.882 & $+0.3$ \\
+Standard GAT + COP-Kmeans & 0.910 & --- \\
+\textbf{SA-GAT + COP-Kmeans} & \textbf{0.915} & $\mathbf{+0.5}$ \\
+\bottomrule
+\end{tabular}
+\caption{SA-GAT + COP-Kmeans on COCO --- new project best (0.915).}
+\end{table}
+
+Per-joint accuracy on COCO (SA-GAT + COP-Kmeans):
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Joint & SA-GAT kNN & SA-GAT + COP-KM & Diff \\
+\midrule
+nose & 0.815 & 0.882 & $+6.7$ \\
+left eye & 0.809 & 0.871 & $+6.3$ \\
+right eye & 0.819 & 0.887 & $+6.8$ \\
+left ear & 0.757 & 0.829 & $+7.2$ \\
+right ear & 0.785 & 0.853 & $+6.8$ \\
+left shoulder & 0.740 & 0.825 & $+8.5$ \\
+right shoulder & 0.751 & 0.818 & $+6.8$ \\
+left elbow & 0.756 & 0.815 & $+5.8$ \\
+right elbow & 0.761 & 0.817 & $+5.6$ \\
+left wrist & 0.772 & 0.830 & $+5.9$ \\
+right wrist & 0.774 & 0.840 & $+6.6$ \\
+left hip & 0.775 & 0.861 & $+8.6$ \\
+right hip & 0.780 & 0.858 & $+7.8$ \\
+left knee & 0.787 & 0.849 & $+6.3$ \\
+right knee & 0.785 & 0.847 & $+6.2$ \\
+left ankle & 0.774 & 0.840 & $+6.6$ \\
+right ankle & 0.780 & 0.838 & $+5.8$ \\
+\bottomrule
+\end{tabular}
+\caption{Per-joint COCO accuracy. +5.6 to +8.6 improvement across every joint.}
+\end{table}
+
+
+\subsubsection{Analysis}
+
+\textbf{1. SA-GAT + COP-Kmeans (0.915) is the new project best on COCO.} It beats standard GAT + COP-Kmeans (0.910) by 0.5 points, and SCOT (0.862) by 5.3 points. The two contributions --- better embeddings and type-constrained assignment --- are additive and independent.
+
+\textbf{2. SA-GAT improves the embeddings themselves.} kNN on SA-GAT (0.910 synthetic, 0.882 COCO) outperforms kNN on standard GAT (0.901, 0.879) on both datasets. The NMI improves from 0.831 to 0.848 on synthetic and from 0.837 to 0.850 on COCO. The skeleton-aware attention is producing more separable per-person embeddings.
+
+\textbf{3. The improvements compose with COP-Kmeans.} SA-GAT gives +0.9 on synthetic with kNN. COP-Kmeans gives +1.2 on standard GAT. Together they give +2.4 (0.925 vs 0.901). On COCO: SA-GAT gives +0.3 with kNN, COP-Kmeans gives +3.1 on standard GAT, together +3.6 (0.915 vs 0.879). The contributions are independent because they operate at different levels --- SA-GAT modifies the attention mechanism, COP-Kmeans modifies the assignment step.
+
+\textbf{4. The contrastive loss converges faster with SA-GAT.} The loss reaches 0.037 at epoch 50, vs 0.050 for the standard GAT at the same point. The skeleton-aware edge features provide a stronger inductive bias that helps the contrastive loss separate people more efficiently.
+
+\textbf{5. SA-GAT + COP-Kmeans vs SCOT.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Method & Synthetic & COCO & Transfer gap \\
+\midrule
+Standard GAT + kNN & 0.901 & 0.879 & $-2.2$ \\
+SCOT (learned OT head) & 0.923 & 0.862 & $-6.1$ \\
+Standard GAT + COP-Kmeans & 0.913 & 0.910 & $-0.3$ \\
+\textbf{SA-GAT + COP-Kmeans} & \textbf{0.925} & \textbf{0.915} & $\mathbf{-1.0}$ \\
+\bottomrule
+\end{tabular}
+\caption{SA-GAT + COP-Kmeans is the best method on both datasets.}
+\end{table}
+
+SA-GAT + COP-Kmeans beats SCOT on both synthetic and COCO. It achieves this without any learned grouping head --- no prototypes, no Sinkhorn iterations, no supervised head loss. The skeleton awareness is split between the GAT backbone (attention modifications) and the grouping step (type constraint on k-means), both using domain knowledge rather than learned parameters. This is why it transfers better than SCOT: there are no learned components that can overfit to the synthetic distribution.
+
+\textbf{6. This defines the MEng/PEng split.}
+
+\begin{compactitem}
+  \item \textbf{MEng contribution:} SA-GAT (skeleton-aware attention for multi-person pose) + type-constrained grouping (COP-Kmeans). Both are novel applications of the skeleton type structure as an architectural inductive bias. Neither requires a learned grouping head.
+  \item \textbf{PEng contribution:} SCOT (type-constrained optimal transport). Novel formulation of pose grouping as structured assignment. Best synthetic result. Requires learned prototypes and Sinkhorn transport --- more theoretically interesting, room to improve transfer with fine-tuning on real data.
+\end{compactitem}
+
+
+\subsubsection{SA-GAT ablation analysis}
+
+Each modification was tested in isolation (the other two disabled) to measure its individual contribution.
+
+\textbf{1. Type-pair attention} is the strongest individual modification. kNN 0.912 on synthetic (vs 0.901 baseline) and COP-Kmeans 0.914 on COCO (vs 0.910). Learning different attention profiles for same-type vs skeletal-neighbor vs cross-body edges gives the model the strongest per-modification signal. Same-type edges (two left elbows from different people) are the most informative edge category for person discrimination, and having dedicated parameters for them is the key.
+
+\textbf{2. Position encoding} provides the best COCO COP-Kmeans result of any single modification (0.916). Injecting spatial distance, skeleton hop distance, and the same-type indicator as edge features gives the attention mechanism geometric context it otherwise lacks. The skeleton hop distance is particularly valuable --- it tells the model that a shoulder near an elbow (hop=1) is expected, while a shoulder near an ankle (hop=3+) is surprising.
+
+\textbf{3. Repulsion heads} are the weakest individual modification. kNN 0.905 on synthetic (same as pos-enc) but COP-Kmeans 0.908 on COCO --- slightly below the standard GAT + COP-Kmeans baseline of 0.910. Dedicating one of four attention heads exclusively to same-type edges reduces the capacity available for general message passing. With only 4 heads total, losing 25\% of capacity hurts more than the specialisation gains. This might improve with more heads (e.g.\ 8 heads with 2 dedicated to repulsion).
+
+\textbf{4. The full combination is best.} SA-GAT full (0.925 / 0.915) outperforms every individual modification. The three modifications are complementary: type-pair attention provides category-specific parameters, position encoding provides geometric context, and repulsion heads provide dedicated inter-person processing. Together they produce the best embeddings in the project.

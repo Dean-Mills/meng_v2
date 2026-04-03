@@ -228,8 +228,16 @@ class Evaluator:
         cfg_dict    = ckpt["config"]
         self.cfg    = ExperimentConfig(**cfg_dict)
 
-        # GAT
-        self.gat = GATEmbedding(self.cfg.gat).to(device)
+        # GAT (standard or SA-GAT)
+        if self.cfg.sa_gat is not None:
+            from sa_gat import SAGATEmbedding
+            self.gat = SAGATEmbedding(self.cfg.sa_gat).to(device)
+            self._embedding_dim = self.cfg.sa_gat.output_dim
+            self._use_depth = self.cfg.sa_gat.use_depth
+        else:
+            self.gat = GATEmbedding(self.cfg.gat).to(device)
+            self._embedding_dim = self.cfg.gat.output_dim
+            self._use_depth = self.cfg.gat.use_depth
         self.gat.load_state_dict(ckpt["gat_state"])
         self.gat.eval()
 
@@ -242,7 +250,7 @@ class Evaluator:
                 from slot_attention import SlotAttention
                 self.head = SlotAttention(
                     self.cfg.slot_attention,
-                    embedding_dim=self.cfg.gat.output_dim
+                    embedding_dim=self._embedding_dim
                 ).to(device)
                 self.head_name = "slot_attention"
 
@@ -322,9 +330,9 @@ class Evaluator:
                 self.head.load_state_dict(ckpt["head_state"])
                 self.head.eval()
 
-        k_neighbors = 16 if self.cfg.gat.output_dim >= 256 else 8
+        k_neighbors = 16 if self._embedding_dim >= 256 else 8
         self.preprocessor = PosePreprocessor(device=device, k_neighbors=k_neighbors,
-                                             use_depth=self.cfg.gat.use_depth)
+                                             use_depth=self._use_depth)
         print(f"Loaded checkpoint (epoch {ckpt.get('epoch','?')}, "
               f"val PGA {ckpt.get('val_pga', 0):.4f})")
         print(f"Head: {self.head_name}")

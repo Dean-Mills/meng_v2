@@ -170,13 +170,21 @@ def evaluate(
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     cfg = ExperimentConfig(**ckpt["config"])
 
-    gat = GATEmbedding(cfg.gat).to(device)
+    if cfg.sa_gat is not None:
+        from sa_gat import SAGATEmbedding
+        gat = SAGATEmbedding(cfg.sa_gat).to(device)
+        embedding_dim = cfg.sa_gat.output_dim
+        use_depth = cfg.sa_gat.use_depth
+    else:
+        gat = GATEmbedding(cfg.gat).to(device)
+        embedding_dim = cfg.gat.output_dim
+        use_depth = cfg.gat.use_depth
     gat.load_state_dict(ckpt["gat_state"])
     gat.eval()
 
-    k_neighbors = 16 if cfg.gat.output_dim >= 256 else 8
+    k_neighbors = 16 if embedding_dim >= 256 else 8
     preprocessor = PosePreprocessor(
-        device=device, k_neighbors=k_neighbors, use_depth=cfg.gat.use_depth,
+        device=device, k_neighbors=k_neighbors, use_depth=use_depth,
     )
 
     print(f"Loaded checkpoint (epoch {ckpt.get('epoch', '?')})")
