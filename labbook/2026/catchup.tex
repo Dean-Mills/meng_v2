@@ -2018,3 +2018,159 @@ Dustbin (explicit rejection) & 0.861 & 0.832 & Dustbin absorbs too much $\to$ hu
 \textbf{Vanilla SCOT is the strongest formulation.} Every variant that adds flexibility --- adaptive temperature, spatial prior, relaxed marginals, explicit dustbin --- trades accuracy for generality that does not pay off. The core contribution is the type-constrained structured assignment via OT with known $K$, not the parameterisation details.
 
 K-free inference remains a valuable direction for future work. Both approaches tested (unbalanced and dustbin) suffer from the same root cause: too many unused prototype slots dilute the optimisation. A more promising direction would be predicting $K$ first via a lightweight count head, then running vanilla SCOT with the predicted $K$. This preserves the tight constraints that make vanilla SCOT work while removing the dependency on ground truth person count. Alternatively, a curriculum that starts training with known $K$ and gradually introduces extra slots could teach the model to concentrate mass on active prototypes before being asked to handle unknown $K$.
+
+
+% ────────────────────────────────────────────────────────────
+\subsection{COP-Kmeans --- Type-Constrained K-Means}
+
+\subsubsection{Motivation}
+
+SCOT demonstrated that the type constraint is the key contribution --- hard enforcement that no two keypoints of the same type can be assigned to the same person. But SCOT wraps this constraint inside a learned optimal transport formulation with person prototypes, Sinkhorn iterations, and supervised training. What if the constraint is applied directly to the kNN baseline instead?
+
+COP-Kmeans (Wagstaff et al.\ 2001) extends standard k-means with \textbf{must-not-link constraints}: pairs of points that are forbidden from being in the same cluster. For pose grouping, the constraints are simple: any two keypoints of the same type cannot be in the same cluster. A left elbow and another left elbow must be in different person clusters.
+
+This is the minimal possible intervention on the kNN baseline --- the same algorithm, the same embeddings, the same $K$, with one additional constraint. No training required. If the type constraint is the reason SCOT works, COP-Kmeans should capture most of the benefit without any of the complexity.
+
+
+\subsubsection{How it works}
+
+The algorithm is identical to standard k-means with one change in the assignment step:
+
+\begin{enumerate}
+  \item Initialise centroids with k-means++
+  \item \textbf{Constrained assignment:} sort keypoints by distance to nearest centroid (most confident first). For each keypoint, assign to the nearest centroid whose cluster does not already contain a keypoint of the same type. If the nearest centroid violates the constraint, try the next nearest, and so on.
+  \item \textbf{Update:} recompute centroids as cluster means
+  \item Repeat until convergence (10 random restarts, best kept)
+\end{enumerate}
+
+The confidence-first ordering ensures that ambiguous keypoints (far from all centroids) are resolved after the easy ones are settled. No training is required --- COP-Kmeans runs on the existing contrastive GAT embeddings at inference time using the same checkpoint as the kNN baseline.
+
+
+\subsubsection{Results --- Synthetic test set}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lcc}
+\toprule
+Method & PGA & Diff vs kNN \\
+\midrule
+kNN (standard k-means) & 0.901 & --- \\
+COP-Kmeans & 0.913 & $+1.2$ \\
+SCOT & 0.923 & $+2.2$ \\
+\bottomrule
+\end{tabular}
+\caption{COP-Kmeans vs kNN and SCOT on synthetic test set.}
+\end{table}
+
+The constraint changed 63.1\% of assignments (3754 / 5950 keypoints). Per-joint accuracy:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Joint & kNN & COP-Kmeans & Diff \\
+\midrule
+nose & 0.871 & 0.926 & $+5.4$ \\
+left eye & 0.894 & 0.920 & $+2.6$ \\
+right eye & 0.900 & 0.926 & $+2.6$ \\
+left ear & 0.929 & 0.943 & $+1.4$ \\
+right ear & 0.903 & 0.943 & $+4.0$ \\
+left shoulder & 0.929 & 0.954 & $+2.6$ \\
+right shoulder & 0.920 & 0.943 & $+2.3$ \\
+left elbow & 0.923 & 0.957 & $+3.4$ \\
+right elbow & 0.874 & 0.931 & $+5.7$ \\
+left wrist & 0.894 & 0.900 & $+0.6$ \\
+right wrist & 0.863 & 0.871 & $+0.9$ \\
+left hip & 0.909 & 0.923 & $+1.4$ \\
+right hip & 0.914 & 0.911 & $-0.3$ \\
+left knee & 0.866 & 0.871 & $+0.6$ \\
+right knee & 0.877 & 0.897 & $+2.0$ \\
+left ankle & 0.840 & 0.783 & $-5.7$ \\
+right ankle & 0.860 & 0.840 & $-2.0$ \\
+\bottomrule
+\end{tabular}
+\caption{Per-joint accuracy on synthetic data. Most joints improve; ankles slightly degrade.}
+\end{table}
+
+
+\subsubsection{Results --- COCO val2017 (zero-shot transfer)}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lcc}
+\toprule
+Method & PGA & Diff vs kNN \\
+\midrule
+kNN (standard k-means) & 0.879 & --- \\
+SCOT (no depth) & 0.862 & $-1.7$ \\
+\textbf{COP-Kmeans} & \textbf{0.910} & $\mathbf{+3.1}$ \\
+\bottomrule
+\end{tabular}
+\caption{COP-Kmeans on COCO --- the best result in the entire project.}
+\end{table}
+
+The constraint changed 57.4\% of assignments (39165 / 68176 keypoints). Per-joint accuracy:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Joint & kNN & COP-Kmeans & Diff \\
+\midrule
+nose & 0.810 & 0.880 & $+7.0$ \\
+left eye & 0.797 & 0.871 & $+7.4$ \\
+right eye & 0.806 & 0.871 & $+6.5$ \\
+left ear & 0.758 & 0.816 & $+5.8$ \\
+right ear & 0.779 & 0.840 & $+6.0$ \\
+left shoulder & 0.734 & 0.808 & $+7.3$ \\
+right shoulder & 0.768 & 0.839 & $+7.1$ \\
+left elbow & 0.750 & 0.811 & $+6.1$ \\
+right elbow & 0.776 & 0.834 & $+5.8$ \\
+left wrist & 0.768 & 0.825 & $+5.6$ \\
+right wrist & 0.782 & 0.842 & $+6.0$ \\
+left hip & 0.778 & 0.861 & $+8.3$ \\
+right hip & 0.781 & 0.856 & $+7.6$ \\
+left knee & 0.787 & 0.846 & $+6.0$ \\
+right knee & 0.775 & 0.843 & $+6.7$ \\
+left ankle & 0.743 & 0.800 & $+5.7$ \\
+right ankle & 0.751 & 0.828 & $+7.7$ \\
+\bottomrule
+\end{tabular}
+\caption{Per-joint accuracy on COCO. Every joint improves, +5.6 to +8.3 points.}
+\end{table}
+
+
+\subsubsection{Analysis}
+
+\textbf{1. COP-Kmeans achieves the best COCO result in the entire project (0.910).} This is 3.1 points above kNN (0.879) and 4.8 points above SCOT (0.862). No training was required --- the same contrastive GAT checkpoint was used. The only change is one constraint during k-means assignment.
+
+\textbf{2. The type constraint is doing substantial work.} On COCO, 57.4\% of assignments were changed by the constraint. Standard k-means was routinely assigning duplicate types to the same person in more than half of all cases, and the constraint fixes this.
+
+\textbf{3. Every joint improves on COCO.} Unlike SCOT which lost on face joints (ears $-$8 to $-$14 points vs kNN), COP-Kmeans improves across the board --- +5.6 to +8.3 points on every joint. The largest gains are on hips (+8.3/+7.6) and the nose (+7.0).
+
+\textbf{4. COP-Kmeans transfers almost perfectly.} The transfer gap is $-0.3$ points (0.913 synthetic $\to$ 0.910 COCO) --- essentially zero. Compare this to SCOT's $-6.1$ point gap. COP-Kmeans has no learned parameters beyond the GAT, so there is nothing to overfit to the synthetic distribution. The type constraint is domain-invariant by construction --- it encodes skeleton structure, not learned features.
+
+\textbf{5. COP-Kmeans vs SCOT: simplicity wins on transfer.} SCOT beats COP-Kmeans on synthetic data (0.923 vs 0.913) because the learned cost function and Sinkhorn transport provide better global optimisation when embeddings are clean. But on COCO, COP-Kmeans wins decisively (0.910 vs 0.862) because it has no learned components that can overfit.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Method & Synthetic & COCO & Transfer gap \\
+\midrule
+kNN & 0.901 & 0.879 & $-2.2$ \\
+SCOT & 0.923 & 0.862 & $-6.1$ \\
+\textbf{COP-Kmeans} & \textbf{0.913} & \textbf{0.910} & $\mathbf{-0.3}$ \\
+\bottomrule
+\end{tabular}
+\caption{Transfer comparison. COP-Kmeans has the smallest sim-to-real gap of any method.}
+\end{table}
+
+\textbf{6. The ankle regression on synthetic data ($-5.7$ left ankle).} When confident keypoints are assigned first, ankles --- which are often the most spatially ambiguous --- are assigned last and may be forced to a suboptimal centroid by accumulated constraints. On COCO this does not occur because there are more keypoints per scene and the constraints are less restrictive relative to available slots.
+
+\textbf{7. This is the result that DMoN was supposed to produce.} The original SA-DMoN hypothesis was that domain-invariant structural signal (modularity) would improve sim-to-real transfer. Ten SA-DMoN experiments failed to deliver this. COP-Kmeans achieves it with a single constraint: no duplicate joint types per cluster. The structural signal that transfers across domains is not graph topology --- it is the skeleton's type structure, enforced as a hard constraint on the assignment algorithm rather than a soft loss on a learned clustering head.
