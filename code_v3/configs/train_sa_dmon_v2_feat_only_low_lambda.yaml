@@ -1,0 +1,44 @@
+name: "train_sa_dmon_v2_feat_only_low_lambda"
+description: "SA-DMoN v2 — decoupled feature adjacency, lambda_spectral=0.1 to avoid fighting CE"
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+
+sa_dmon_v2:
+  hidden_dim: 256
+  k_max: 10
+  dropout: 0.0
+  use_feature_adjacency: true
+  use_entropy_type_loss: false
+  feature_knn_k: 8
+  lambda_spectral: 0.1
+  lambda_ortho: 0.1
+  lambda_cluster: 0.1
+  lambda_type: 1.0
+  lambda_supervised: 1.0
+
+loss:
+  contrastive_margin: 0.5
+  sa_dmon_weight: 1.0
+
+training:
+  virtual_dir:   data/virtual
+  batch_size:    4
+  num_workers:   4
+  lr:            1e-3
+  lr_min:        1e-5
+  weight_decay:  1e-4
+  epochs:        100
+  val_every:     5
+  save_dir:      outputs/checkpoints/sa_dmon_v2_feat_only_low_lambda
+  save_best:     true

@@ -107,6 +107,21 @@ class ResidualSCOTConfig(BaseModel):
     lambda_residual:    float = 0.2    # weight of learned cost relative to spatial
 
 
+class SADMoNV2Config(BaseModel):
+    hidden_dim:              int   = 256
+    k_max:                   int   = 10
+    dropout:                 float = 0.0
+    use_feature_adjacency:   bool  = True   # Fix 1: feature-based adj for modularity
+    use_entropy_type_loss:   bool  = True   # Fix 2: entropy instead of ReLU type loss
+    feature_knn_k:           int   = 8      # kNN k for feature adjacency
+    # Loss weights (same structure as SADMoNConfig)
+    lambda_spectral:         float = 1.0
+    lambda_ortho:            float = 0.1
+    lambda_cluster:          float = 0.1
+    lambda_type:             float = 1.0
+    lambda_supervised:       float = 1.0
+
+
 class SADMoNConfig(BaseModel):
     hidden_dim:         int   = 256    # encoder hidden dimension
     k_max:              int   = 10     # maximum number of clusters (pool size)
@@ -147,6 +162,7 @@ class ExperimentConfig(BaseModel):
     graph_partitioning: Optional[GraphPartitioningConfig] = None
     dmon:               Optional[DMoNConfig]              = None
     sa_dmon:            Optional[SADMoNConfig]            = None
+    sa_dmon_v2:         Optional[SADMoNV2Config]          = None
     scot:               Optional[SCOTConfig]              = None
     residual_scot:      Optional[ResidualSCOTConfig]      = None
     adaptive_scot:      Optional[AdaptiveSCOTConfig]      = None

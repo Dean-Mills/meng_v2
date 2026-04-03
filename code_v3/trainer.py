@@ -50,6 +50,10 @@ def _build_head(cfg: ExperimentConfig, embedding_dim: int):
         from sa_dmon import SADMoNHead
         return SADMoNHead(cfg.sa_dmon, embedding_dim=embedding_dim)
 
+    if cfg.sa_dmon_v2 is not None:
+        from sa_dmon_v2 import SADMoNV2Head
+        return SADMoNV2Head(cfg.sa_dmon_v2, embedding_dim=embedding_dim)
+
     if cfg.scot is not None:
         from ot_head import SCOTHead
         return SCOTHead(cfg.scot, embedding_dim=embedding_dim)
@@ -83,6 +87,9 @@ def _build_head_loss(cfg: ExperimentConfig):
         return DMoNLoss(cfg.loss, cfg.dmon)
     if cfg.sa_dmon is not None:
         return SADMoNLoss(cfg.loss, cfg.sa_dmon)
+    if cfg.sa_dmon_v2 is not None:
+        # SADMoNV2Config has the same lambda fields as SADMoNConfig
+        return SADMoNLoss(cfg.loss, cfg.sa_dmon_v2)
     if cfg.scot is not None:
         return SCOTLoss(cfg.loss)
     if cfg.residual_scot is not None:
@@ -128,7 +135,16 @@ def _head_forward(head, embeddings, graph):
     from sa_dmon import SADMoNHead
     if isinstance(head, SADMoNHead):
         k = int(graph.num_people)
-        positions = graph.x[:, :2]  # x_norm, y_norm
+        positions = graph.x[:, :2]
+        logits, s, spec, ortho, clust, type_l = head(
+            embeddings, graph.edge_index, k, positions, graph.joint_types,
+        )
+        return (logits, s), (logits, graph.person_labels, spec, ortho, clust, type_l)
+
+    from sa_dmon_v2 import SADMoNV2Head
+    if isinstance(head, SADMoNV2Head):
+        k = int(graph.num_people)
+        positions = graph.x[:, :2]
         logits, s, spec, ortho, clust, type_l = head(
             embeddings, graph.edge_index, k, positions, graph.joint_types,
         )
@@ -206,6 +222,7 @@ def train(cfg: ExperimentConfig, device: str):
         "graph_partitioning" if cfg.graph_partitioning is not None else
         "dmon"               if cfg.dmon               is not None else
         "sa_dmon"            if cfg.sa_dmon             is not None else
+        "sa_dmon_v2"         if cfg.sa_dmon_v2          is not None else
         "scot"               if cfg.scot               is not None else
         "residual_scot"      if cfg.residual_scot       is not None else
         "adaptive_scot"      if cfg.adaptive_scot       is not None else
@@ -358,7 +375,7 @@ def _validate(gat, head, head_name, loader, preprocessor,
                         head, embeddings, graph.edge_index, k,
                         graph.joint_types,
                     )
-                elif head_name == "sa_dmon":
+                elif head_name in ("sa_dmon", "sa_dmon_v2"):
                     pred_labels = predict_sa_dmon(
                         head, embeddings, graph.edge_index, k,
                         graph.x[:, :2], graph.joint_types,

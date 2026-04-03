@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Any, Dict, List
 
-from config import LossConfig, DMoNConfig, SADMoNConfig, SCOTConfig
+from config import LossConfig, DMoNConfig, SADMoNConfig, SADMoNV2Config, SCOTConfig
 
 
 class GATOnlyLoss(nn.Module):

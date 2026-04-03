@@ -270,6 +270,14 @@ class Evaluator:
                 ).to(device)
                 self.head_name = "sa_dmon"
 
+            elif self.cfg.sa_dmon_v2 is not None:
+                from sa_dmon_v2 import SADMoNV2Head
+                self.head = SADMoNV2Head(
+                    self.cfg.sa_dmon_v2,
+                    embedding_dim=self.cfg.gat.output_dim
+                ).to(device)
+                self.head_name = "sa_dmon_v2"
+
             elif self.cfg.scot is not None:
                 from ot_head import SCOTHead
                 self.head = SCOTHead(
@@ -349,7 +357,7 @@ class Evaluator:
                 self.head, embeddings, graph.edge_index, k,
                 graph.joint_types,
             )
-        elif self.head_name == "sa_dmon":
+        elif self.head_name in ("sa_dmon", "sa_dmon_v2"):
             head_pred = predict_sa_dmon(
                 self.head, embeddings, graph.edge_index, k,
                 graph.x[:, :2], graph.joint_types,

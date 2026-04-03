@@ -907,6 +907,198 @@ The deeper problem is that the kNN graph doesn't have the community structure mo
 
 
 % ────────────────────────────────────────────────────────────
+\subsection{SA-DMoN v2 --- Diagnosing and Fixing Signal Cancellation}
+
+\subsubsection{The diagnosis}
+
+Looking back at the four sigma experiments, the problem is more specific than ``modularity doesn't work for pose graphs.'' The problem is \textbf{signal cancellation between the adjacency and the null model}.
+
+The adjacency matrix $A$ is built from kNN on 2D spatial positions --- it encodes ``these keypoints are spatially close.'' The skeleton-aware null model $R_{\text{norm}}$ also encodes ``these keypoints are spatially close'' (via the Gaussian kernel on 2D positions, modulated by anatomical affinity). When computing the modularity matrix:
+\[
+B_{\text{pose}} = A - R_{\text{norm}}
+\]
+the result is subtracting a spatial signal from a spatial signal. $B_{\text{pose}}$ ends up as near-zero noise everywhere because $A$ and $R$ are highly correlated. There is nothing left for modularity to optimise. The degree-based null in vanilla DMoN at least encodes something different from the adjacency (degree distribution vs edge existence), so $B$ has a non-trivial signal --- even if it's the wrong signal for pose grouping.
+
+This explains why every sigma strategy failed in the same way: the spatial kernel $P$ and the spatial kNN adjacency $A$ are both functions of the same 2D positions. Changing sigma just changes how closely $R$ approximates $A$ --- too broad and $R$ is weaker than $A$ (trivially exceeded), too tight and $R$ matches $A$ (nothing left). There is no sigma where the difference is both non-trivial and informative.
+
+
+\subsubsection{The fix: decouple the graphs}
+
+The adjacency and the null model need to encode \emph{different information} so that their difference is meaningful. The fix is to build the adjacency for modularity from GAT \emph{embedding similarity} rather than spatial proximity, while keeping the spatial/skeletal null model unchanged.
+
+The GAT still runs message passing on the original spatial kNN graph --- that doesn't change. But for the modularity computation, a new adjacency is built from kNN in embedding space:
+\begin{align*}
+H &= \text{GAT}(A_{\text{spatial}}, X) && \text{(message passing on spatial graph)} \\
+A_{\text{feature}} &= \text{kNN}(H) && \text{(build new graph from embeddings)} \\
+B_{\text{pose}} &= A_{\text{feature}} - R_{\text{norm}} && \text{(modularity matrix)}
+\end{align*}
+
+Now $B_{\text{pose}} = A_{\text{feature}} - R_{\text{spatial}}$ is asking a meaningful question: ``which keypoints are connected by learned feature similarity \emph{beyond} what spatial proximity and anatomy predict?'' A left shoulder and left elbow from different people might be spatially close (high $R_{\text{norm}}$) but have dissimilar embeddings (low $A_{\text{feature}}$), giving a negative $B_{\text{pose}}$ entry --- evidence they should be in different clusters. Two keypoints from the same person that are far apart but have similar embeddings give a positive $B_{\text{pose}}$ entry --- the modularity objective rewards grouping them.
+
+The feature adjacency is detached from the gradient --- it is a fixed graph structure for each forward pass, built from the current embeddings but not differentiated through. This prevents the modularity loss from gaming the adjacency the way it gamed sigma.
+
+
+\subsubsection{The second fix: entropy-based type exclusivity}
+
+The original type exclusivity penalty $\|\text{ReLU}(M^\top S - 1)\|_F^2$ has a problem with softmax assignments. With softmax, each keypoint distributes mass across all clusters. If there are 5 left elbows and 3 person clusters, each cluster might get $5/3 \approx 1.67$ soft mass for the left-elbow type --- but that is the expected behaviour of softmax, not a real violation. The penalty fires constantly and becomes noisy gradient signal.
+
+The fix replaces the absolute-mass threshold with an entropy minimisation. For each cluster $k$ and joint type $t$, normalise the soft assignments of type-$t$ keypoints to cluster $k$ into a probability distribution, then minimise its entropy:
+\[
+\mathcal{L}_{\text{type}} = \frac{1}{|\mathcal{P}|} \sum_{(k,t) \in \mathcal{P}} H\left(\frac{S[\text{type}_t, k]}{\sum S[\text{type}_t, k]}\right)
+\]
+
+This says ``for each cluster-type pair, the assignment should be dominated by one keypoint, not spread across many.'' Low entropy means one keypoint has most of the mass (correct --- one person has one left elbow). High entropy means the mass is spread evenly (wrong --- multiple left elbows competing for the same person slot). This is a softer and more gradient-friendly signal than the ReLU threshold.
+
+
+\subsubsection{Implementation}
+
+Both fixes are implemented in \texttt{sa\_dmon\_v2.py} with config flags for independent ablation:
+\begin{compactitem}
+  \item \texttt{use\_feature\_adjacency}: if true, build adjacency from kNN in embedding space for modularity; if false, use the spatial graph (original behaviour)
+  \item \texttt{use\_entropy\_type\_loss}: if true, use entropy-based type exclusivity; if false, use the original ReLU penalty
+  \item \texttt{feature\_knn\_k}: number of neighbours for the feature adjacency (default 8)
+\end{compactitem}
+
+Because the feature adjacency now encodes different information from the spatial null, $\lambda_{\text{spectral}}$ is set to 1.0 for the feature adjacency configs. The original SA-DMoN needed 0.1 because the spectral signal was wrong and had to be suppressed --- with decoupled graphs, the spectral signal should be meaningful and can be given full weight.
+
+The ablation table:
+\begin{center}
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Config & Feature adj & Entropy type & $\lambda_{\text{spectral}}$ \\
+\midrule
+SA-DMoN v1 (existing baseline) & no & no (ReLU) & 0.1 \\
+v2 feature adjacency only & yes & no (ReLU) & 1.0 \\
+v2 entropy type loss only & no & yes & 0.1 \\
+v2 full (both fixes) & yes & yes & 1.0 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The targets: SA-DMoN v1's best result was 0.805 PGA on synthetic data (clamped sigma). SCOT achieved 0.923. If the signal cancellation diagnosis is correct, the feature adjacency configs should show a meaningful jump above 0.805. Beating kNN at 0.901 would validate the decoupled architecture. Matching SCOT at 0.923 would mean the DMoN formulation is competitive with optimal transport when given the right graph structure.
+
+
+\subsubsection{Experiment --- Feature adjacency only ($\lambda_{\text{spectral}} = 1.0$)}
+
+First attempt: decoupled feature adjacency with $\lambda_{\text{spectral}} = 1.0$ (the reasoning being that the signal should now be meaningful and can be given full weight). ReLU type loss (unchanged from v1).
+
+\begin{center}
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (contrastive, no depth) & 0.901 & 0.110 & 0.831 & 0.801 & 1.000 \\
+SA-DMoN v1 best (clamped $\sigma$) & 0.805 & 0.149 & 0.803 & 0.759 & 0.965 \\
+SA-DMoN v2 feat adj ($\lambda$=1.0) & 0.772 & 0.142 & 0.803 & 0.750 & 0.928 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Worse than v1. The head loss remained very high at epoch 100 ($\sim$0.95) compared to v1's head loss at the same point ($\sim$0.15). With $\lambda_{\text{spectral}} = 1.0$, the spectral loss on the feature adjacency was dominating the gradient and not converging. The feature adjacency changes every forward pass as the embeddings evolve during training --- at full weight, the spectral loss was chasing a moving target, the same instability that killed learned sigma.
+
+
+\subsubsection{Experiment --- Feature adjacency only ($\lambda_{\text{spectral}} = 0.1$)}
+
+Dropped $\lambda_{\text{spectral}}$ back to 0.1 to let the spectral term act as a regulariser rather than a dominant objective.
+
+\begin{center}
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (contrastive, no depth) & 0.901 & 0.110 & 0.831 & 0.801 & 1.000 \\
+SA-DMoN v1 best (clamped $\sigma$) & 0.805 & 0.149 & 0.803 & 0.759 & 0.965 \\
+SA-DMoN v2 feat adj ($\lambda$=1.0) & 0.772 & 0.142 & 0.803 & 0.750 & 0.928 \\
+SA-DMoN v2 feat adj ($\lambda$=0.1) & 0.786 & 0.145 & 0.794 & 0.745 & 0.959 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Better than $\lambda = 1.0$ but still below v1's 0.805. The head loss was still high at epoch 100 ($\sim$1.17). The GAT embeddings were slightly degraded (NMI 0.794 vs 0.803 for v1), and detection F1 at 0.959 shows the head is getting person count wrong more often than v1 (0.965).
+
+The feature adjacency fix does not improve performance at either lambda value. The signal cancellation diagnosis was partially correct --- decoupling the graphs does produce a non-trivial $B_{\text{pose}}$ --- but the resulting modularity signal is not useful for improving grouping. The feature adjacency built from GAT embeddings encodes the same person-identity signal that the supervised CE already provides directly. The spectral loss on $A_{\text{feature}}$ is redundant with CE, adding noise without new information.
+
+
+\subsubsection{Experiment --- Entropy type loss only (spatial adjacency)}
+
+Entropy-based type exclusivity with the original spatial adjacency and $\lambda_{\text{spectral}} = 0.1$. This isolates Fix 2 --- does a better type loss formulation help even when the spectral signal is still cancelled?
+
+\begin{center}
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (contrastive, no depth) & 0.901 & 0.110 & 0.831 & 0.801 & 1.000 \\
+SA-DMoN v1 best (clamped $\sigma$) & 0.805 & 0.149 & 0.803 & 0.759 & 0.965 \\
+SA-DMoN v2 entropy only & 0.802 & 0.141 & 0.806 & 0.767 & 0.961 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Essentially neutral --- 0.802 vs 0.805. The entropy type loss produces smoother training (head loss drops steadily from 1.41 to 0.19, much cleaner than the feature adjacency runs) but does not change the final accuracy. The entropy formulation is a better-behaved gradient signal than the ReLU threshold but both converge to the same ceiling.
+
+
+\subsubsection{Experiment --- Full v2 (both fixes)}
+
+Both fixes combined: feature adjacency + entropy type loss, $\lambda_{\text{spectral}} = 0.1$.
+
+\begin{center}
+\footnotesize
+\begin{tabular}{lccccc}
+\toprule
+Method & PGA & Std & NMI & ARI & Det F1 \\
+\midrule
+kNN (contrastive, no depth) & 0.901 & 0.110 & 0.831 & 0.801 & 1.000 \\
+SA-DMoN v1 best (clamped $\sigma$) & 0.805 & 0.149 & 0.803 & 0.759 & 0.965 \\
+SA-DMoN v2 full & 0.784 & 0.150 & 0.795 & 0.749 & 0.936 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Worse than v1 by 2.1 points. Combining both fixes does not produce a synergy --- the feature adjacency degrades performance regardless of which type loss is used.
+
+
+\subsubsection{SA-DMoN v2 ablation summary}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lcccc}
+\toprule
+SA-DMoN variant & Feature adj & Entropy type & PGA & vs v1 best \\
+\midrule
+v1 best (clamped $\sigma$, $\lambda$=0.1) & no & no (ReLU) & 0.805 & --- \\
+v1 no spectral & no & no (ReLU) & 0.794 & $-1.1$ \\
+v2 feat adj ($\lambda$=1.0) & yes & no (ReLU) & 0.772 & $-3.3$ \\
+v2 feat adj ($\lambda$=0.1) & yes & no (ReLU) & 0.786 & $-1.9$ \\
+v2 entropy only & no & yes & 0.802 & $-0.3$ \\
+v2 full (both) & yes & yes & 0.784 & $-2.1$ \\
+\bottomrule
+\end{tabular}
+\caption{Complete SA-DMoN v2 ablation. No variant improves on v1.}
+\end{table}
+
+
+\subsubsection{Conclusion: the DMoN head architecture is the bottleneck}
+
+Six v1 experiments and four v2 experiments all converge to the same 0.77--0.81 PGA range regardless of:
+\begin{compactitem}
+  \item What the spectral loss measures (degree null, spatial null, feature null, or nothing)
+  \item How sigma is handled (learned, clamped, fixed, or removed entirely)
+  \item What type of adjacency is used (spatial kNN or embedding kNN)
+  \item How type exclusivity is formulated (ReLU threshold or entropy minimisation)
+\end{compactitem}
+
+The consistent $\sim$8 point gap between the head and kNN on the same embeddings is not a loss problem --- it is an \textbf{assignment mechanism problem}. The DMoN head computes soft assignments via a single-pass dot product between encoded node features and learned cluster centres, followed by softmax. This is fundamentally weaker than k-means, which iteratively refines centroids to minimise within-cluster variance. The single-pass dot product has no iterative refinement, no convergence guarantee, and distributes mass across all clusters via softmax even when the correct assignment is unambiguous.
+
+This is the architectural insight that motivated the pivot to SCOT. SCOT replaces the soft assignment mechanism with Sinkhorn optimal transport, which is iterative (10 iterations), globally optimal (within the entropy-regularised space), and incorporates hard type constraints that the DMoN softmax cannot express. The 0.923 PGA that SCOT achieves --- compared to the 0.805 ceiling of DMoN --- is not because SCOT has a better loss function. It is because SCOT has a better assignment mechanism.
+
+
+% ────────────────────────────────────────────────────────────
 \subsection{Experiment 8 --- Spectral Loss Removed Entirely}
 
 Four sigma strategies all failed. The hypothesis shifted: perhaps the spectral loss itself is the problem, not its parameterisation. Setting \texttt{lambda\_spectral: 0.0} isolates the head architecture from the conflicting spectral gradient. 100 epochs.
