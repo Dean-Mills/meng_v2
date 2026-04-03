@@ -2174,3 +2174,88 @@ SCOT & 0.923 & 0.862 & $-6.1$ \\
 \textbf{6. The ankle regression on synthetic data ($-5.7$ left ankle).} When confident keypoints are assigned first, ankles --- which are often the most spatially ambiguous --- are assigned last and may be forced to a suboptimal centroid by accumulated constraints. On COCO this does not occur because there are more keypoints per scene and the constraints are less restrictive relative to available slots.
 
 \textbf{7. This is the result that DMoN was supposed to produce.} The original SA-DMoN hypothesis was that domain-invariant structural signal (modularity) would improve sim-to-real transfer. Ten SA-DMoN experiments failed to deliver this. COP-Kmeans achieves it with a single constraint: no duplicate joint types per cluster. The structural signal that transfers across domains is not graph topology --- it is the skeleton's type structure, enforced as a hard constraint on the assignment algorithm rather than a soft loss on a learned clustering head.
+
+
+% ────────────────────────────────────────────────────────────
+\subsection{Type-Constrained Agglomerative Clustering}
+
+\subsubsection{Motivation}
+
+COP-Kmeans showed that type constraints on k-means produce strong results. A natural question: does the same constraint help with a different base algorithm? Agglomerative (bottom-up) clustering starts with each keypoint as its own cluster and iteratively merges the two closest clusters. Adding the type constraint means: never merge two clusters that would create duplicate joint types.
+
+This has a potential advantage over COP-Kmeans: it doesn't need $K$ at inference. Standard agglomerative clustering stops at a target $K$, but type-constrained agglomerative could stop when all remaining merges would violate constraints --- $K$ emerges from the data. For this evaluation, GT $K$ is provided for fair comparison, but the method could work without it.
+
+
+\subsubsection{How it works}
+
+\begin{enumerate}
+  \item Start with $N$ clusters (one per keypoint)
+  \item Find the closest pair of clusters (average linkage --- mean pairwise distance between members)
+  \item If merging would create duplicate joint types in the merged cluster, skip this pair and try the next closest
+  \item Merge the closest valid pair
+  \item Repeat until $K$ clusters remain
+\end{enumerate}
+
+No training required --- runs on the same contrastive GAT embeddings as kNN and COP-Kmeans.
+
+
+\subsubsection{Results}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Method & Synthetic & COCO & Transfer gap \\
+\midrule
+kNN & 0.901 & 0.879 & $-2.2$ \\
+Agglomerative & 0.837 & 0.887 & $+5.0$ \\
+COP-Kmeans & 0.913 & 0.910 & $-0.3$ \\
+\bottomrule
+\end{tabular}
+\caption{Agglomerative clustering comparison.}
+\end{table}
+
+Per-joint accuracy on COCO:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Joint & kNN & Agglomerative & Diff \\
+\midrule
+nose & 0.810 & 0.841 & $+3.1$ \\
+left eye & 0.797 & 0.847 & $+5.0$ \\
+right eye & 0.806 & 0.846 & $+4.0$ \\
+left ear & 0.758 & 0.802 & $+4.4$ \\
+right ear & 0.779 & 0.814 & $+3.4$ \\
+left shoulder & 0.734 & 0.775 & $+4.1$ \\
+right shoulder & 0.768 & 0.796 & $+2.8$ \\
+left elbow & 0.750 & 0.764 & $+1.4$ \\
+right elbow & 0.776 & 0.790 & $+1.4$ \\
+left wrist & 0.768 & 0.782 & $+1.4$ \\
+right wrist & 0.782 & 0.793 & $+1.2$ \\
+left hip & 0.778 & 0.793 & $+1.5$ \\
+right hip & 0.781 & 0.801 & $+2.0$ \\
+left knee & 0.787 & 0.788 & $+0.1$ \\
+right knee & 0.775 & 0.779 & $+0.4$ \\
+left ankle & 0.743 & 0.752 & $+0.9$ \\
+right ankle & 0.751 & 0.763 & $+1.2$ \\
+\bottomrule
+\end{tabular}
+\caption{Every joint improves on COCO, but gains are smaller than COP-Kmeans.}
+\end{table}
+
+
+\subsubsection{Analysis}
+
+\textbf{1. Agglomerative hurts on synthetic ($-6.4$) but helps on COCO ($+0.7$).} The type constraint provides transfer benefit (every joint improves on COCO) but the bottom-up merging strategy is fundamentally weaker than k-means on clean embeddings. On synthetic data where the embeddings are well-separated, k-means finds the right clusters immediately; agglomerative makes irrevocable merge decisions that accumulate errors.
+
+\textbf{2. The irrevocable-merge problem.} Agglomerative clustering cannot undo bad decisions. If it merges the wrong pair early (because they are the closest valid pair), every subsequent merge is conditioned on that error. K-means can recover from bad assignments by recomputing centroids on the next iteration. This is why COP-Kmeans (0.913/0.910) dramatically outperforms agglomerative (0.837/0.887) despite using the same type constraint.
+
+\textbf{3. The COCO gains are smaller than COP-Kmeans.} Agglomerative improves kNN by +0.7 on COCO; COP-Kmeans improves it by +3.1. Per-joint gains are +1 to +5 for agglomerative vs +5.6 to +8.3 for COP-Kmeans. The type constraint is the same in both methods --- the difference is entirely in the base clustering algorithm.
+
+\textbf{4. The positive transfer gap ($+5.0$) is misleading.} Agglomerative goes from 0.837 synthetic to 0.887 COCO, which looks like it transfers well. But this is because it performs so poorly on synthetic data (where the problem is easy) that the COCO result is higher by comparison. COP-Kmeans at $-0.3$ transfer gap with much higher absolute numbers on both datasets is the genuinely good transfer result.
+
+\textbf{5. Conclusion: the base algorithm matters as much as the constraint.} The type constraint helps both methods on COCO, confirming it is a genuinely useful inductive bias for sim-to-real transfer. But COP-Kmeans is the right vehicle for it --- k-means' iterative centroid refinement is a better assignment mechanism than agglomerative's greedy bottom-up merging, and the constraint integrates cleanly into the assignment step without the irrevocable-decision problem.
