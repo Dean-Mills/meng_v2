@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 import torch.optim as optim
 
 from config import ExperimentConfig
@@ -238,8 +239,15 @@ def train(cfg: ExperimentConfig, device: str):
         "dustbin_scot"       if cfg.dustbin_scot        is not None else
         "knn_only"
     )
+    # ── K estimation head (optional) ─────────────────────────────────────────
+    k_head = None
+    if cfg.train_k_head:
+        from k_head import KEstimationHead
+        k_head = KEstimationHead(embedding_dim=embedding_dim).to(device)
+
     print(f"\nTraining: {cfg.name}")
     print(f"Head:     {head_name}")
+    print(f"K head:   {'yes' if k_head else 'no'}")
     print(f"Device:   {device}")
     print(f"Epochs:   {tc.epochs}")
     print(f"Save dir: {save_dir}\n")
@@ -252,6 +260,8 @@ def train(cfg: ExperimentConfig, device: str):
     params = list(gat.parameters())
     if head is not None:
         params += list(head.parameters())
+    if k_head is not None:
+        params += list(k_head.parameters())
 
     optimizer = optim.AdamW(params, lr=tc.lr, weight_decay=tc.weight_decay)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
@@ -295,6 +305,13 @@ def train(cfg: ExperimentConfig, device: str):
                     head_loss_val  = head_out["total_loss"]
                     total          = total + head_loss_val
 
+                # K estimation loss
+                if k_head is not None:
+                    k_pred = k_head(embeddings)
+                    k_gt = torch.tensor(float(graph.num_people), device=device)
+                    k_loss = F.l1_loss(k_pred, k_gt)
+                    total = total + k_loss
+
                 total.backward()
                 torch.nn.utils.clip_grad_norm_(params, max_norm=1.0)
                 optimizer.step()
@@ -327,7 +344,7 @@ def train(cfg: ExperimentConfig, device: str):
             if tc.save_best and val_pga > best_val_pga:
                 best_val_pga = val_pga
                 _save_checkpoint(save_dir / "best.pt", gat, head, optimizer,
-                                 epoch, val_pga, cfg)
+                                 epoch, val_pga, cfg, k_head=k_head)
                 log += "  ← best"
 
             history.append({
@@ -340,7 +357,7 @@ def train(cfg: ExperimentConfig, device: str):
 
     # Always save final
     _save_checkpoint(save_dir / "final.pt", gat, head, optimizer,
-                     tc.epochs, best_val_pga, cfg)
+                     tc.epochs, best_val_pga, cfg, k_head=k_head)
 
     # Save history
     with open(save_dir / "history.json", "w") as f:
@@ -422,12 +439,13 @@ def _validate(gat, head, head_name, loader, preprocessor,
     return sum(all_pga) / max(len(all_pga), 1)
 
 
-def _save_checkpoint(path, gat, head, optimizer, epoch, val_pga, cfg):
+def _save_checkpoint(path, gat, head, optimizer, epoch, val_pga, cfg, k_head=None):
     torch.save({
         "epoch":     epoch,
         "val_pga":   val_pga,
         "gat_state": gat.state_dict(),
         "head_state": head.state_dict() if head is not None else None,
+        "k_head_state": k_head.state_dict() if k_head is not None else None,
         "opt_state":  optimizer.state_dict(),
         "config":     cfg.model_dump(),
     }, path)

@@ -194,6 +194,7 @@ class ExperimentConfig(BaseModel):
     adaptive_scot:      Optional[AdaptiveSCOTConfig]      = None
     unbalanced_scot:    Optional[UnbalancedSCOTConfig]    = None
     dustbin_scot:       Optional[DustbinSCOTConfig]       = None
+    train_k_head:       bool                              = False
     training:           Optional[TrainingConfig]          = None
 
     @classmethod

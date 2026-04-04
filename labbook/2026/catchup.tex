@@ -2592,3 +2592,270 @@ Each modification was tested in isolation (the other two disabled) to measure it
 \textbf{3. Repulsion heads} are the weakest individual modification. kNN 0.905 on synthetic (same as pos-enc) but COP-Kmeans 0.908 on COCO --- slightly below the standard GAT + COP-Kmeans baseline of 0.910. Dedicating one of four attention heads exclusively to same-type edges reduces the capacity available for general message passing. With only 4 heads total, losing 25\% of capacity hurts more than the specialisation gains. This might improve with more heads (e.g.\ 8 heads with 2 dedicated to repulsion).
 
 \textbf{4. The full combination is best.} SA-GAT full (0.925 / 0.915) outperforms every individual modification. The three modifications are complementary: type-pair attention provides category-specific parameters, position encoding provides geometric context, and repulsion heads provide dedicated inter-person processing. Together they produce the best embeddings in the project.
+
+
+% ────────────────────────────────────────────────────────────
+\subsection{SA-GAT + SCOT --- Combining the Two Contributions}
+
+\subsubsection{Motivation}
+
+SA-GAT produces better embeddings. SCOT provides better assignment via type-constrained optimal transport. These are independent contributions operating at different levels --- SA-GAT modifies the attention mechanism, SCOT modifies the grouping step. The question: do they compose? If so, SA-GAT + SCOT could be the PEng system while SA-GAT + COP-Kmeans remains the MEng system.
+
+
+\subsubsection{Results}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Method & Synthetic & COCO & Transfer gap \\
+\midrule
+Standard GAT + kNN & 0.901 & 0.879 & $-2.2$ \\
+Standard GAT + SCOT & 0.923 & 0.862 & $-6.1$ \\
+Standard GAT + COP-KM & 0.913 & 0.910 & $-0.3$ \\
+\midrule
+SA-GAT + kNN & 0.910 & 0.882 & $-2.8$ \\
+SA-GAT + COP-KM & 0.925 & 0.915 & $-1.0$ \\
+SA-GAT + SCOT & 0.924 & 0.863 & $-6.1$ \\
+SA-GAT (SCOT-trained) + COP-KM & 0.915 & 0.915 & $0.0$ \\
+\bottomrule
+\end{tabular}
+\caption{Complete comparison across all backbone + grouping combinations.}
+\end{table}
+
+SCOT head on COCO with SA-GAT backbone:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Joint & SA-GAT kNN & SA-GAT + SCOT & SA-GAT + COP-KM \\
+\midrule
+nose & 0.890 & 0.842 & 0.900 \\
+left eye & 0.906 & 0.798 & 0.890 \\
+right eye & 0.906 & 0.820 & 0.885 \\
+left ear & 0.858 & 0.708 & 0.848 \\
+right ear & 0.884 & 0.797 & 0.856 \\
+left shoulder & 0.861 & 0.876 & 0.822 \\
+right shoulder & 0.871 & 0.882 & 0.817 \\
+left elbow & 0.847 & 0.816 & 0.816 \\
+right elbow & 0.864 & 0.844 & 0.822 \\
+left wrist & 0.850 & 0.795 & 0.832 \\
+right wrist & 0.857 & 0.815 & 0.833 \\
+left hip & 0.878 & 0.877 & 0.861 \\
+right hip & 0.880 & 0.885 & 0.858 \\
+left knee & 0.875 & 0.830 & 0.867 \\
+right knee & 0.867 & 0.831 & 0.846 \\
+left ankle & 0.863 & 0.815 & 0.840 \\
+right ankle & 0.866 & 0.808 & 0.847 \\
+\bottomrule
+\end{tabular}
+\caption{Per-joint COCO accuracy. SCOT loses on face joints; COP-Kmeans wins overall.}
+\end{table}
+
+
+\subsubsection{Analysis}
+
+\textbf{1. SA-GAT + SCOT (0.924) matches standard GAT + SCOT (0.923) on synthetic.} The better embeddings provide minimal additional benefit to SCOT because SCOT's learned prototypes and Sinkhorn iterations already handle the assignment well on clean synthetic data. On synthetic data, the assignment mechanism is the bottleneck, not the embeddings.
+
+\textbf{2. On COCO, SA-GAT + SCOT (0.863) barely improves over standard GAT + SCOT (0.862).} The transfer gap remains $-6.1$ regardless of the backbone. This confirms that SCOT's transfer problem is in the learned head --- the prototypes and transport plan overfit to synthetic data --- not in the embeddings. Better embeddings cannot fix a head that doesn't generalise.
+
+\textbf{3. COP-Kmeans on the SCOT-trained SA-GAT hits 0.915 on COCO.} This is the same as COP-Kmeans on the contrastive-only SA-GAT (0.915). Joint training with SCOT does not degrade the SA-GAT embeddings --- unlike standard GAT where the SCOT head loss slightly hurt the embeddings. The skeleton-aware attention is robust to the additional head loss gradient.
+
+\textbf{4. The SCOT per-joint pattern persists.} SCOT beats kNN on shoulders and hips (where the type constraint helps) but loses badly on face joints (ears $-8$ to $-18$ points vs kNN). This pattern is identical to standard GAT + SCOT. The SA-GAT backbone does not fix SCOT's face-joint weakness because the problem is in the Sinkhorn assignment, not the embeddings.
+
+\textbf{5. COP-Kmeans dominates on COCO regardless of backbone.} Every COP-Kmeans variant (0.910--0.915) outperforms every SCOT variant (0.862--0.863) on COCO. The type constraint applied as a hard check during k-means assignment is more robust to domain shift than the type constraint applied as infinite cost in a learned optimal transport plan.
+
+
+\subsubsection{Final project summary}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lcccc}
+\toprule
+Method & Synthetic & COCO & Transfer & Notes \\
+\midrule
+\multicolumn{5}{l}{\textit{Baselines}} \\
+Standard GAT + kNN & 0.901 & 0.879 & $-2.2$ & Baseline \\
+\midrule
+\multicolumn{5}{l}{\textit{Learned grouping heads (all failed to beat kNN on COCO)}} \\
+Slot attention & 0.858 & 0.788 & --- & With depth \\
+Graph partitioning & 0.954 & 0.752 & --- & With depth \\
+SA-DMoN (best) & 0.805 & 0.817 & --- & No depth \\
+\midrule
+\multicolumn{5}{l}{\textit{Type-constrained methods}} \\
+Standard GAT + COP-KM & 0.913 & 0.910 & $-0.3$ & No training needed \\
+Standard GAT + SCOT & 0.923 & 0.862 & $-6.1$ & Best synthetic head \\
+\midrule
+\multicolumn{5}{l}{\textit{SA-GAT combinations}} \\
+SA-GAT + kNN & 0.910 & 0.882 & $-2.8$ & Better embeddings \\
+\textbf{SA-GAT + COP-KM} & \textbf{0.925} & \textbf{0.915} & $\mathbf{-1.0}$ & \textbf{Best overall} \\
+SA-GAT + SCOT & 0.924 & 0.863 & $-6.1$ & SCOT transfer limits it \\
+\bottomrule
+\end{tabular}
+\caption{All methods tested in this project. SA-GAT + COP-Kmeans is the best on both datasets.}
+\end{table}
+
+\textbf{The MEng contribution} is SA-GAT (skeleton-aware attention with type-pair bias, position encoding, and repulsion heads) combined with COP-Kmeans (type-constrained k-means). Together they achieve 0.925 on synthetic and 0.915 on COCO --- the best results in the project on both datasets, with a transfer gap of only $-1.0$ points. Neither component requires a learned grouping head. The skeleton type structure is encoded as an architectural inductive bias in the attention mechanism and as a hard constraint in the assignment algorithm.
+
+\textbf{The PEng direction} is SCOT (type-constrained optimal transport) combined with SA-GAT. SCOT achieves 0.924 on synthetic --- matching the MEng result --- but its COCO transfer gap of $-6.1$ points is the main open problem. The path forward is either fine-tuning on real data, solving K estimation to remove the dependency on ground truth person count, or making the learned prototypes more robust to distributional shift. This builds directly on the MEng work: the same SA-GAT backbone, the same skeleton type structure, but a more ambitious (and publishable) assignment formulation.
+
+
+% ────────────────────────────────────────────────────────────
+\subsection{K Estimation --- Removing the Ground Truth K Dependency}
+
+\subsubsection{The problem}
+
+Every method tested in this project receives the ground truth number of people $K$ as input. kNN uses it as \texttt{n\_clusters}, COP-Kmeans uses it identically, SCOT constructs $K \times 17$ typed slots. In a real production system $K$ is unknown --- the system receives detected keypoints and must determine both how many people are present and which keypoints belong to which person.
+
+This is standard practice in bottom-up pose grouping research --- most papers evaluate with GT keypoint locations and GT person count to isolate the grouping problem from detection. But solving K estimation would make the system complete and deployable.
+
+
+\subsubsection{Attempt 1: Eigenvalue gap}
+
+The classical spectral approach: build an affinity matrix from embedding similarity (RBF kernel), compute the graph Laplacian $L = D - W$, and estimate $K$ from the largest gap between consecutive eigenvalues. The number of near-zero eigenvalues equals the number of connected components (people).
+
+\paragraph{Results.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+ & SA-GAT & Standard GAT & SA-GAT (COCO) \\
+\midrule
+Exact match & 26\% & 27\% & 18\% \\
+Off by $\leq 1$ & 58\% & 56\% & 54\% \\
+\bottomrule
+\end{tabular}
+\caption{Eigenvalue gap K estimation accuracy.}
+\end{table}
+
+Per GT K breakdown (SA-GAT, synthetic):
+\begin{compactitem}
+  \item K=2: 92\% exact --- near perfect
+  \item K=3: 12\% exact --- mostly predicted K=2
+  \item K=4: 0\% exact --- all predicted K=2 or K=3
+  \item K=5: 0\% exact --- same failure
+\end{compactitem}
+
+The eigengap is massively biased toward K=2. The contrastive loss produces embeddings where the first spectral gap (between eigenvalue 1 and 2) is always the largest --- the strongest signal is ``there are multiple people'' (a binary split). The finer structure (3, 4, 5 people) produces smaller gaps that the simple argmax misses.
+
+Grouping PGA with predicted K drops catastrophically: 0.910 $\to$ 0.673 on synthetic ($-$23.7 points). The eigengap approach is not viable.
+
+
+\subsubsection{Attempt 2: Learned K estimation head}
+
+A small MLP that predicts $K$ from pooled GAT embeddings and the keypoint count:
+\[
+K_{\text{pred}} = \text{MLP}(\text{mean\_pool}(H) \,\|\, \text{max\_pool}(H) \,\|\, N_{\text{keypoints}} / 17)
+\]
+
+The $N_{\text{keypoints}} / 17$ feature is a strong prior --- with 17 COCO joints per person, 85 keypoints almost certainly means 5 people. The MLP learns to refine this estimate using the embedding features (which encode how many distinct clusters exist). Trained jointly with the SA-GAT via L1 loss on the predicted K.
+
+\paragraph{Results --- Synthetic.}
+
+K estimation: \textbf{100/100 exact match} on synthetic data (25/25 for each of K=2,3,4,5). Perfect. Grouping PGA with predicted K is identical to GT K (0.677 vs 0.677 for COP-Kmeans).
+
+\paragraph{Results --- COCO.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lcc}
+\toprule
+ & Eigengap & Learned head \\
+\midrule
+Exact match & 18.3\% & \textbf{55.5\%} \\
+Off by $\leq 1$ & 53.7\% & \textbf{80.4\%} \\
+\bottomrule
+\end{tabular}
+\caption{K estimation accuracy on COCO. Learned head is substantially better.}
+\end{table}
+
+Per GT K breakdown:
+\begin{compactitem}
+  \item K=1: 100\% exact (1059/1059) --- trivial case, N\_keypoints is small
+  \item K=2: 34\% exact --- underpredicts to K=1 (299/454)
+  \item K=3: 20\% exact --- mostly predicts K=2 or K=1
+  \item K=4+: $<$6\% exact --- systematic underprediction
+\end{compactitem}
+
+The K head is much better than eigengap but still underpredicts on COCO for $K \geq 3$. The model was trained on synthetic data with $K = 2$--$5$; on COCO it sees up to $K = 13$ with different keypoint visibility patterns (more occlusion, more missing joints). The $N_{\text{keypoints}} / 17$ prior is less reliable on COCO because occlusion means fewer visible joints per person.
+
+
+\paragraph{The embedding quality problem.}
+
+The K head achieved perfect K estimation on synthetic data but the grouping PGA was only 0.677 --- dramatically below the SA-GAT without K head (0.910). The L1 loss on K prediction was \textbf{interfering with contrastive learning}. The mean-pooled embeddings were being optimised to encode person \emph{count} rather than person \emph{identity}. The embeddings became countable but not separable.
+
+On COCO the same problem: kNN with GT K scored 0.793 (vs 0.882 for SA-GAT without K head). The K head loss corrupted the embeddings.
+
+
+\subsubsection{Attempt 3: Frozen backbone K head}
+
+The fix: freeze the SA-GAT weights and train only the K head on pre-computed embeddings. The SA-GAT checkpoint (0.910/0.882) is loaded and frozen --- the K head learns to read $K$ from embeddings that were already optimised for separation, without corrupting them.
+
+Implemented in \texttt{train\_k\_head\_frozen.py}: loads a GAT checkpoint, freezes all parameters, creates a fresh K head, and trains with L1 loss for 50 epochs on the virtual training set.
+
+\paragraph{Results --- Synthetic.}
+
+K estimation: \textbf{100/100 exact match} (identical to joint training). Crucially, the embeddings are preserved: kNN PGA 0.910 and COP-Kmeans PGA 0.925, both identical to the SA-GAT without any K head. Grouping with predicted K matches grouping with GT K exactly ($+$0.000).
+
+\paragraph{Results --- COCO.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+ & Eigengap & Joint training & Frozen backbone \\
+\midrule
+Exact match & 18.3\% & 55.5\% & \textbf{63.2\%} \\
+Off by $\leq 1$ & 53.7\% & 80.4\% & \textbf{83.5\%} \\
+\bottomrule
+\end{tabular}
+\caption{K estimation accuracy on COCO across all three approaches.}
+\end{table}
+
+Per GT K breakdown (frozen vs joint training):
+\begin{compactitem}
+  \item K=1: 97.6\% (vs 100\%) --- slight regression, the frozen embeddings are optimised for multi-person separation not single-person detection
+  \item K=2: \textbf{66\%} (vs 34\%) --- nearly doubled, the discriminative embeddings make two-person scenes more readable
+  \item K=3: \textbf{38\%} (vs 20\%) --- also nearly doubled
+  \item K=4: 11\% (vs 5\%) --- improving but still low
+  \item K=5+: $<$10\% --- systematic underprediction persists for large K
+\end{compactitem}
+
+\paragraph{Grouping with predicted K.}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccc}
+\toprule
+Method & GT K & Predicted K & Diff \\
+\midrule
+kNN & 0.882 & 0.848 & $-3.5$ \\
+COP-Kmeans & 0.915 & 0.849 & $-6.5$ \\
+\bottomrule
+\end{tabular}
+\caption{COCO grouping PGA with frozen K head predictions.}
+\end{table}
+
+COP-Kmeans drops more than kNN ($-6.5$ vs $-3.5$) because wrong K hurts constrained methods more --- if $K$ is too low, COP-Kmeans forces keypoints into too few clusters and the type constraint creates conflicts that wouldn't exist with the correct K.
+
+
+\paragraph{Analysis.}
+
+\textbf{1. Frozen backbone completely solves the embedding corruption problem.} The SA-GAT embeddings are identical to the original checkpoint --- kNN 0.910, COP-Kmeans 0.925 on synthetic. The joint training attempt degraded these to 0.613 and 0.677 respectively. Separating the K estimation objective from the contrastive objective is essential.
+
+\textbf{2. K estimation is substantially better with frozen embeddings.} 63.2\% exact (vs 55.5\% joint, 18.3\% eigengap) and 83.5\% off-by-one. The discriminative embeddings produced by contrastive-only training contain clearer cluster structure that the K head can read.
+
+\textbf{3. The remaining error is from training distribution mismatch.} The K head was trained on synthetic data with K=2--5. COCO has K=1--13+ with different occlusion patterns. K=1 (single person) is nearly perfect because N\_keypoints is distinctively small. K=2 at 66\% is reasonable. K$\geq$4 fails because the model has never seen enough data in that range and the $N_{\text{keypoints}} / 17$ prior becomes unreliable with occlusion.
+
+\textbf{4. COP-Kmeans with predicted K (0.849) does not yet beat kNN with GT K (0.879).} The 3-point gap is entirely from K estimation errors. If K were perfect, COP-Kmeans would score 0.915. The path to closing this gap is training the K head on more diverse data (larger K range, real occlusion patterns) or fine-tuning on a small amount of COCO.
+
+\textbf{5. This is a viable PEng direction.} The K head adds only $\sim$17K parameters, trains in 50 epochs on frozen embeddings (67 seconds total), and provides 83.5\% off-by-one accuracy on COCO with zero COCO training data. With COCO fine-tuning or training on a wider K range, the predicted-K system could approach the GT-K performance and provide a complete, deployable pipeline: SA-GAT $\to$ K head $\to$ COP-Kmeans/SCOT, with no oracle required.

@@ -214,3 +214,37 @@ python evaluator.py --checkpoint outputs/checkpoints/sa_gat_repulsion/best.pt --
 python eval_cop_kmeans.py --checkpoint outputs/checkpoints/sa_gat_repulsion/best.pt --virtual_dir data/virtual
 python eval_cop_kmeans.py --checkpoint outputs/checkpoints/sa_gat_repulsion/best.pt --coco_img_dir data/coco2017/val2017 --coco_ann_file data/coco2017/annotations/person_keypoints_val2017.json
 ```
+
+
+## SA-GAT + SCOT (PEng direction)
+```bash
+python trainer.py --config configs/train_sa_gat_scot_no_depth.yaml
+python evaluator.py --checkpoint outputs/checkpoints/sa_gat_scot_no_depth/best.pt --virtual_dir data/virtual
+python evaluator.py --checkpoint outputs/checkpoints/sa_gat_scot_no_depth/best.pt --coco_img_dir data/coco2017/val2017 --coco_ann_file data/coco2017/annotations/person_keypoints_val2017.json
+python eval_cop_kmeans.py --checkpoint outputs/checkpoints/sa_gat_scot_no_depth/best.pt --virtual_dir data/virtual
+python eval_cop_kmeans.py --checkpoint outputs/checkpoints/sa_gat_scot_no_depth/best.pt --coco_img_dir data/coco2017/val2017 --coco_ann_file data/coco2017/annotations/person_keypoints_val2017.json
+```
+
+
+## K Estimation
+
+### Eigenvalue gap (inference only, no training)
+```bash
+python eval_k_estimation.py --checkpoint outputs/checkpoints/sa_gat_full/best.pt --virtual_dir data/virtual
+python eval_k_estimation.py --checkpoint outputs/checkpoints/sa_gat_full/best.pt --coco_img_dir data/coco2017/val2017 --coco_ann_file data/coco2017/annotations/person_keypoints_val2017.json
+python eval_k_estimation.py --checkpoint outputs/checkpoints/knn_no_depth/best.pt --virtual_dir data/virtual
+```
+
+### Learned K head — joint training (corrupts embeddings, don't use)
+```bash
+python trainer.py --config configs/train_sa_gat_k_head.yaml
+python eval_k_estimation.py --checkpoint outputs/checkpoints/sa_gat_k_head/best.pt --virtual_dir data/virtual
+python eval_k_estimation.py --checkpoint outputs/checkpoints/sa_gat_k_head/best.pt --coco_img_dir data/coco2017/val2017 --coco_ann_file data/coco2017/annotations/person_keypoints_val2017.json
+```
+
+### Learned K head — frozen backbone (recommended)
+```bash
+python train_k_head_frozen.py --checkpoint outputs/checkpoints/sa_gat_full/best.pt --epochs 50
+python eval_k_estimation.py --checkpoint outputs/checkpoints/k_head_frozen/best.pt --virtual_dir data/virtual
+python eval_k_estimation.py --checkpoint outputs/checkpoints/k_head_frozen/best.pt --coco_img_dir data/coco2017/val2017 --coco_ann_file data/coco2017/annotations/person_keypoints_val2017.json
+```
