@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -276,6 +277,25 @@ def evaluate(
         diff = cop_acc - knn_acc
         print(f"  {name:<18}{knn_acc:>10.4f}{cop_acc:>10.4f}{diff:>+10.4f}")
     print(f"{'='*60}")
+
+    # Save results next to checkpoint with dataset suffix
+    suffix = "coco" if coco_img_dir is not None else "virtual"
+    save_path = checkpoint_path.parent / f"eval_cop_kmeans_{suffix}.json"
+    per_joint_summary = {}
+    for j in range(17):
+        name = COCO_JOINT_NAMES[j]
+        per_joint_summary[name] = {
+            "knn": sum(per_joint["knn"][j]) / max(len(per_joint["knn"][j]), 1),
+            "cop_kmeans": sum(per_joint["cop_kmeans"][j]) / max(len(per_joint["cop_kmeans"][j]), 1),
+        }
+    save_data = {
+        "knn_pga": knn_mean, "cop_kmeans_pga": cop_mean,
+        "constraint_changed": n_constrained, "total_assignments": n_total,
+        "per_joint": per_joint_summary,
+    }
+    with open(save_path, "w") as f:
+        json.dump(save_data, f, indent=2)
+    print(f"Results saved to {save_path}")
 
 
 def main():

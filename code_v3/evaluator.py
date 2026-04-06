@@ -605,8 +605,8 @@ def main():
     parser.add_argument("--coco_ann_file", type=Path, default=None)
     parser.add_argument("--max_images",    type=int,  default=None,
                         help="Limit number of images evaluated (useful for quick checks)")
-    parser.add_argument("--save",          type=Path,
-                        default=Path("outputs/eval_results.json"))
+    parser.add_argument("--save",          type=Path, default=None,
+                        help="Override save path (default: next to checkpoint)")
     parser.add_argument("--device",        type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
@@ -621,7 +621,14 @@ def main():
     )
 
     evaluator.print_comparison(summary)
-    evaluator.save_results(summary, args.save)
+
+    # Default: save results next to checkpoint with dataset suffix
+    if args.save is not None:
+        save_path = args.save
+    else:
+        suffix = "coco" if args.coco_img_dir is not None else "virtual"
+        save_path = args.checkpoint.parent / f"eval_results_{suffix}.json"
+    evaluator.save_results(summary, save_path)
 
 
 if __name__ == "__main__":

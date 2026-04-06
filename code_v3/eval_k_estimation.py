@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -244,6 +245,22 @@ def evaluate(
         print(f"  {label:<25}{gt_mean:>10.4f}{pred_mean:>10.4f}{diff:>+10.4f}")
 
     print(f"{'='*65}")
+
+    # Save results next to checkpoint with dataset suffix
+    suffix = "coco" if coco_img_dir is not None else "virtual"
+    save_path = checkpoint_path.parent / f"eval_k_estimation_{suffix}.json"
+    save_data = {
+        "k_exact": k_exact, "k_off_by_one": k_off_by_one, "k_total": k_total,
+        "pga": {},
+    }
+    for method in ["knn", "cop_km"]:
+        save_data["pga"][method] = {
+            "gt_k": sum(results_gt[method]) / len(results_gt[method]),
+            "pred_k": sum(results_pred[method]) / len(results_pred[method]),
+        }
+    with open(save_path, "w") as f:
+        json.dump(save_data, f, indent=2)
+    print(f"Results saved to {save_path}")
 
 
 def main():

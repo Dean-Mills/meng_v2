@@ -15,7 +15,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import shutil
 import time
+import uuid
 from pathlib import Path
 
 import torch
@@ -36,8 +38,8 @@ def main():
     parser.add_argument("--checkpoint", type=Path, required=True,
                         help="SA-GAT or GAT checkpoint to freeze")
     parser.add_argument("--virtual_dir", type=Path, default=Path("data/virtual"))
-    parser.add_argument("--save_dir", type=Path,
-                        default=Path("outputs/checkpoints/k_head_frozen"))
+    parser.add_argument("--name", type=str, default="k_head_frozen",
+                        help="Run name for output directory")
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--device", type=str,
@@ -45,7 +47,17 @@ def main():
     args = parser.parse_args()
 
     device = args.device
-    args.save_dir.mkdir(parents=True, exist_ok=True)
+
+    # GUID-based run directory
+    run_id = uuid.uuid4().hex[:8]
+    save_dir = Path("outputs") / args.name / run_id
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    # Update latest symlink
+    latest_link = Path("outputs") / args.name / "latest"
+    if latest_link.is_symlink() or latest_link.exists():
+        latest_link.unlink()
+    latest_link.symlink_to(run_id)
 
     # ── Load frozen GAT ───────────────────────────────────────────────
     ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
@@ -95,8 +107,9 @@ def main():
     )
 
     print(f"\nTraining K head (frozen GAT)")
-    print(f"Epochs: {args.epochs}")
-    print(f"Save dir: {args.save_dir}\n")
+    print(f"Run ID:  {run_id}")
+    print(f"Epochs:  {args.epochs}")
+    print(f"Save dir: {save_dir}\n")
 
     # ── Training ──────────────────────────────────────────────────────
     best_val_acc = 0.0
@@ -171,7 +184,7 @@ def main():
                     "k_head_state": k_head.state_dict(),
                     "head_state": ckpt.get("head_state"),  # preserve any head
                     "config": ckpt["config"],
-                }, args.save_dir / "best.pt")
+                }, save_dir / "best.pt")
                 log += "  ← best"
 
             print(log)
@@ -187,10 +200,10 @@ def main():
         "k_head_state": k_head.state_dict(),
         "head_state": ckpt.get("head_state"),
         "config": ckpt["config"],
-    }, args.save_dir / "final.pt")
+    }, save_dir / "final.pt")
 
     print(f"\nTraining complete. Best val K accuracy: {best_val_acc:.3f}")
-    print(f"Saved to {args.save_dir}")
+    print(f"Saved to {save_dir}")
 
 
 if __name__ == "__main__":

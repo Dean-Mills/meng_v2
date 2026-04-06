@@ -2859,3 +2859,47 @@ COP-Kmeans drops more than kNN ($-6.5$ vs $-3.5$) because wrong K hurts constrai
 \textbf{4. COP-Kmeans with predicted K (0.849) does not yet beat kNN with GT K (0.879).} The 3-point gap is entirely from K estimation errors. If K were perfect, COP-Kmeans would score 0.915. The path to closing this gap is training the K head on more diverse data (larger K range, real occlusion patterns) or fine-tuning on a small amount of COCO.
 
 \textbf{5. This is a viable PEng direction.} The K head adds only $\sim$17K parameters, trains in 50 epochs on frozen embeddings (67 seconds total), and provides 83.5\% off-by-one accuracy on COCO with zero COCO training data. With COCO fine-tuning or training on a wider K range, the predicted-K system could approach the GT-K performance and provide a complete, deployable pipeline: SA-GAT $\to$ K head $\to$ COP-Kmeans/SCOT, with no oracle required.
+
+
+\subsection{Training Infrastructure --- GUID-based Output Management}
+
+\subsubsection{The problem}
+
+During SCOT re-training, I discovered that re-running \texttt{trainer.py} with the same config overwrites the previous \texttt{best.pt} checkpoint. The original SCOT run achieved 0.923 synthetic PGA; after accidentally re-training with the same config (but only 50 epochs instead of 100), the checkpoint was overwritten with a 0.917 result. The original model was permanently lost.
+
+This is a fundamental reproducibility problem. The old directory structure was:
+\begin{verbatim}
+outputs/checkpoints/{config_save_dir}/
+    best.pt        # overwritten on every run
+    final.pt
+    history.json
+\end{verbatim}
+
+There was a one-to-one mapping between config and output directory, so any re-run --- whether intentional (parameter sweep) or accidental --- destroyed the previous result. There was also no record of which exact config produced a given checkpoint, making it impossible to reproduce a run after the fact.
+
+\subsubsection{Solution: GUID-based run directories}
+
+Every training run now creates a unique subdirectory under \texttt{outputs/\{config\_name\}/}:
+\begin{verbatim}
+outputs/
+  train_scot_no_depth/
+    a1b2c3d4/             # 8-char GUID
+      best.pt
+      final.pt
+      history.json
+      config.yaml          # full copy of the config used
+      eval_results.json    # saved by evaluator
+    e5f6g7h8/             # another run with same or different params
+      ...
+    latest -> a1b2c3d4    # symlink to most recent run
+\end{verbatim}
+
+Key design decisions:
+\begin{itemize}
+    \item The config name is derived from the YAML filename (e.g.\ \texttt{configs/train\_scot\_no\_depth.yaml} $\to$ \texttt{train\_scot\_no\_depth}). A \texttt{--name} override is available for re-running a saved \texttt{config.yaml} from inside a GUID directory, which would otherwise create a folder called ``config''.
+    \item The full config YAML is copied into each run directory, so any result can be reproduced by pointing the trainer at that file: \texttt{python trainer.py --config outputs/.../config.yaml --name train\_scot\_no\_depth}.
+    \item A \texttt{latest} symlink is updated programmatically after each run, so quick evaluations can use \texttt{outputs/train\_scot\_no\_depth/latest/best.pt} without knowing the GUID.
+    \item Evaluation results are saved next to the checkpoint rather than to a global \texttt{outputs/eval\_results.json} that was also being overwritten.
+\end{itemize}
+
+Previous frozen results from all experiments up to this point were preserved \texttt{outputs/frozen\_checkpoints/}.

@@ -17,7 +17,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import time
+import uuid
 from pathlib import Path
 
 import torch
@@ -195,12 +198,33 @@ def _make_loader(virtual_dir: Path, split: str, batch_size: int, num_workers: in
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-def train(cfg: ExperimentConfig, device: str):
+def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
+          name_override: str = None):
     assert cfg.training is not None, "training config missing from yaml"
     tc = cfg.training
 
-    save_dir = Path(tc.save_dir)
+    # Derive run name from config filename or --name override
+    if name_override:
+        run_name = name_override
+    elif config_path is not None:
+        run_name = config_path.stem
+    else:
+        run_name = cfg.name
+
+    # Create GUID-based run directory: outputs/{run_name}/{guid}/
+    run_id = uuid.uuid4().hex[:8]
+    save_dir = Path("outputs") / run_name / run_id
     save_dir.mkdir(parents=True, exist_ok=True)
+
+    # Copy config into run directory for reproducibility
+    if config_path is not None and config_path.exists():
+        shutil.copy2(config_path, save_dir / "config.yaml")
+
+    # Update latest symlink
+    latest_link = Path("outputs") / run_name / "latest"
+    if latest_link.is_symlink() or latest_link.exists():
+        latest_link.unlink()
+    latest_link.symlink_to(run_id)
 
     virtual_dir = Path(tc.virtual_dir)
 
@@ -245,7 +269,8 @@ def train(cfg: ExperimentConfig, device: str):
         from k_head import KEstimationHead
         k_head = KEstimationHead(embedding_dim=embedding_dim).to(device)
 
-    print(f"\nTraining: {cfg.name}")
+    print(f"\nTraining: {run_name}")
+    print(f"Run ID:   {run_id}")
     print(f"Head:     {head_name}")
     print(f"K head:   {'yes' if k_head else 'no'}")
     print(f"Device:   {device}")
@@ -457,12 +482,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path,
                         default=Path("configs/train_slot.yaml"))
+    parser.add_argument("--name", type=str, default=None,
+                        help="Override run name (default: derived from config filename)")
     parser.add_argument("--device", type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
 
     cfg = ExperimentConfig.from_yaml(args.config)
-    train(cfg, args.device)
+    train(cfg, args.device, config_path=args.config, name_override=args.name)
 
 
 if __name__ == "__main__":
