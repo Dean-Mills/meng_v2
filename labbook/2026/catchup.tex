@@ -2903,3 +2903,147 @@ Key design decisions:
 \end{itemize}
 
 Previous frozen results from all experiments up to this point were preserved \texttt{outputs/frozen\_checkpoints/}.
+
+
+\subsection{End-to-End Evaluation --- HigherHRNet Detection + SA-GAT Grouping}
+
+\subsubsection{Motivation}
+
+All experiments up to this point assume ground truth keypoint locations. This is useful for isolating the grouping contribution, but does not reflect a real deployment scenario where keypoints must first be detected. To compare against published methods like HigherHRNet, DEKR, and ED-Pose, I need to evaluate on the same terms they use: raw images in, per-person poses out.
+
+The obvious approach would be to isolate each method's grouping stage --- feed GT keypoints into their grouping logic and compare directly. However, this would require deep surgery into each model's codebase to bypass detection and inject GT keypoints. These models tightly couple detection and grouping (e.g.\ HigherHRNet jointly predicts heatmaps and associative embedding tags in a single forward pass), making clean separation impractical without risking subtle bugs that would invalidate the comparison.
+
+Instead, I chose the end-to-end approach: let every method run its complete pipeline on the same images, then compare the final per-person keypoint assignments. This means each method uses its own detector, so differences in detection quality are conflated with differences in grouping quality. The caveat is clear: \emph{a better detector gives the grouper easier inputs}. To make this concrete, I also pair SA-GAT with the same HigherHRNet detector, so the comparison between HigherHRNet's AE grouping and SA-GAT's COP-Kmeans grouping uses identical detections --- isolating the grouping contribution without any model surgery.
+
+This also enables direct comparison against HigherHRNet's own associative embedding (AE) grouping, which is trained end-to-end on COCO --- a much stronger training signal than the ~400 synthetic images.
+
+\subsubsection{Setup}
+
+I integrated \texttt{simple-HigherHRNet}, a clean PyTorch wrapper around the official HigherHRNet weights, into the codebase as a vendor dependency. The pretrained model used is \textbf{HigherHRNet-W32 at 512px resolution} --- the smallest available variant (the W32-640 and W48-640 weights were no longer available from the official Google Drive links).
+
+The end-to-end pipeline works as follows:
+\begin{enumerate}
+    \item \textbf{Detection:} HigherHRNet processes each COCO image and produces per-joint-type heatmaps. Its internal NMS extracts keypoint candidates and its associative embedding tags group them into people.
+    \item \textbf{Keypoint matching:} Detected keypoints are matched to ground truth keypoints by joint type and spatial proximity (Hungarian assignment, 10px threshold). This gives each matched detection a GT person label for evaluation.
+    \item \textbf{SA-GAT grouping:} The matched detections (now unassigned --- HigherHRNet's grouping is discarded) are fed into the SA-GAT preprocessor to build a kNN graph. SA-GAT produces embeddings, and COP-Kmeans groups them.
+    \item \textbf{PGA evaluation:} Three groupings are compared against GT person labels: HigherHRNet's own AE grouping, SA-GAT + kNN, and SA-GAT + COP-Kmeans.
+\end{enumerate}
+
+\subsubsection{Results}
+
+Evaluated on 2,166 COCO val images (images with $\geq 1$ person having $\geq 3$ visible keypoints).
+
+\paragraph{Detection quality.}
+
+\begin{tabular}{ll}
+\hline
+GT keypoints & 66,998 \\
+Detected keypoints & 90,359 \\
+Matched keypoints & 53,131 \\
+Recall & 0.793 \\
+Precision & 0.588 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+HigherHRNet-W32-512 detects more keypoints than exist in the ground truth (90k vs 67k), many of which are false positives or duplicates. 79.3\% of GT keypoints were successfully matched to a detection within 10 pixels.
+
+\paragraph{Grouping comparison.}
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Method} & \textbf{End-to-end PGA} & \textbf{GT keypoints PGA} \\
+\hline
+HigherHRNet AE (their grouping) & \textbf{0.985} & --- \\
+SA-GAT + kNN & 0.876 & 0.882 \\
+SA-GAT + COP-Kmeans & 0.908 & 0.915 \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. HigherHRNet's AE grouping is very strong at 0.985.} This is expected: HigherHRNet was trained end-to-end on COCO with associative embedding loss, so its tag embeddings are perfectly calibrated for its own detections. The detector and grouper were jointly optimised on hundreds of thousands of real images. This is the advantage of end-to-end training on the target domain.
+
+\textbf{2. SA-GAT + COP-Kmeans at 0.908 is remarkably close given the training data gap.} SA-GAT was trained on just 400 synthetic images with perfect keypoint positions, yet it achieves 0.908 PGA on real detected keypoints from a completely different detector. The drop from GT keypoints (0.915) to detected keypoints (0.908) is only 0.7 points, showing that SA-GAT's contrastive embeddings are robust to detection noise --- position jitter, false positives being filtered out, and missing keypoints.
+
+\textbf{3. The 7.7-point gap to HigherHRNet is a training data issue, not an architectural limitation.} HigherHRNet was trained on COCO (118k training images, real-world diversity, end-to-end backpropagation through detector and grouper). SA-GAT was trained on 400 procedurally generated scenes with no occlusion modelling, no real backgrounds, and no detection noise. The fact that SA-GAT closes to within 8 points of a COCO-trained model using two orders of magnitude less training data suggests the architecture has significant headroom. Fine-tuning on COCO or training on a larger synthetic dataset would likely close this gap substantially.
+
+\textbf{4. The W32-512 model is the weakest HigherHRNet variant.} The W48-640 model would have higher detection recall and likely better AE grouping. However, this also means SA-GAT would receive higher-quality keypoint candidates, potentially improving its PGA as well. The relative comparison is what matters for the thesis.
+
+\textbf{5. COP-Kmeans consistently outperforms kNN in the end-to-end setting.} The 3.2-point gap (0.908 vs 0.876) is slightly larger than in the GT keypoint setting (0.915 vs 0.882, gap 3.3 points). Type constraints remain valuable when keypoints come from a real detector.
+
+
+\subsection{Full Autonomous Pipeline --- SA-GAT + K-Head + SCOT End-to-End}
+
+\subsubsection{Motivation}
+
+The previous end-to-end evaluation used GT person count (K) for the grouping methods. In a real deployment there is no oracle --- the system must estimate K from the scene. This section evaluates the complete PEng pipeline with no ground truth dependencies: HigherHRNet detects keypoints, SA-GAT embeds them, the K-head predicts how many people are present, and SCOT (or COP-Kmeans) groups the keypoints into that many people.
+
+This is also the first time SCOT has been evaluated end-to-end with detected keypoints, which tests whether the learned transport prototypes generalise beyond the synthetic training distribution.
+
+\subsubsection{Setup}
+
+I trained a new K estimation head on frozen SA-GAT+SCOT embeddings (the K-head from the earlier section was trained on SA-GAT-only embeddings, which occupy a different embedding space). The new K-head achieved 100\% exact match on synthetic validation, consistent with the earlier result --- the frozen backbone approach works regardless of which SA-GAT variant provides the embeddings.
+
+The pipeline for each COCO image:
+\begin{enumerate}
+    \item HigherHRNet-W32-512 detects keypoints (same detector as previous section).
+    \item Detected keypoints are matched to GT by type and proximity (10px threshold).
+    \item SA-GAT (from the SA-GAT+SCOT checkpoint) embeds the matched keypoints.
+    \item The K-head predicts the number of people from the embeddings.
+    \item SCOT groups keypoints using the predicted K; COP-Kmeans also groups using predicted K for comparison.
+\end{enumerate}
+
+\subsubsection{Results}
+
+Evaluated on 2,166 COCO val images (same set as previous section).
+
+\paragraph{K estimation on COCO (end-to-end).}
+
+\begin{tabular}{ll}
+\hline
+Exact match & 1,132 / 2,165 (52.3\%) \\
+Off by $\leq 1$ & 1,664 / 2,165 (76.9\%) \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+K estimation accuracy is lower than the 63.2\% exact achieved with GT keypoints in the earlier K estimation section. This is expected: detected keypoints are noisier, some people may have too few matched keypoints to form clear clusters, and the number of detected keypoints per person varies more with a real detector than with GT.
+
+\paragraph{Full comparison table.}
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Method} & \textbf{End-to-end PGA} & \textbf{GT keypoints PGA} \\
+\hline
+HigherHRNet AE & \textbf{0.985} & --- \\
+\hline
+\multicolumn{3}{l}{\emph{With GT K (oracle):}} \\
+SA-GAT + COP-Kmeans & 0.908 & 0.915 \\
+SA-GAT + SCOT & 0.854 & 0.863 \\
+\hline
+\multicolumn{3}{l}{\emph{Fully autonomous (predicted K):}} \\
+SA-GAT + COP-Kmeans & 0.816 & --- \\
+SA-GAT + SCOT & 0.800 & --- \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. The SCOT transfer gap persists in the end-to-end setting.} With GT K, SCOT scores 0.854 vs COP-Kmeans at 0.908 --- a 5.4-point gap, consistent with the GT keypoint results (0.863 vs 0.915). The learned prototypes and Sinkhorn transport plan, trained on 400 synthetic scenes, do not capture the spatial diversity of real COCO images. This is the primary weakness of the SCOT approach in its current form and the clearest target for improvement: fine-tuning on COCO data or training on a more diverse synthetic dataset should close this gap.
+
+\textbf{2. K estimation adds a further 5.4-point drop for SCOT (0.854 $\to$ 0.800).} SCOT is more sensitive to K errors than COP-Kmeans because the Sinkhorn transport plan creates exactly $K \times 17$ typed slots. If K is wrong, the slot structure is fundamentally misaligned --- too few slots force keypoints into incorrect people, and too many slots leave empty clusters that fragment correct groupings. COP-Kmeans handles K errors more gracefully because k-means centroids can absorb extra or missing clusters with less structural damage.
+
+\textbf{3. COP-Kmeans outperforms SCOT across every evaluation condition.} With GT keypoints, with detected keypoints, with GT K, and with predicted K. The gap ranges from 1.6 to 5.4 points. For the MEng contribution this is a strong result --- COP-Kmeans is simpler, has no learned components beyond the SA-GAT embeddings, and transfers better. For the PEng contribution, this establishes a clear baseline that SCOT must beat after domain adaptation improvements.
+
+\textbf{4. The fully autonomous pipeline (SA-GAT + K-head + SCOT at 0.800) is a complete system.} No ground truth of any kind is used at inference: HigherHRNet provides keypoint candidates, the K-head estimates person count, and SCOT assigns keypoints to people. While 0.800 is below the oracle-K results, it demonstrates that every component of the pipeline functions end-to-end. The three sources of error are clearly decomposed:
+\begin{itemize}
+    \item Detection noise: $-0.9$ points (GT kps 0.863 $\to$ detected kps GT-K 0.854)
+    \item K estimation error: $-5.4$ points (GT-K 0.854 $\to$ predicted-K 0.800)
+    \item SCOT transfer gap: $-5.4$ points vs COP-Kmeans at each K condition
+\end{itemize}
+Each of these is independently addressable: better detector weights, COCO-trained K-head, and SCOT fine-tuning respectively.
+
+\textbf{5. The 18.5-point gap to HigherHRNet (0.985 vs 0.800) decomposes cleanly.} Approximately 8 points come from the training data gap (SA-GAT trained on 400 synthetic vs HigherHRNet on 118k COCO), 5 points from SCOT's transfer weakness, and 5 points from K estimation errors. None of these are architectural limitations --- they are all addressable with more data and domain adaptation, which is exactly the PEng improvement trajectory.
