@@ -6,6 +6,69 @@
 This chapter covers everything that has changed since the last proper labbook entry. I've been bad about keeping up with this so this is a big dump of what happened, what worked, and what didn't.
 
 
+\subsection{Related Work}
+
+This section summarises the existing work that my contributions build on, compete with, or were inspired by. I organise it by problem area rather than chronologically.
+
+\subsubsection{Bottom-up multi-person pose estimation}
+
+Bottom-up methods detect all keypoints in an image first, then group them into individual people. The grouping step is the core problem this thesis addresses.
+
+\textbf{Part Affinity Fields (PAFs).} OpenPose~\cite{cao2017openpose} introduced 2D vector fields that encode limb direction and association strength between pairs of joint types. Grouping is a greedy bipartite matching over the PAF scores. This was the first real-time bottom-up method and remains the most widely known baseline, but the handcrafted matching heuristic limits its accuracy on crowded scenes.
+
+\textbf{Associative Embeddings (AE).} Newell and Deng~\cite{newell2017associative} proposed learning a per-keypoint tag embedding alongside the heatmap detector. Keypoints with similar tags are grouped together via a simple greedy algorithm. HigherHRNet~\cite{cheng2020higherhrnet} extended this with a high-resolution backbone~\cite{sun2019hrnet} and multi-scale heatmap aggregation, achieving strong results on COCO. The AE paradigm is the closest existing work to my contrastive embedding approach --- both learn per-joint embeddings and cluster them. The key difference is that AE is trained end-to-end with the detector on real data, while my SA-GAT operates on a separately constructed graph and is trained on synthetic data with a contrastive loss.
+
+\textbf{Direct regression.} DEKR~\cite{geng2021dekr} bypasses explicit grouping entirely by regressing per-pixel offset vectors from each keypoint to its person centre. The offsets implicitly define the grouping. This is a fundamentally different paradigm --- there is no embedding space and no clustering step.
+
+\textbf{End-to-end transformers.} ED-Pose~\cite{yang2023edpose} and GroupPose~\cite{liu2023grouppose} treat multi-person pose as a set prediction problem using DETR-style architectures. Each query directly predicts a full person skeleton, so detection and grouping are unified in a single transformer decoder. These are the most modern methods (ICLR 2023, ICCV 2023) and achieve state-of-the-art results, but require large-scale training and are architecturally very different from the graph-based approach I investigate.
+
+\subsubsection{GNN-based pose grouping}
+
+A small but growing body of work applies graph neural networks specifically to the keypoint grouping problem.
+
+\textbf{Hierarchical Graph Grouping (HGG).} Jin et al.~\cite{jin2020hgg} cast multi-person pose estimation as a graph clustering problem with keypoints as nodes. They use edge discriminators and macro-node discriminators to hierarchically merge nodes into person clusters. This is the closest prior work to my overall approach --- both use GNNs on keypoint graphs for grouping. The key differences are: (1) HGG uses a hierarchical merging strategy while I use a flat clustering/OT assignment, (2) HGG is trained end-to-end with the detector while my method operates on a separate embedding stage, and (3) HGG does not incorporate skeleton-aware structural priors.
+
+\textbf{CenterGroup.} Bras\'o et al.~\cite{braso2021centergroup} use a transformer to produce context-aware embeddings for detected keypoints and person centres, then apply multi-head cross-attention to directly group joints to their corresponding centres. This is a learned grouping mechanism trained end-to-end, achieving state-of-the-art speed and accuracy. My SA-GAT's type-pair attention bias is conceptually related to CenterGroup's use of attention for grouping, though the architectures differ substantially.
+
+\textbf{Instance-aware attention.} Yang et al.~\cite{yang2023instanceaware} supervise the self-attention weights in a vision transformer to be instance-aware, so that keypoints belonging to the same person attend to each other. The attention matrix directly provides the grouping. This work demonstrates that attention mechanisms can encode grouping structure, which motivates my SA-GAT's repulsion heads that explicitly separate same-type keypoints.
+
+\textbf{Graph Edge Classification (GEC).} Maher et al.~\cite{maher2025gec} published a binary edge classification approach for keypoint grouping in early 2025, using edge features to predict same-person / different-person edges. This is essentially the same idea as my abandoned skeleton-aware edge classifier (Option A), confirming both the viability of the approach and that it had been independently explored.
+
+\subsubsection{Graph clustering with GNNs}
+
+Several general-purpose GNN clustering methods informed my SA-DMoN experiments.
+
+\textbf{DMoN.} Tsitsulin et al.~\cite{tsitsulin2023dmon} proposed Deep Modularity Networks, which learn soft cluster assignments by maximising a differentiable relaxation of the modularity objective from spectral graph theory~\cite{vonluxburg2007spectral}. DMoN was the starting point for my SA-DMoN contribution. My experiments revealed that the modularity objective is fundamentally misaligned with pose grouping: the null model encodes spatial proximity, but communities are defined by identity. No null model modification fixed this (see Experiments 4--10).
+
+\textbf{DiffPool.} Ying et al.~\cite{ying2018diffpool} introduced differentiable soft assignment with a link prediction auxiliary loss for hierarchical graph coarsening. DiffPool's soft assignment mechanism influenced my thinking about assignment matrices, though I ultimately used Sinkhorn OT rather than learned pooling.
+
+\textbf{DC-GNN.} Dong and Klabjan~\cite{dong2024dcgnn} proposed optimal transport-based clustering with Sinkhorn iterations on a bipartite graph of nodes and cluster-nodes. This is the closest general-purpose GNN clustering method to my SCOT approach. The key difference is that SCOT uses typed skeleton slots (each slot expects a specific joint type) rather than generic cluster-nodes, and applies hard type constraints via infinite cost masking.
+
+\subsubsection{Face clustering with GNNs}
+
+GNN-based clustering has been more extensively studied in face recognition, and several ideas transferred to my work.
+
+Yang et al.~\cite{yang2019face} proposed a GCN with edge detection and segmentation modules for face clustering on an affinity graph, establishing that GNNs can effectively predict pairwise same-identity / different-identity relationships. Follow-up work (GCN-V/E)~\cite{yang2020gcnve} separated vertex confidence estimation from edge connectivity prediction. These edge classification approaches inspired my initial skeleton-aware edge classifier direction (Option A), which was later abandoned in favour of SCOT after the GEC paper~\cite{maher2025gec} demonstrated independent parallel work on the same idea.
+
+\subsubsection{Optimal transport in vision}
+
+Optimal transport has been applied to several vision problems, but not to skeleton-constrained keypoint grouping prior to SCOT.
+
+\textbf{Sinkhorn algorithm.} Cuturi~\cite{cuturi2013sinkhorn} introduced entropy-regularised optimal transport with the Sinkhorn-Knopp algorithm, making OT computationally tractable for machine learning. SCOT uses Sinkhorn iterations in log-domain for numerical stability.
+
+\textbf{OTA.} Ge et al.~\cite{ge2021ota} applied OT to label assignment in object detection, using Sinkhorn to optimally match anchors to ground truth boxes. This uses flat, untyped targets --- there is no skeleton structure or type constraint.
+
+\textbf{KPG-RL.} Gu et al.~\cite{gu2022kpgrl} used keypoint-guided OT for heterogeneous domain adaptation, where keypoints guide the transport plan between source and target distributions. Despite the name overlap, this is a completely different problem --- the ``keypoints'' are landmark correspondences for domain alignment, not body joint detections.
+
+\textbf{Slot attention and OT.} Chang et al.~\cite{chang2022slotot} connected slot attention to Sinkhorn OT for object discovery, showing that slot attention's competitive assignment can be interpreted as an OT problem. SCOT's typed slot structure is a more constrained version of this idea, with hard type masks that enforce skeleton semantics.
+
+None of these prior OT methods combine typed slots, skeleton structure, and hard joint-type constraints. This is the novelty that SCOT contributes.
+
+\subsubsection{Constrained clustering}
+
+\textbf{COP-Kmeans.} Wagstaff et al.~\cite{wagstaff2001copkmeans} proposed constrained k-means with must-link and cannot-link constraints. My COP-Kmeans adaptation uses cannot-link constraints between same-type keypoints --- two left elbows cannot belong to the same person. This is a simple but powerful structural prior that requires no learned components beyond the embedding space.
+
+
 \subsection{Dataset Generator Refactor}
 
 The old code had separate files for everything --- \texttt{virtual\_dataloader.py}, \texttt{virtual\_dataset.py}, \texttt{virtual\_preprocessor.py} as well as \texttt{dataloader.py}, \texttt{dataset.py}, \texttt{preprocessor.py}, \texttt{depth\_estimation.py}. The architecture has been updated to use a unified pipeline:
@@ -31,7 +94,7 @@ Two reasons for this:
 
 \subsubsection{Extractor changes}
 
-Keypoint format changed from $[x,y,v]$ to $[x,y,z,v]$ per joint (51 $\to$ 68 values per person). Per-joint depth is strictly better than one depth value per person. $z$ is world-space Euclidean distance from camera to joint in metres --- consistent across all camera positions, matches MiDaS semantics after normalisation.
+Keypoint format changed from $[x,y,v]$ to $[x,y,z,v]$ per joint (51 $\to$ 68 values per person). Per-joint depth is strictly better than one depth value per person. $z$ is world-space Euclidean distance from camera to joint in metres --- consistent across all camera positions, matches MiDaS~\cite{ranftl2020midas} semantics after normalisation.
 
 Visibility changed from $0/2$ to $0/1/2$ with raycast occlusion detection. Occluded joints are real training signal --- marking them as invisible was losing information.
 
@@ -63,7 +126,7 @@ No transforms, no normalisation, no MiDaS --- just reading and reshaping. Everyt
 
 \subsubsection{COCO adapter}
 
-Loads COCO 2017 person keypoint annotations via pycocotools, filters by min/max person count the same way as the virtual adapter. MiDaS DPT\_Hybrid is initialised once at construction time and used to estimate a depth map per image. Depth is then sampled at each keypoint's pixel location.
+Loads COCO 2017~\cite{lin2014coco} person keypoint annotations via pycocotools, filters by min/max person count the same way as the virtual adapter. MiDaS DPT\_Hybrid is initialised once at construction time and used to estimate a depth map per image. Depth is then sampled at each keypoint's pixel location.
 
 Converts from COCO's flat format (51 floats per person, COCO visibility 0/1/2) to the same unified output as the virtual adapter.
 
@@ -141,7 +204,7 @@ The GAT (Graph Attention Network) takes the graph of joints built by the preproc
 The architecture:
 \begin{compactitem}
   \item Each joint starts as a 4-value feature vector $[x, y, z, v]$ plus a learned 32-dim embedding for its joint type (nose, left knee, etc.)
-  \item Two GATv2 layers with 4 attention heads do message passing --- each joint updates its representation by attending to its neighbours
+  \item Two GATv2~\cite{brody2022gatv2} layers with 4 attention heads do message passing --- each joint updates its representation by attending to its neighbours
   \item A final linear projection maps down to 128 dimensions
   \item L2 normalisation so all embeddings live on the unit hypersphere
 \end{compactitem}
@@ -151,7 +214,7 @@ The joint type embedding matters --- a left knee should have different character
 
 \subsubsection{Training (isolation phase)}
 
-The GAT is trained in isolation using contrastive loss only. Pull same-person joint embeddings together, push different-person joint embeddings apart. No grouping head yet --- just verifying the embedding space is structured correctly before adding the next component.
+The GAT is trained in isolation using contrastive loss~\cite{chopra2005contrastive} only. Pull same-person joint embeddings together, push different-person joint embeddings apart. No grouping head yet --- just verifying the embedding space is structured correctly before adding the next component.
 
 Config:
 \begin{verbatim}
@@ -575,7 +638,7 @@ right ankle & 0.777 & 0.714 & 0.748 \\
 
 \subsubsection{What DMoN is}
 
-DMoN (Deep Modularity Networks) is a differentiable graph clustering method from Tsitsulin et al.\ (2023). It learns to partition a graph into communities by maximising a differentiable relaxation of the modularity objective from spectral graph theory.
+DMoN (Deep Modularity Networks) is a differentiable graph clustering method from Tsitsulin et al.~\cite{tsitsulin2023dmon}. It learns to partition a graph into communities by maximising a differentiable relaxation of the modularity objective from spectral graph theory~\cite{vonluxburg2007spectral}.
 
 Given a graph with adjacency matrix $A$, find a soft assignment matrix $S \in \mathbb{R}^{N \times K}$ where $S_{ik}$ is the probability that node $i$ belongs to cluster $k$. DMoN optimises three losses simultaneously:
 
@@ -1246,7 +1309,7 @@ C_{i,(k,t)} = \begin{cases}
 
 where $h_i$ is the encoded GAT embedding for keypoint $i$ and $p_k$ is a learned prototype for person $k$. The infinity costs mean that the Sinkhorn solver \textbf{cannot} assign a left elbow to a right knee slot. It is not penalised --- it is structurally impossible.
 
-The transport plan is computed via differentiable Sinkhorn-Knopp iterations in log domain:
+The transport plan is computed via differentiable Sinkhorn-Knopp~\cite{cuturi2013sinkhorn} iterations in log domain:
 \begin{compactitem}
   \item Source marginal: each keypoint assigned to exactly one slot (row sum = 1)
   \item Target marginal: each person-type slot gets at most one keypoint (column sum $\leq 1$)
@@ -1257,7 +1320,7 @@ Person-level logits are obtained by summing the transport plan over type slots p
 
 \subsubsection{Why this is novel}
 
-Standard optimal transport for assignment (e.g.\ OTA for object detection) uses flat targets --- anchors assigned to objects with no typed structure. SCOT has a two-level structure: person level and keypoint-type level. The target is not just $K$ persons but $K \times 17$ typed slots. This hierarchical typed target is specific to the pose problem.
+Standard optimal transport for assignment (e.g.\ OTA~\cite{ge2021ota} for object detection) uses flat targets --- anchors assigned to objects with no typed structure. SCOT has a two-level structure: person level and keypoint-type level. The target is not just $K$ persons but $K \times 17$ typed slots. This hierarchical typed target is specific to the pose problem.
 
 The same-type exclusivity is now impossible to violate by construction rather than discouraged by a penalty. Two left elbows competing for the same person will be forced into different person slots because there is only one left-elbow slot per person. This is fundamentally different from DMoN's $\|\mathrm{ReLU}(M^\top S - 1)\|_F^2$ which can only discourage violations after they occur.
 
@@ -2027,7 +2090,7 @@ K-free inference remains a valuable direction for future work. Both approaches t
 
 SCOT demonstrated that the type constraint is the key contribution --- hard enforcement that no two keypoints of the same type can be assigned to the same person. But SCOT wraps this constraint inside a learned optimal transport formulation with person prototypes, Sinkhorn iterations, and supervised training. What if the constraint is applied directly to the kNN baseline instead?
 
-COP-Kmeans (Wagstaff et al.\ 2001) extends standard k-means with \textbf{must-not-link constraints}: pairs of points that are forbidden from being in the same cluster. For pose grouping, the constraints are simple: any two keypoints of the same type cannot be in the same cluster. A left elbow and another left elbow must be in different person clusters.
+COP-Kmeans~\cite{wagstaff2001copkmeans} (Wagstaff et al.\ 2001) extends standard k-means with \textbf{must-not-link constraints}: pairs of points that are forbidden from being in the same cluster. For pose grouping, the constraints are simple: any two keypoints of the same type cannot be in the same cluster. A left elbow and another left elbow must be in different person clusters.
 
 This is the minimal possible intervention on the kNN baseline --- the same algorithm, the same embeddings, the same $K$, with one additional constraint. No training required. If the type constraint is the reason SCOT works, COP-Kmeans should capture most of the benefit without any of the complexity.
 
@@ -2905,17 +2968,17 @@ Key design decisions:
 Previous frozen results from all experiments up to this point were preserved \texttt{outputs/frozen\_checkpoints/}.
 
 
-\subsection{End-to-End Evaluation --- HigherHRNet Detection + SA-GAT Grouping}
+\subsection{End-to-End Evaluation --- HigherHRNet~\cite{cheng2020higherhrnet} Detection + SA-GAT Grouping}
 
 \subsubsection{Motivation}
 
-All experiments up to this point assume ground truth keypoint locations. This is useful for isolating the grouping contribution, but does not reflect a real deployment scenario where keypoints must first be detected. To compare against published methods like HigherHRNet, DEKR, and ED-Pose, I need to evaluate on the same terms they use: raw images in, per-person poses out.
+All experiments up to this point assume ground truth keypoint locations. This is useful for isolating the grouping contribution, but does not reflect a real deployment scenario where keypoints must first be detected. To compare against published methods like HigherHRNet, DEKR~\cite{geng2021dekr}, and ED-Pose~\cite{yang2023edpose}, I need to evaluate on the same terms they use: raw images in, per-person poses out.
 
 The obvious approach would be to isolate each method's grouping stage --- feed GT keypoints into their grouping logic and compare directly. However, this would require deep surgery into each model's codebase to bypass detection and inject GT keypoints. These models tightly couple detection and grouping (e.g.\ HigherHRNet jointly predicts heatmaps and associative embedding tags in a single forward pass), making clean separation impractical without risking subtle bugs that would invalidate the comparison.
 
 Instead, I chose the end-to-end approach: let every method run its complete pipeline on the same images, then compare the final per-person keypoint assignments. This means each method uses its own detector, so differences in detection quality are conflated with differences in grouping quality. The caveat is clear: \emph{a better detector gives the grouper easier inputs}. To make this concrete, I also pair SA-GAT with the same HigherHRNet detector, so the comparison between HigherHRNet's AE grouping and SA-GAT's COP-Kmeans grouping uses identical detections --- isolating the grouping contribution without any model surgery.
 
-This also enables direct comparison against HigherHRNet's own associative embedding (AE) grouping, which is trained end-to-end on COCO --- a much stronger training signal than the ~400 synthetic images.
+This also enables direct comparison against HigherHRNet's own associative embedding~\cite{newell2017associative} (AE) grouping, which is trained end-to-end on COCO --- a much stronger training signal than the ~400 synthetic images.
 
 \subsubsection{Setup}
 

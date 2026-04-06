@@ -25,3 +25,254 @@
   year={2016},
   publisher={Springer New York}
 }
+
+% ─────────────────────────────────────────────────────────────────────────────
+% Core architecture: GAT / GNN foundations
+% ─────────────────────────────────────────────────────────────────────────────
+
+@inproceedings{velickovic2018gat,
+  title={Graph Attention Networks},
+  author={Veli{\v{c}}kovi{\'c}, Petar and Cucurull, Guillem and Casanova, Arantxa and Romero, Adriana and Li{\`o}, Pietro and Bengio, Yoshua},
+  booktitle={International Conference on Learning Representations (ICLR)},
+  year={2018}
+}
+
+@inproceedings{brody2022gatv2,
+  title={How Attentive are Graph Attention Networks?},
+  author={Brody, Shaked and Alon, Uri and Yahav, Eran},
+  booktitle={International Conference on Learning Representations (ICLR)},
+  year={2022}
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% Bottom-up pose estimation: foundational methods
+% ─────────────────────────────────────────────────────────────────────────────
+
+@inproceedings{cao2017openpose,
+  title={Realtime Multi-Person {2D} Pose Estimation Using Part Affinity Fields},
+  author={Cao, Zhe and Simon, Tomas and Wei, Shih-En and Sheikh, Yaser},
+  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year={2017}
+}
+
+@inproceedings{newell2017associative,
+  title={Associative Embedding: End-to-End Learning for Joint Detection and Grouping},
+  author={Newell, Alejandro and Huang, Zhiao and Deng, Jia},
+  booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
+  year={2017}
+}
+
+@inproceedings{sun2019hrnet,
+  title={Deep High-Resolution Representation Learning for Human Pose Estimation},
+  author={Sun, Ke and Xiao, Bin and Liu, Dong and Wang, Jingdong},
+  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year={2019}
+}
+
+@inproceedings{cheng2020higherhrnet,
+  title={{HigherHRNet}: Scale-Aware Representation Learning for Bottom-Up Human Pose Estimation},
+  author={Cheng, Bowen and Xiao, Bin and Wang, Jingdong and Shi, Honghui and Huang, Thomas S. and Zhang, Lei},
+  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year={2020}
+}
+
+@inproceedings{geng2021dekr,
+  title={Bottom-Up Human Pose Estimation Via Disentangled Keypoint Regression},
+  author={Geng, Zigang and Sun, Ke and Xiao, Bin and Zhang, Zhaoxiang and Wang, Jingdong},
+  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year={2021}
+}
+
+@inproceedings{yang2023edpose,
+  title={Explicit Box Detection Unifies End-to-End Multi-Person Pose Estimation},
+  author={Yang, Jie and Zeng, Ailing and Li, Feng and Liu, Shilong and Zhang, Ruimao and Zhang, Lei},
+  booktitle={International Conference on Learning Representations (ICLR)},
+  year={2023}
+}
+
+@inproceedings{liu2023grouppose,
+  title={Group Pose: A Simple Baseline for End-to-End Multi-Person Pose Estimation},
+  author={Liu, Huan and Chen, Qiang and Tan, Zichang and Liu, Jiangjiang and Wang, Jian and Su, Xiangbo and Li, Xiaolong and Yao, Kun and Han, Junyu and Ding, Errui and others},
+  booktitle={IEEE International Conference on Computer Vision (ICCV)},
+  year={2023}
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% Pose grouping with GNNs and attention
+% ─────────────────────────────────────────────────────────────────────────────
+
+@inproceedings{jin2020hgg,
+  title={Differentiable Hierarchical Graph Grouping for Multi-Person Pose Estimation},
+  author={Jin, Sheng and Liu, Wentao and Xie, Enze and Wang, Wenhai and Qian, Chen and Ouyang, Wanli and Luo, Ping},
+  booktitle={European Conference on Computer Vision (ECCV)},
+  year={2020}
+}
+
+@inproceedings{braso2021centergroup,
+  title={The Center of Attention: Center-Keypoint Grouping via Attention for Multi-Person Pose Estimation},
+  author={Bras{\'o}, Guillem and Kister, Nikita and Leal-Taix{\'e}, Laura},
+  booktitle={IEEE International Conference on Computer Vision (ICCV)},
+  pages={11853--11863},
+  year={2021}
+}
+
+@article{yang2023instanceaware,
+  title={Detecting and Grouping Keypoints for Multi-Person Pose Estimation using Instance-Aware Attention},
+  author={Yang, Sen and Feng, Ze and Wang, Zhicheng and Li, Yanjie and Zhang, Shoukui and Quan, Zhibin and Xia, Shu-Tao and Yang, Wankou},
+  journal={Pattern Recognition},
+  volume={136},
+  pages={109232},
+  year={2023},
+  publisher={Elsevier}
+}
+
+@article{maher2025gec,
+  title={Graph Edge Classification for Keypoint Grouping in Multi-Person Pose Estimation},
+  author={Maher, Marwan and Fathalla, Radwa and Shaheen, Mohamed},
+  journal={Journal of Image and Graphics},
+  volume={13},
+  number={2},
+  pages={130--139},
+  year={2025}
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% GNN clustering methods (not pose-specific)
+% ─────────────────────────────────────────────────────────────────────────────
+
+@article{tsitsulin2023dmon,
+  title={Graph Clustering with Graph Neural Networks},
+  author={Tsitsulin, Anton and Palowitch, John and Perozzi, Bryan and M{\"u}ller, Emmanuel},
+  journal={Journal of Machine Learning Research},
+  volume={24},
+  number={127},
+  pages={1--21},
+  year={2023}
+}
+
+@inproceedings{ying2018diffpool,
+  title={Hierarchical Graph Representation Learning with Differentiable Pooling},
+  author={Ying, Rex and You, Jiaxuan and Morris, Christopher and Ren, Xiang and Hamilton, William L. and Leskovec, Jure},
+  booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
+  year={2018}
+}
+
+@article{dong2024dcgnn,
+  title={Differentiable Cluster Graph Neural Network},
+  author={Dong, Yanfei and Klabjan, Diego},
+  journal={arXiv preprint arXiv:2405.16185},
+  year={2024}
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% Face clustering with GNNs (edge prediction)
+% ─────────────────────────────────────────────────────────────────────────────
+
+@inproceedings{yang2019face,
+  title={Learning to Cluster Faces on an Affinity Graph},
+  author={Yang, Lei and Zhan, Xiaohang and Chen, Dapeng and Yan, Junjie and Loy, Chen Change and Lin, Dahua},
+  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year={2019}
+}
+
+@inproceedings{yang2020gcnve,
+  title={Learning to Cluster Faces via Confidence and Connectivity Estimation},
+  author={Yang, Lei and Chen, Dapeng and Zhan, Xiaohang and Zhao, Rui and Loy, Chen Change and Lin, Dahua},
+  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year={2020}
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% Optimal transport
+% ─────────────────────────────────────────────────────────────────────────────
+
+@inproceedings{cuturi2013sinkhorn,
+  title={Sinkhorn Distances: Lightspeed Computation of Optimal Transport},
+  author={Cuturi, Marco},
+  booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
+  year={2013}
+}
+
+@inproceedings{ge2021ota,
+  title={{OTA}: Optimal Transport Assignment for Object Detection},
+  author={Ge, Zheng and Liu, Songtao and Li, Zeming and Yoshie, Osamu and Sun, Jian},
+  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={303--312},
+  year={2021}
+}
+
+@inproceedings{gu2022kpgrl,
+  title={Keypoint-Guided Optimal Transport with Applications in Heterogeneous Domain Adaptation},
+  author={Gu, Xiang and Yang, Yucheng and Zeng, Wei and Sun, Jian and Xu, Zongben},
+  booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
+  year={2022}
+}
+
+@article{chang2022slotot,
+  title={Unlocking Slot Attention by Changing Optimal Transport Costs},
+  author={Chang, Yan and Bauer, Stefan and Sitzmann, Vincent and Duckworth, Daniel and Fidler, Sanja},
+  journal={ICML Workshop on Spurious Correlations},
+  year={2022}
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% Contrastive learning
+% ─────────────────────────────────────────────────────────────────────────────
+
+@inproceedings{chopra2005contrastive,
+  title={Learning a Similarity Metric Discriminatively, with Application to Face Verification},
+  author={Chopra, Sumit and Hadsell, Raia and LeCun, Yann},
+  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year={2005}
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% Constrained clustering
+% ─────────────────────────────────────────────────────────────────────────────
+
+@inproceedings{wagstaff2001copkmeans,
+  title={Constrained K-Means Clustering with Background Knowledge},
+  author={Wagstaff, Kiri and Cardie, Claire and Rogers, Seth and Schr{\"o}dl, Stefan},
+  booktitle={International Conference on Machine Learning (ICML)},
+  pages={577--584},
+  year={2001}
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% Spectral clustering
+% ─────────────────────────────────────────────────────────────────────────────
+
+@article{vonluxburg2007spectral,
+  title={A Tutorial on Spectral Clustering},
+  author={Von Luxburg, Ulrike},
+  journal={Statistics and Computing},
+  volume={17},
+  number={4},
+  pages={395--416},
+  year={2007}
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% Depth estimation
+% ─────────────────────────────────────────────────────────────────────────────
+
+@article{ranftl2020midas,
+  title={Towards Robust Monocular Depth Estimation: Mixing Datasets for Zero-Shot Cross-Dataset Transfer},
+  author={Ranftl, Ren{\'e} and Lasinger, Katrin and Hafner, David and Schindler, Konrad and Koltun, Vladislav},
+  journal={IEEE Transactions on Pattern Analysis and Machine Intelligence},
+  volume={44},
+  number={3},
+  pages={1623--1637},
+  year={2022}
+}
+
+% ─────────────────────────────────────────────────────────────────────────────
+% COCO dataset
+% ─────────────────────────────────────────────────────────────────────────────
+
+@inproceedings{lin2014coco,
+  title={{Microsoft COCO}: Common Objects in Context},
+  author={Lin, Tsung-Yi and Maire, Michael and Belongie, Serge and Hays, James and Perona, Pietro and Ramanan, Deva and Doll{\'a}r, Piotr and Zitnick, C. Lawrence},
+  booktitle={European Conference on Computer Vision (ECCV)},
+  year={2014}
+}
