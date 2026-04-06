@@ -153,6 +153,7 @@ def evaluate(
         from coco_adapter import CocoAdapter
         adapter = CocoAdapter(
             img_dir=coco_img_dir, ann_file=coco_ann_file, device=device,
+            use_depth=use_depth,
         )
         print(f"Evaluating on COCO: {coco_ann_file.name}")
     elif virtual_dir is not None:

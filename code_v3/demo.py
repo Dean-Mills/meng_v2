@@ -184,12 +184,14 @@ def main():
         raise ValueError("Checkpoint does not contain a SCOT head")
 
     # ── Load COCO adapter ──────────────────────────────────────────────
+    use_depth = cfg.sa_gat.use_depth if cfg.sa_gat is not None else cfg.gat.use_depth
     adapter = CocoAdapter(
         img_dir=args.coco_img_dir,
         ann_file=args.coco_ann_file,
         min_people=args.min_people,
         max_people=args.max_people,
         device=args.device,
+        use_depth=use_depth,
     )
     dataset = PoseDataset(adapter)
 

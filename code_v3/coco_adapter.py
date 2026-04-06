@@ -47,12 +47,14 @@ class CocoAdapter:
         min_people: int = 1,
         max_people: Optional[int] = None,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        use_depth: bool = True,
     ):
         self.img_dir    = Path(img_dir)
         self.ann_file   = Path(ann_file)
         self.min_people = min_people
         self.max_people = max_people
         self.device     = device
+        self.use_depth  = use_depth
 
         if not self.img_dir.exists():
             raise ValueError(f"COCO image directory not found: {self.img_dir}")
@@ -75,18 +77,24 @@ class CocoAdapter:
             f"(people: {min_people}–{max_people or '∞'})"
         )
 
-        # ── MiDaS ─────────────────────────────────────────────────────────
-        print(f"Loading MiDaS DPT_Hybrid on {device}...")
-        import torch.nn as nn
-        self.depth_model: nn.Module = torch.hub.load(  # type: ignore[assignment]
-            "intel-isl/MiDaS", "DPT_Hybrid", verbose=False
-        )
-        self.depth_model.to(self.device)
-        self.depth_model.eval()
+        # ── MiDaS (only if depth is needed) ───────────────────────────────
+        self.depth_model     = None
+        self.depth_transform = None
 
-        midas_transforms     = torch.hub.load("intel-isl/MiDaS", "transforms", verbose=False)
-        self.depth_transform = midas_transforms.dpt_transform  # type: ignore[union-attr]
-        print("MiDaS ready.")
+        if self.use_depth:
+            print(f"Loading MiDaS DPT_Hybrid on {device}...")
+            import torch.nn as nn
+            self.depth_model: nn.Module = torch.hub.load(  # type: ignore[assignment]
+                "intel-isl/MiDaS", "DPT_Hybrid", verbose=False
+            )
+            self.depth_model.to(self.device)
+            self.depth_model.eval()
+
+            midas_transforms     = torch.hub.load("intel-isl/MiDaS", "transforms", verbose=False)
+            self.depth_transform = midas_transforms.dpt_transform  # type: ignore[union-attr]
+            print("MiDaS ready.")
+        else:
+            print("Depth disabled — skipping MiDaS.")
 
     # ── Indexing ──────────────────────────────────────────────────────────────
 
@@ -176,10 +184,10 @@ class CocoAdapter:
         elif image.shape[0] > 3:
             image = image[:3]
 
-        # ── Estimate depth ────────────────────────────────────────────────
-        depth_map = self._estimate_depth(image)     # [H, W]
+        # ── Estimate depth (only if needed) ───────────────────────────────
+        depth_map = self._estimate_depth(image) if self.use_depth else None
 
-        # ── Extract keypoints with depth ──────────────────────────────────
+        # ── Extract keypoints ─────────────────────────────────────────────
         anns      = self._get_person_anns(img_id)
         keypoints: List[torch.Tensor] = []
 
@@ -198,16 +206,16 @@ class CocoAdapter:
                     # Not labeled — no position information
                     kps[j] = [-1.0, -1.0, 0.0, 0]
                 elif v == 1:
-                    # Labeled but occluded — real position, sample depth
+                    # Labeled but occluded — real position
                     kps[j, 0] = x
                     kps[j, 1] = y
-                    kps[j, 2] = self._sample_depth(depth_map, x, y)
+                    kps[j, 2] = self._sample_depth(depth_map, x, y) if depth_map is not None else 0.0
                     kps[j, 3] = 1
                 else:
-                    # Fully visible — real position, sample depth
+                    # Fully visible — real position
                     kps[j, 0] = x
                     kps[j, 1] = y
-                    kps[j, 2] = self._sample_depth(depth_map, x, y)
+                    kps[j, 2] = self._sample_depth(depth_map, x, y) if depth_map is not None else 0.0
                     kps[j, 3] = 2
 
             keypoints.append(torch.tensor(kps, dtype=torch.float32))

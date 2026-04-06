@@ -493,6 +493,7 @@ class Evaluator:
                 img_dir=coco_img_dir,
                 ann_file=coco_ann_file,
                 device=self.device,
+                use_depth=self._use_depth,
             )
             print(f"Evaluating on COCO: {coco_ann_file.name}")
         elif virtual_dir is not None:
