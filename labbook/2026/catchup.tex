@@ -3262,3 +3262,32 @@ HigherHRNet-W32 (full model) & 28,645,331 & 109.27 \\
 SA-GAT is \textbf{168$\times$ smaller} than HigherHRNet. The full PEng pipeline (SA-GAT + K-head + SCOT) is \textbf{127$\times$ smaller}. This comparison is not entirely apples-to-apples --- HigherHRNet includes the image backbone and heatmap decoder while SA-GAT only handles grouping --- but it highlights that the grouping problem can be solved with a very small model. SA-GAT adds only 9,952 parameters over the standard GAT (a 6.2\% increase), demonstrating that the three skeleton-aware modifications (type-pair attention, position encoding, repulsion heads) are lightweight architectural changes, not heavy additions.
 
 COP-Kmeans adds zero learned parameters. The entire MEng grouping contribution, from embedding to final person assignment, fits in 0.65\,MB.
+
+
+\subsection{Summary and Outlook}
+
+\subsubsection{Where things stand}
+
+The MEng contribution is in strong shape. SA-GAT (a GATv2-based embedding network with three skeleton-aware modifications: type-pair attention bias, skeleton-relative position encoding, and same-type repulsion heads) combined with COP-Kmeans (constrained k-means with must-not-link constraints between same-type keypoints) achieves \textbf{0.968 PGA on COCO val} with GT keypoints after fine-tuning, and \textbf{0.955 PGA end-to-end} with HigherHRNet-detected keypoints. This is within 3 points of HigherHRNet's own jointly-trained associative embedding grouping (0.985), using a model that is 168$\times$ smaller and was pre-trained on just 400 synthetic images before 20 epochs of COCO fine-tuning. COP-Kmeans adds zero learned parameters --- the type constraints are a hard architectural prior, not a trained component.
+
+The journey to get here involved a significant amount of negative results that informed the final design:
+\begin{itemize}
+    \item \textbf{Slot attention} (0.824 synthetic) --- learned grouping head, but did not outperform kNN on the same embeddings.
+    \item \textbf{Graph partitioning / edge classification} (0.828 synthetic) --- binary edge classifier for same-person/different-person edges. Reasonable on synthetic data, but the fixed threshold did not transfer to COCO. Independently published as GEC~\cite{maher2025gec} in early 2025.
+    \item \textbf{SA-DMoN v1 and v2} (0.77--0.81 synthetic across 10 experiments) --- skeleton-aware modifications to DMoN's modularity-based clustering. Exhaustively demonstrated that modularity is fundamentally misaligned with pose grouping: the kNN graph encodes spatial proximity, but communities are defined by identity. No null model formulation fixed this.
+    \item \textbf{DEC} (0.654 synthetic) --- deep embedded clustering, worse than all other approaches.
+\end{itemize}
+
+These failures were not wasted work --- they systematically eliminated entire paradigms (modularity-based clustering, unsupervised deep clustering, fixed-threshold edge classification) and motivated the final design choices: contrastive embeddings with hard structural constraints rather than learned clustering objectives.
+
+\subsubsection{The PEng concern}
+
+The PEng contribution is the full autonomous pipeline: SA-GAT $\to$ K-head $\to$ SCOT (Skeleton-Constrained Optimal Transport). SCOT uses Sinkhorn iterations~\cite{cuturi2013sinkhorn} with typed skeleton slots and hard type constraints via infinite cost masking to assign keypoints to people. The K-head is a small MLP trained on frozen SA-GAT embeddings to predict person count.
+
+The concern is SCOT's transfer performance. On synthetic data, SCOT (0.926) is competitive with COP-Kmeans (0.925). But on COCO, SCOT drops to 0.863 while COP-Kmeans achieves 0.915 --- a 5.2-point gap. The fully autonomous pipeline (SA-GAT + K-head + SCOT with predicted K) scores 0.800 on COCO end-to-end, compared to COP-Kmeans' 0.816 with predicted K.
+
+The issue is that SCOT has learned components (prototypes, Sinkhorn temperature) that overfit to the synthetic training distribution. COP-Kmeans has no learned grouping components, so it transfers almost perfectly. This is the fundamental trade-off: SCOT is architecturally more sophisticated (differentiable OT with skeleton structure, typed slots, iterative refinement) but pays for that sophistication with a domain adaptation cost.
+
+The path forward for the PEng is: fine-tune SCOT on COCO the same way I fine-tuned SA-GAT. The infrastructure is already in place (COCO training support in the trainer, GUID-based run management, end-to-end evaluation pipeline). If SCOT fine-tuning closes the gap to COP-Kmeans --- or ideally surpasses it --- the PEng contribution is validated. If it does not, the thesis can still present SCOT as a novel architecture with a clear analysis of where and why learned OT grouping struggles compared to constraint-based clustering, which is itself a contribution to understanding.
+
+Either way, the SA-GAT embedding network, the contrastive training framework, the type-constraint methodology, and the end-to-end evaluation infrastructure are shared between both degrees and are demonstrably strong.
