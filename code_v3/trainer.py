@@ -240,8 +240,21 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
         use_depth = cfg.gat.use_depth
 
     # ── Data ──────────────────────────────────────────────────────────────────
-    train_loader = _make_loader(virtual_dir, "train", tc.batch_size, tc.num_workers)
-    val_loader   = _make_loader(virtual_dir, "val",   tc.batch_size, 0)
+    if tc.coco_train_dir is not None and tc.coco_train_ann is not None:
+        from coco_adapter import CocoAdapter
+        train_adapter = CocoAdapter(
+            img_dir=Path(tc.coco_train_dir),
+            ann_file=Path(tc.coco_train_ann),
+            use_depth=use_depth,
+        )
+        train_dataset = PoseDataset(train_adapter)
+        train_loader = create_dataloader(train_dataset, batch_size=tc.batch_size,
+                                         shuffle=True, num_workers=tc.num_workers)
+    else:
+        train_loader = _make_loader(virtual_dir, "train", tc.batch_size, tc.num_workers)
+
+    # Validation always on virtual (consistent benchmark)
+    val_loader = _make_loader(virtual_dir, "val", tc.batch_size, 0)
 
     k_neighbors  = 16 if embedding_dim >= 256 else 8
     preprocessor = PosePreprocessor(device=device, k_neighbors=k_neighbors,
@@ -249,6 +262,15 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
     head = _build_head(cfg, embedding_dim=embedding_dim)
     if head is not None:
         head = head.to(device)
+
+    # ── Load pretrained weights (for fine-tuning) ─────────────────────────────
+    if tc.pretrained is not None:
+        pretrained_ckpt = torch.load(tc.pretrained, map_location=device,
+                                     weights_only=False)
+        gat.load_state_dict(pretrained_ckpt["gat_state"])
+        if head is not None and pretrained_ckpt.get("head_state") is not None:
+            head.load_state_dict(pretrained_ckpt["head_state"])
+        print(f"Loaded pretrained weights from {tc.pretrained}")
 
     head_name = (
         "slot_attention"     if cfg.slot_attention     is not None else

@@ -162,6 +162,11 @@ class SADMoNConfig(BaseModel):
 class TrainingConfig(BaseModel):
     # Data paths — expect train/ val/ test/ subdirectories of virtual_dir
     virtual_dir:   str = "data/virtual"
+    # COCO fine-tuning (optional — if set, trains on COCO instead of virtual)
+    coco_train_dir:  Optional[str] = None   # e.g. "data/coco2017/train2017"
+    coco_train_ann:  Optional[str] = None   # e.g. "data/coco2017/annotations/person_keypoints_train2017.json"
+    # Pre-trained checkpoint to load before training (for fine-tuning)
+    pretrained:      Optional[str] = None
     # Loader
     batch_size:    int   = 4
     num_workers:   int   = 4

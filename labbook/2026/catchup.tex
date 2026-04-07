@@ -3110,3 +3110,155 @@ SA-GAT + SCOT & 0.800 & --- \\
 Each of these is independently addressable: better detector weights, COCO-trained K-head, and SCOT fine-tuning respectively.
 
 \textbf{5. The 18.5-point gap to HigherHRNet (0.985 vs 0.800) decomposes cleanly.} Approximately 8 points come from the training data gap (SA-GAT trained on 400 synthetic vs HigherHRNet on 118k COCO), 5 points from SCOT's transfer weakness, and 5 points from K estimation errors. None of these are architectural limitations --- they are all addressable with more data and domain adaptation, which is exactly the PEng improvement trajectory.
+
+
+\subsection{COCO Fine-Tuning --- Closing the Transfer Gap}
+
+\subsubsection{Motivation}
+
+The previous sections identified the synthetic-to-real transfer gap as the primary performance bottleneck. SA-GAT trained on 400 synthetic images achieved 0.915 COCO PGA with COP-Kmeans --- strong, but 7 points behind HigherHRNet's 0.985 in the end-to-end comparison. The question was whether this gap is architectural or simply a training data issue. Fine-tuning on COCO train2017 directly tests this.
+
+\subsubsection{Setup}
+
+I added COCO training support to the trainer --- an optional \texttt{coco\_train\_dir} and \texttt{coco\_train\_ann} in the training config, plus a \texttt{pretrained} field to load existing weights before training. When COCO paths are set, the trainer uses the CocoAdapter for training data instead of VirtualAdapter. Validation remains on synthetic data for consistent benchmarking. All changes are backwards-compatible: existing configs are unaffected since the new fields default to \texttt{None}.
+
+Fine-tuning configuration:
+\begin{itemize}
+    \item Pre-trained on: SA-GAT full (400 synthetic images, 50 epochs)
+    \item Fine-tuned on: COCO train2017 (56,599 images with people)
+    \item Learning rate: $1 \times 10^{-4}$ (10$\times$ lower than pre-training)
+    \item LR minimum: $1 \times 10^{-6}$
+    \item Epochs: 20 (each epoch processes all 56k images)
+    \item Head: contrastive loss only (kNN grouping, no learned head)
+    \item Depth: disabled (\texttt{use\_depth: false}, MiDaS skipped)
+\end{itemize}
+
+Training took approximately 88 minutes (20 epochs $\times$ $\sim$264s per epoch). The loss decreased steadily from 0.095 to 0.060, and validation PGA improved every second epoch, reaching a best of 0.920 at epoch 20 --- still climbing, suggesting further epochs would help.
+
+\subsubsection{Results --- GT keypoints}
+
+\paragraph{Synthetic test set (100 images).}
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Method} & \textbf{Before fine-tuning} & \textbf{After fine-tuning} \\
+\hline
+SA-GAT + kNN & 0.910 & 0.928 \\
+SA-GAT + COP-Kmeans & 0.925 & \textbf{0.938} \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Fine-tuning on COCO did not hurt synthetic performance --- it improved it by 1.3--1.8 points. The model learned more general representations that benefit both domains.
+
+\paragraph{COCO val2017 (2,346 images, GT keypoints).}
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Method} & \textbf{Before fine-tuning} & \textbf{After fine-tuning} \\
+\hline
+SA-GAT + kNN & 0.882 & 0.957 \\
+SA-GAT + COP-Kmeans & 0.915 & \textbf{0.968} \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+\textbf{COCO PGA with COP-Kmeans jumped from 0.915 to 0.968 --- a 5.3-point improvement.} This is the single largest improvement in the entire project and confirms that the transfer gap was a training data issue, not an architectural limitation. The kNN improvement is even larger (+7.5 points), showing the embedding space became dramatically more structured on real data.
+
+\paragraph{Per-joint accuracy on COCO (COP-Kmeans, fine-tuned).}
+
+\begin{tabular}{lr}
+\hline
+\textbf{Joint} & \textbf{PGA} \\
+\hline
+nose & 0.969 \\
+left\_eye & 0.964 \\
+right\_eye & 0.968 \\
+left\_ear & 0.958 \\
+right\_ear & 0.958 \\
+left\_shoulder & 0.943 \\
+right\_shoulder & 0.950 \\
+left\_elbow & 0.939 \\
+right\_elbow & 0.937 \\
+left\_wrist & 0.926 \\
+right\_wrist & 0.925 \\
+left\_hip & 0.958 \\
+right\_hip & 0.963 \\
+left\_knee & 0.939 \\
+right\_knee & 0.936 \\
+left\_ankle & 0.927 \\
+right\_ankle & 0.927 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Every joint type exceeds 0.92. The weakest joints (wrists, ankles) improved the most from fine-tuning --- these are exactly the joints most affected by the synthetic-to-real distribution shift (real occlusion patterns, cluttered backgrounds, varied body proportions).
+
+\subsubsection{Results --- End-to-end (detected keypoints)}
+
+Using the same HigherHRNet-W32-512 detector and evaluation protocol as the previous end-to-end sections, on 2,166 COCO val images:
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Method} & \textbf{Before fine-tuning} & \textbf{After fine-tuning} \\
+\hline
+HigherHRNet AE & 0.985 & 0.985 \\
+SA-GAT + kNN & 0.876 & 0.942 \\
+SA-GAT + COP-Kmeans & 0.908 & \textbf{0.955} \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+\textbf{The gap to HigherHRNet closed from 7.7 points to 3.0 points.} SA-GAT + COP-Kmeans at 0.955 is now competitive with HigherHRNet's 0.985, and this comparison slightly favours HigherHRNet because its AE grouping was jointly trained with its detector while SA-GAT was trained separately.
+
+\subsubsection{Analysis}
+
+\textbf{1. The transfer gap was almost entirely a training data issue.} 20 epochs of COCO fine-tuning closed 5.3 of the original 7.7-point gap on GT keypoints, and 4.7 of the 7.7-point end-to-end gap. The SA-GAT architecture was already capable of strong performance --- it just needed to see real data. The remaining 3-point gap to HigherHRNet is likely closable with more epochs (the loss was still decreasing), a stronger detector (W48-640), or fine-tuning the detector jointly.
+
+\textbf{2. COCO fine-tuning did not hurt synthetic performance.} Both kNN and COP-Kmeans improved on synthetic data after COCO fine-tuning (0.910 $\to$ 0.928 and 0.925 $\to$ 0.938 respectively). The contrastive loss learns a distance metric, and seeing more diverse real-world scenes makes that metric more robust, not more specialised. This is an important practical result --- fine-tuning on the target domain has no catastrophic forgetting penalty.
+
+\textbf{3. COP-Kmeans consistently adds $\sim$1 point over kNN after fine-tuning.} The gap narrowed from 3.3 points (synthetic-only) to 1.1--1.3 points after fine-tuning. This makes sense: better embeddings make the clustering problem easier, so the type constraints add less marginal value. But COP-Kmeans still consistently outperforms kNN in every condition, confirming the structural prior remains useful.
+
+\textbf{4. The 0.968 COCO PGA with GT keypoints is the strongest result in this project.} For context:
+\begin{itemize}
+    \item 0.968 --- SA-GAT + COP-Kmeans (COCO fine-tuned, GT keypoints)
+    \item 0.955 --- SA-GAT + COP-Kmeans (COCO fine-tuned, detected keypoints)
+    \item 0.985 --- HigherHRNet AE (end-to-end, jointly trained on COCO)
+    \item 0.915 --- SA-GAT + COP-Kmeans (synthetic only, GT keypoints)
+    \item 0.863 --- SA-GAT + SCOT (synthetic only, GT keypoints)
+\end{itemize}
+
+\textbf{5. This validates the full MEng contribution.} SA-GAT's skeleton-aware attention modifications combined with COP-Kmeans' type constraints produce a grouping system that, when given access to real training data, approaches the performance of a state-of-the-art end-to-end method trained on the same data. The architectural contributions (type-pair attention, skeleton-relative position encoding, repulsion heads, must-not-link constraints) are genuine improvements that complement standard contrastive training.
+
+\textbf{6. SCOT fine-tuning is the natural next step for the PEng.} The same fine-tuning approach should be applied to the SA-GAT + SCOT pipeline. The SCOT transfer gap (0.863 vs COP-Kmeans' 0.915 on synthetic-only training) may close substantially when the SCOT prototypes and Sinkhorn transport are trained on real data rather than 400 synthetic scenes.
+
+
+\subsubsection{Model size comparison}
+
+An important practical consideration is model size. SA-GAT is a lightweight grouping module designed to operate on a pre-built keypoint graph, not a full image backbone.
+
+\begin{tabular}{lrr}
+\hline
+\textbf{Component} & \textbf{Parameters} & \textbf{Size (MB)} \\
+\hline
+Standard GAT (baseline) & 160,608 & 0.61 \\
+SA-GAT (3 modifications) & 170,560 & 0.65 \\
+K-head (MLP) & 18,625 & 0.07 \\
+SCOT head & 35,584 & 0.14 \\
+\hline
+\textbf{MEng pipeline} (SA-GAT + COP-Kmeans) & \textbf{170,560} & \textbf{0.65} \\
+\textbf{PEng pipeline} (SA-GAT + K-head + SCOT) & \textbf{224,769} & \textbf{0.86} \\
+\hline
+HigherHRNet-W32 (full model) & 28,645,331 & 109.27 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+SA-GAT is \textbf{168$\times$ smaller} than HigherHRNet. The full PEng pipeline (SA-GAT + K-head + SCOT) is \textbf{127$\times$ smaller}. This comparison is not entirely apples-to-apples --- HigherHRNet includes the image backbone and heatmap decoder while SA-GAT only handles grouping --- but it highlights that the grouping problem can be solved with a very small model. SA-GAT adds only 9,952 parameters over the standard GAT (a 6.2\% increase), demonstrating that the three skeleton-aware modifications (type-pair attention, position encoding, repulsion heads) are lightweight architectural changes, not heavy additions.
+
+COP-Kmeans adds zero learned parameters. The entire MEng grouping contribution, from embedding to final person assignment, fits in 0.65\,MB.
