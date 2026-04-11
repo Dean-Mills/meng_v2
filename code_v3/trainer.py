@@ -334,6 +334,10 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
             graphs = preprocessor.process_batch(batch)
 
             for graph in graphs:
+                # Skip scenes that exceed SCOT's k_max
+                if cfg.scot is not None and graph.num_people > cfg.scot.k_max:
+                    continue
+
                 graph = graph.to(device)
                 optimizer.zero_grad()
 

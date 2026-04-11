@@ -257,6 +257,15 @@ def predict_knn(embeddings: torch.Tensor, k: int) -> torch.Tensor:
     return _predict_knn(embeddings, k)
 
 
+def predict_tha(
+    embeddings: torch.Tensor,
+    k: int,
+    joint_types: torch.Tensor,
+) -> torch.Tensor:
+    from eval_hungarian_grouping import predict_tha as _predict_tha
+    return _predict_tha(embeddings, k, joint_types)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main evaluation
 # ─────────────────────────────────────────────────────────────────────────────
@@ -332,7 +341,7 @@ def evaluate(
         valid_img_ids = valid_img_ids[:max_images]
 
     # ── Evaluate ─────────────────────────────────────────────────────────
-    results = {"hrnet_ae": [], "knn": [], "cop_kmeans": []}
+    results = {"hrnet_ae": [], "knn": [], "cop_kmeans": [], "tha": []}
     detection_stats = {"total_gt": 0, "total_matched": 0, "total_detected": 0}
 
     with torch.no_grad():
@@ -424,6 +433,13 @@ def evaluate(
             cop_pga = compute_pga(cop_pred, gt_labels.to(device))
             results["cop_kmeans"].append(cop_pga)
 
+            # THA
+            tha_pred = predict_tha(
+                embeddings, n_gt_people, graph.joint_types,
+            )
+            tha_pga = compute_pga(tha_pred, gt_labels.to(device))
+            results["tha"].append(tha_pga)
+
             if (i + 1) % 100 == 0:
                 print(f"  {i+1}/{len(valid_img_ids)} images processed...")
 
@@ -452,6 +468,7 @@ def evaluate(
         ("hrnet_ae", "HigherHRNet AE"),
         ("knn", "SA-GAT + kNN"),
         ("cop_kmeans", "SA-GAT + COP-Kmeans"),
+        ("tha", "SA-GAT + THA"),
     ]:
         vals = results[method]
         mean = sum(vals) / len(vals)

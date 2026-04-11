@@ -1,51 +1,58 @@
 """
-Train K estimation head on frozen SA-GAT embeddings.
+Train SCOT head on frozen SA-GAT embeddings.
 
 Loads a trained SA-GAT checkpoint, freezes the GAT weights, and trains
-only the K head MLP to predict person count from the embeddings.
-This prevents the K estimation loss from corrupting the contrastive
-embeddings.
+only the SCOT head to assign keypoints to people using the fixed embeddings.
+This prevents the SCOT loss from corrupting the contrastive embeddings.
 
 Usage:
-    python train_k_head_frozen.py \
-        --checkpoint outputs/checkpoints/sa_gat_full/best.pt \
-        --save_dir outputs/checkpoints/k_head_frozen \
-        --epochs 50
+    python train_scot_frozen.py \
+        --checkpoint outputs/finetune_sa_gat_coco/latest/best.pt \
+        --coco_train_dir data/coco2017/train2017 \
+        --coco_train_ann data/coco2017/annotations/person_keypoints_train2017.json \
+        --name scot_frozen_coco \
+        --epochs 20
 """
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import time
 import uuid
 from pathlib import Path
 
 import torch
-import torch.nn.functional as F
 import torch.optim as optim
 
-from config import ExperimentConfig
+from config import ExperimentConfig, SCOTConfig
 from gat import GATEmbedding
 from preprocessor import PosePreprocessor
 from dataset import PoseDataset
 from dataloader import create_dataloader
 from virtual_adapter import VirtualAdapter
-from k_head import KEstimationHead
+from losses import SCOTLoss
+from ot_head import SCOTHead
+from evaluator import compute_pga, predict_scot, predict_knn
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=Path, required=True,
-                        help="SA-GAT or GAT checkpoint to freeze")
+                        help="SA-GAT checkpoint to freeze")
     parser.add_argument("--virtual_dir", type=Path, default=Path("data/virtual"))
     parser.add_argument("--coco_train_dir", type=Path, default=None,
                         help="COCO train images (if set, trains on COCO)")
     parser.add_argument("--coco_train_ann", type=Path, default=None,
                         help="COCO train annotations")
-    parser.add_argument("--name", type=str, default="k_head_frozen",
+    parser.add_argument("--name", type=str, default="scot_frozen",
                         help="Run name for output directory")
-    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--k_max", type=int, default=10)
+    parser.add_argument("--hidden_dim", type=int, default=256)
+    parser.add_argument("--sinkhorn_iters", type=int, default=10)
+    parser.add_argument("--sinkhorn_tau", type=float, default=0.1)
     parser.add_argument("--device", type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
@@ -110,30 +117,37 @@ def main():
             batch_size=4, shuffle=True, num_workers=4,
         )
 
-    # Validation always on virtual for consistent benchmarking
     val_loader = create_dataloader(
         PoseDataset(VirtualAdapter(args.virtual_dir / "val")),
         batch_size=4, shuffle=False, num_workers=0,
     )
 
-    # ── K head ────────────────────────────────────────────────────────
-    k_head = KEstimationHead(embedding_dim=embedding_dim).to(device)
+    # ── SCOT head ─────────────────────────────────────────────────────
+    scot_cfg = SCOTConfig(
+        hidden_dim=args.hidden_dim,
+        k_max=args.k_max,
+        sinkhorn_iters=args.sinkhorn_iters,
+        sinkhorn_tau=args.sinkhorn_tau,
+    )
+    scot_head = SCOTHead(scot_cfg, embedding_dim=embedding_dim).to(device)
+    scot_loss_fn = SCOTLoss(cfg.loss)
 
-    optimizer = optim.Adam(k_head.parameters(), lr=args.lr)
+    optimizer = optim.Adam(scot_head.parameters(), lr=args.lr)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=args.epochs, eta_min=1e-5,
     )
 
-    print(f"\nTraining K head (frozen GAT)")
-    print(f"Run ID:  {run_id}")
-    print(f"Epochs:  {args.epochs}")
+    print(f"\nTraining SCOT head (frozen GAT)")
+    print(f"Run ID:   {run_id}")
+    print(f"k_max:    {args.k_max}")
+    print(f"Epochs:   {args.epochs}")
     print(f"Save dir: {save_dir}\n")
 
     # ── Training ──────────────────────────────────────────────────────
-    best_val_acc = 0.0
+    best_val_pga = 0.0
 
     for epoch in range(1, args.epochs + 1):
-        k_head.train()
+        scot_head.train()
         epoch_loss = 0.0
         n_graphs = 0
         t0 = time.time()
@@ -141,17 +155,24 @@ def main():
         for batch in train_loader:
             graphs = preprocessor.process_batch(batch)
             for graph in graphs:
+                # Skip scenes that exceed k_max
+                if graph.num_people > args.k_max:
+                    continue
+
                 graph = graph.to(device)
                 optimizer.zero_grad()
 
                 with torch.no_grad():
                     embeddings = gat(graph)
 
-                k_pred = k_head(embeddings)
-                k_gt = torch.tensor(float(graph.num_people), device=device)
-                loss = F.l1_loss(k_pred, k_gt)
+                k = int(graph.num_people)
+                logits, T = scot_head(embeddings, k, graph.joint_types)
+
+                loss_out = scot_loss_fn(logits, graph.person_labels)
+                loss = loss_out["total_loss"]
 
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(scot_head.parameters(), max_norm=1.0)
                 optimizer.step()
 
                 epoch_loss += loss.item()
@@ -163,11 +184,9 @@ def main():
         elapsed = time.time() - t0
 
         # Validation
-        if epoch % 5 == 0 or epoch == args.epochs:
-            k_head.eval()
-            n_correct = 0
-            n_off_by_one = 0
-            n_val = 0
+        if epoch % 2 == 0 or epoch == args.epochs:
+            scot_head.eval()
+            all_pga = []
 
             with torch.no_grad():
                 for batch in val_loader:
@@ -175,33 +194,30 @@ def main():
                     for graph in graphs:
                         graph = graph.to(device)
                         embeddings = gat(graph)
-                        k_pred = k_head.predict(embeddings)
-                        k_gt = int(graph.num_people)
+                        k = int(graph.num_people)
 
-                        n_val += 1
-                        if k_pred == k_gt:
-                            n_correct += 1
-                        if abs(k_pred - k_gt) <= 1:
-                            n_off_by_one += 1
+                        pred = predict_scot(scot_head, embeddings, k, graph.joint_types)
+                        pga = compute_pga(pred, graph.person_labels)
+                        all_pga.append(pga)
 
-            exact_acc = n_correct / max(n_val, 1)
-            off1_acc = n_off_by_one / max(n_val, 1)
+            val_pga = sum(all_pga) / max(len(all_pga), 1)
 
             log = (f"Epoch {epoch:3d}/{args.epochs} | "
                    f"loss {avg_loss:.4f} | "
-                   f"val exact {exact_acc:.3f} off1 {off1_acc:.3f} | "
+                   f"val_pga {val_pga:.4f} | "
                    f"{elapsed:.1f}s")
 
-            if exact_acc > best_val_acc:
-                best_val_acc = exact_acc
-                # Save: GAT state (frozen) + K head state
+            if val_pga > best_val_pga:
+                best_val_pga = val_pga
+                # Inject SCOT config so evaluator can load the head
+                save_cfg = cfg.model_dump()
+                save_cfg["scot"] = scot_cfg.model_dump()
                 torch.save({
                     "epoch": epoch,
-                    "val_k_accuracy": exact_acc,
+                    "val_pga": val_pga,
                     "gat_state": ckpt["gat_state"],  # original frozen weights
-                    "k_head_state": k_head.state_dict(),
-                    "head_state": ckpt.get("head_state"),  # preserve any head
-                    "config": ckpt["config"],
+                    "head_state": scot_head.state_dict(),
+                    "config": save_cfg,
                 }, save_dir / "best.pt")
                 log += "  ← best"
 
@@ -211,16 +227,17 @@ def main():
                   f"loss {avg_loss:.4f} | {elapsed:.1f}s")
 
     # Save final
+    save_cfg = cfg.model_dump()
+    save_cfg["scot"] = scot_cfg.model_dump()
     torch.save({
         "epoch": args.epochs,
-        "val_k_accuracy": best_val_acc,
+        "val_pga": best_val_pga,
         "gat_state": ckpt["gat_state"],
-        "k_head_state": k_head.state_dict(),
-        "head_state": ckpt.get("head_state"),
-        "config": ckpt["config"],
+        "head_state": scot_head.state_dict(),
+        "config": save_cfg,
     }, save_dir / "final.pt")
 
-    print(f"\nTraining complete. Best val K accuracy: {best_val_acc:.3f}")
+    print(f"\nTraining complete. Best val PGA: {best_val_pga:.4f}")
     print(f"Saved to {save_dir}")
 
 

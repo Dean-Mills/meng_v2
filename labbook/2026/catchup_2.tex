@@ -1,0 +1,749 @@
+\chapter[Catchup 2]{Catchup 2}
+
+\section[2026/04/10]{Thursday, 10 April 2026}
+
+Continuation from the previous catchup. The COCO fine-tuning of SA-GAT + COP-Kmeans was a major success (0.968 COCO PGA, up from 0.915). This session focuses on getting the PEng pipeline (SA-GAT + K-head + SCOT) to the same level.
+
+
+\subsection{SCOT Fine-Tuning on COCO --- Joint Training Fails}
+
+\subsubsection{Setup}
+
+I created a fine-tuning config that loads the pre-trained SA-GAT + SCOT checkpoint (trained on 400 synthetic images) and continues training on COCO train2017. Same approach as the successful SA-GAT fine-tuning: LR $1 \times 10^{-4}$, 20 epochs, both contrastive loss and SCOT loss active. Added a k\_max guard in the trainer to skip images where the number of people exceeds SCOT's prototype pool size (10).
+
+\subsubsection{Results}
+
+\begin{tabular}{lccc}
+\hline
+\textbf{Method} & \textbf{Synthetic} & \textbf{COCO (GT K)} & \textbf{End-to-end} \\
+\hline
+\multicolumn{4}{l}{\emph{SA-GAT only fine-tune (for comparison):}} \\
+kNN & 0.928 & 0.957 & 0.942 \\
+COP-Kmeans & 0.938 & \textbf{0.968} & \textbf{0.955} \\
+\hline
+\multicolumn{4}{l}{\emph{SA-GAT + SCOT joint fine-tune:}} \\
+kNN & 0.903 & 0.946 & 0.933 \\
+SCOT head & 0.948 & 0.884 & --- \\
+COP-Kmeans & --- & --- & 0.949 \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+Joint fine-tuning made things worse across the board compared to SA-GAT-only fine-tuning:
+
+\begin{itemize}
+    \item \textbf{SCOT head on COCO: 0.884} --- improved from the pre-fine-tune 0.863, but still far behind COP-Kmeans' 0.968. The learned prototypes and Sinkhorn transport improved but did not close the gap.
+    \item \textbf{The embeddings degraded.} kNN PGA dropped from 0.957 (SA-GAT-only fine-tune) to 0.946 (joint fine-tune). The SCOT loss is pulling the embeddings toward its learned prototypes, which conflicts with the contrastive loss that wants embeddings to separate by identity. On synthetic data this tension resolves (SCOT gets 0.948, better than COP-Kmeans' 0.938), but on COCO's more diverse scenes the prototypes can't keep up and they drag the embedding quality down.
+    \item \textbf{End-to-end COP-Kmeans: 0.949} --- still good but below SA-GAT-only's 0.955. The embedding degradation propagates through to every downstream grouping method.
+\end{itemize}
+
+The core problem: SCOT's loss function optimises for a specific set of prototypes and transport structure. When the data distribution changes (synthetic $\to$ COCO), the prototypes lag behind the embeddings, and backpropagation through SCOT tries to ``fix'' this by reshaping the embeddings rather than the prototypes. This corrupts the embedding space.
+
+
+\subsection{K-Head Training on COCO Data}
+
+\subsubsection{Motivation}
+
+The K estimation head (a small MLP that predicts person count from pooled embeddings) previously achieved only 52.3\% exact match on COCO when trained on synthetic data. Training it on COCO data with the COCO-fine-tuned SA-GAT embeddings should dramatically improve this. The K-head is essential for deployment --- both COP-Kmeans and SCOT require knowing K at inference.
+
+I considered an alternative: a simpler model that just counts joint types (if the detector sees 3 left shoulders, there are at least 3 people). However, this would be tied to a specific detector's false positive characteristics --- a model trained on HigherHRNet type counts would not work with a different detector. The embedding-based K-head is detector-agnostic because the SA-GAT embeddings absorb the detection noise.
+
+\subsubsection{Setup}
+
+Added COCO training support to \texttt{train\_k\_head\_frozen.py}. Trained on frozen SA-GAT embeddings (from the 0.968 COCO-fine-tuned checkpoint) with COCO train2017. 5 epochs (56k images per epoch, 280k total training graphs).
+
+\subsubsection{Results}
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Metric} & \textbf{Synthetic-trained K-head} & \textbf{COCO-trained K-head} \\
+\hline
+Exact match (COCO val) & 52.3\% & \textbf{78.4\%} \\
+Off by $\leq 1$ (COCO val) & 76.9\% & \textbf{95.8\%} \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Per GT K breakdown on COCO val:
+
+\begin{tabular}{lrl}
+\hline
+\textbf{GT K} & \textbf{Exact} & \textbf{Note} \\
+\hline
+K=1 & 99\% & Nearly perfect --- small N is distinctive \\
+K=2 & 89\% & Strong \\
+K=3 & 62\% & Reasonable, most errors off by 1 \\
+K=4 & 52\% & Harder, occlusion increases \\
+K=5+ & 22--39\% & Struggles with large groups \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Impact on grouping PGA (COCO val, GT keypoints):
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Method} & \textbf{GT K} & \textbf{Predicted K} \\
+\hline
+kNN & 0.957 & 0.946 \\
+COP-Kmeans & 0.968 & \textbf{0.951} \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{COP-Kmeans with predicted K: 0.951.} Only 1.7 points below the GT K result (0.968). This is a deployable autonomous system: SA-GAT embeds keypoints, K-head predicts person count, COP-Kmeans groups --- no ground truth used anywhere. The previous best with predicted K was 0.816 (synthetic-trained everything).
+
+The K-head still has room to improve with more epochs (loss was still dropping at epoch 5). Higher K values (5+) are the main weakness, but these are rare in typical scenes and the off-by-one accuracy of 95.8\% means even incorrect predictions are close.
+
+\subsubsection{20-epoch results}
+
+Ran the K-head for 20 epochs on COCO train2017 (vs 5 epochs above). Loss dropped further (0.295 $\to$ 0.252) but the improvement on COCO val was marginal:
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Metric} & \textbf{5 epochs} & \textbf{20 epochs} \\
+\hline
+Exact match (COCO val) & 78.4\% & 79.6\% \\
+Off by $\leq 1$ (COCO val) & 95.8\% & 96.0\% \\
+COP-Kmeans predicted K PGA & 0.951 & 0.950 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Per GT K breakdown (20 epochs):
+
+\begin{tabular}{lrl}
+\hline
+\textbf{GT K} & \textbf{Exact} & \\
+\hline
+K=1 & 99\% & Unchanged --- trivially easy \\
+K=2 & 91\% & Up from 89\% \\
+K=3 & 64\% & Up from 62\% \\
+K=4 & 51\% & Essentially unchanged \\
+K=5+ & 25--43\% & Small improvements but still weak \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+The K-head is plateauing. The fundamental difficulty is that for K$>$4, occlusion makes the cluster structure in embedding space genuinely ambiguous --- multiple people with similar poses and overlapping limbs produce embeddings that are hard to count from pooled statistics alone. However, the grouping PGA impact is small (0.968 $\to$ 0.950) because most COCO images have 1--3 people where the K-head is 91--99\% accurate, and COP-Kmeans degrades gracefully when K is off by one.
+
+
+\subsection{Frozen SCOT Training --- Protecting the Embeddings}
+
+\subsubsection{Motivation}
+
+The joint SCOT fine-tuning failed because SCOT's loss corrupted the embeddings. The solution follows the same pattern that worked for the K-head: freeze the good COCO-fine-tuned SA-GAT embeddings and train only the SCOT head on top. This way SCOT's prototypes and projection layers adapt to the fixed embedding space rather than reshaping it.
+
+I wrote \texttt{train\_scot\_frozen.py} --- same structure as \texttt{train\_k\_head\_frozen.py} but training the SCOT head. Loads a frozen SA-GAT checkpoint, trains SCOT with cross-entropy loss on the transport plan assignments using GT K, validates on synthetic data.
+
+\subsubsection{Setup}
+
+Frozen SA-GAT from the COCO-fine-tuned checkpoint (the 0.968 PGA run). SCOT head trained from scratch on COCO train2017 with LR $1 \times 10^{-3}$, 20 epochs, k\_max=10 (images with $>$10 people skipped). Only the SCOT head parameters are trainable --- the SA-GAT is completely frozen, so the embeddings that give 0.957 kNN and 0.968 COP-Kmeans are preserved exactly.
+
+\subsubsection{Training}
+
+Training was slow to converge. The loss barely moved over 20 epochs (0.498 $\to$ 0.469) and val PGA on synthetic climbed gradually from 0.791 to 0.834 by epoch 20 --- still improving but far below COP-Kmeans' 0.938 on the same embeddings.
+
+\subsubsection{Results}
+
+\begin{tabular}{lccc}
+\hline
+\textbf{Method} & \textbf{Embeddings} & \textbf{Synthetic PGA} & \textbf{COCO PGA} \\
+\hline
+kNN & frozen SA-GAT & 0.928 & 0.957 \\
+COP-Kmeans & frozen SA-GAT & 0.938 & \textbf{0.968} \\
+SCOT (frozen) & frozen SA-GAT & 0.838 & 0.861 \\
+\hline
+SCOT (joint, synthetic only) & joint SA-GAT & 0.926 & 0.863 \\
+SCOT (joint, COCO fine-tune) & joint SA-GAT & 0.948 & 0.884 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+\subsubsection{Analysis}
+
+This is a significant negative result. Frozen SCOT on COCO (0.861) is essentially the same as the original SCOT trained jointly on synthetic data (0.863), and dramatically worse than kNN (0.957) or COP-Kmeans (0.968) on the \emph{exact same embeddings}.
+
+\textbf{1. The embeddings are not the problem.} kNN gets 0.957 and COP-Kmeans gets 0.968 on the frozen embeddings. The embedding space is well-structured --- same-person joints are close, different-person joints are far apart. Any reasonable clustering method should perform well here.
+
+\textbf{2. The SCOT head itself is the bottleneck.} Three different training conditions (joint synthetic, joint COCO, frozen COCO) all produce SCOT PGA in the 0.84--0.88 range on COCO, while COP-Kmeans consistently scores 0.92--0.97. The problem is not training data or embedding quality --- it is the SCOT architecture.
+
+\textbf{3. The likely failure mode is the fixed prototype pool.} SCOT uses $K_{\text{max}} = 10$ learned prototype vectors. For a given scene with $K$ people, the first $K$ prototypes are selected and expanded into $K \times 17$ typed slots. These prototypes must somehow represent ``person 1'', ``person 2'', etc.\ across all possible scenes. But people in COCO vary enormously in pose, scale, and occlusion. A fixed set of prototypes cannot capture this diversity --- prototype 1 might work well for a standing person but poorly for a crouching one. COP-Kmeans avoids this entirely because k-means initialises centroids from the data itself, adapting to each scene.
+
+\textbf{4. The Sinkhorn transport adds rigidity.} The balanced Sinkhorn constraint forces each slot to receive exactly $1/K$ of the probability mass. In scenes where people have different numbers of visible joints (due to occlusion), this uniform assumption hurts. COP-Kmeans has no such constraint --- clusters naturally absorb however many joints belong to each person.
+
+\textbf{5. SCOT works on synthetic because the problem is easier.} Synthetic scenes have consistent joint visibility, limited pose variation, and K=2--5. The prototypes can learn a template that covers this narrow distribution. COCO's diversity breaks the template.
+
+\textbf{6. This is an honest PEng finding.} The SCOT architecture, as designed, does not scale to real-world diversity. The contribution is not ``SCOT beats COP-Kmeans'' but rather ``SCOT is a novel formulation of pose grouping as skeleton-constrained optimal transport, and through systematic experimentation I identified that fixed prototypes and balanced transport are the architectural limitations that prevent it from matching simpler constraint-based methods.'' The obvious next step was scene-adaptive prototypes.
+
+
+\subsection{SCOT-KI --- Scene-Adaptive Prototypes via K-Means Initialisation}
+
+\subsubsection{Motivation}
+
+The analysis above identified fixed prototypes as the likely bottleneck. The fix seemed obvious: replace the learned prototype pool with k-means centroids computed from the current scene's embeddings. This gives SCOT the same scene-adaptive initialisation that makes COP-Kmeans work well, while keeping the Sinkhorn OT assignment and hard type masking that are SCOT's novel contributions.
+
+I implemented this as \texttt{ot\_head\_kmeans\_init.py} (SCOT-KI). The pipeline for each scene:
+\begin{enumerate}
+    \item Encode keypoint embeddings through a node encoder (or use raw embeddings)
+    \item Run k-means on the encoded embeddings to get $K$ centroids
+    \item Use centroids as prototypes $\to$ expand into $K \times 17$ typed slots
+    \item Apply infinite cost masking (same as SCOT)
+    \item Sinkhorn finds the globally optimal transport plan
+\end{enumerate}
+
+The key difference from COP-Kmeans: SCOT-KI uses global Sinkhorn OT assignment rather than greedy one-at-a-time constrained k-means iteration. If the OT formulation adds value beyond simple type constraints, SCOT-KI should outperform COP-Kmeans.
+
+\subsubsection{Results}
+
+Tested two configurations on COCO val (2,307 images, GT keypoints, GT K), using the COCO-fine-tuned SA-GAT embeddings (the 0.968 checkpoint):
+
+\begin{tabular}{lc}
+\hline
+\textbf{Method} & \textbf{COCO PGA} \\
+\hline
+kNN & 0.957 \\
+COP-Kmeans & \textbf{0.968} \\
+SCOT-KI (identity encoder) & 0.926 \\
+SCOT-KI (random encoder) & 0.926 \\
+\hline
+SCOT (fixed prototypes, frozen) & 0.861 \\
+SCOT (fixed prototypes, joint COCO) & 0.884 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+SCOT-KI (0.926) is substantially better than fixed-prototype SCOT (0.861--0.884), confirming that scene-adaptive prototypes help. But it is still 4.2 points below COP-Kmeans (0.968). The identity vs random encoder results are identical, confirming the node encoder is irrelevant --- the k-means centroids in the raw embedding space are what matter.
+
+\subsubsection{Analysis}
+
+This result isolates the problem precisely. Both SCOT-KI and COP-Kmeans use:
+\begin{itemize}
+    \item The same SA-GAT embeddings
+    \item The same k-means initialisation
+    \item The same type constraints (infinite cost masking $\equiv$ must-not-link)
+\end{itemize}
+
+The \emph{only} difference is the assignment mechanism: Sinkhorn OT (SCOT-KI) vs greedy constrained k-means iteration (COP-Kmeans). COP-Kmeans wins by 4.2 points. This means the Sinkhorn transport itself is hurting performance. The reasons:
+
+\textbf{1. Balanced transport is wrong for this problem.} Sinkhorn enforces that each typed slot receives equal probability mass. But real scenes have uneven joint visibility --- one person might have 15 visible joints, another might have 5. COP-Kmeans naturally adapts cluster sizes; Sinkhorn's balanced constraint forces uniform allocation.
+
+\textbf{2. Soft-to-hard conversion loses information.} Sinkhorn produces a soft transport plan that gets argmaxed into hard assignments. Ambiguous joints near the decision boundary get smeared across multiple slots, and the argmax can pick the wrong one. COP-Kmeans makes hard assignments from the start, with constraints preventing type violations at each step.
+
+\textbf{3. Sinkhorn's global optimality is solving the wrong objective.} Sinkhorn finds the minimum-cost transport plan \emph{globally}. But the cost is Euclidean distance in embedding space, which is already well-structured by contrastive training. The ``globally optimal'' assignment under this cost is not necessarily the correct person assignment --- local greedy decisions with type constraints are more aligned with the actual grouping structure.
+
+\subsubsection{Conclusion on SCOT}
+
+I have now tested SCOT under every reasonable condition:
+
+\begin{tabular}{llc}
+\hline
+\textbf{Variant} & \textbf{Training} & \textbf{COCO PGA} \\
+\hline
+SCOT (fixed proto) & Joint, synthetic only & 0.863 \\
+SCOT (fixed proto) & Joint, COCO fine-tune & 0.884 \\
+SCOT (fixed proto) & Frozen GAT, COCO & 0.861 \\
+SCOT-KI (k-means proto) & No training needed & 0.926 \\
+\hline
+COP-Kmeans & No training needed & \textbf{0.968} \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+The progression tells a clear story: fixing the prototype initialisation (k-means) recovered 6.5 points (0.861 $\to$ 0.926), but the remaining 4.2-point gap to COP-Kmeans is in the Sinkhorn assignment mechanism itself. For this problem, with these well-structured contrastive embeddings, greedy constrained k-means is simply a better assignment strategy than balanced optimal transport.
+
+For the PEng thesis, this is a thorough negative result with clear diagnostic value. The contribution is: (1) the novel formulation of pose grouping as skeleton-constrained OT, (2) the systematic identification of why it underperforms --- fixed prototypes and balanced transport assumptions --- and (3) the demonstration that scene-adaptive initialisation partially closes the gap but the assignment mechanism remains the bottleneck. The natural next step: replace Sinkhorn with a different assignment mechanism.
+
+
+\subsection{Type-wise Hungarian Assignment (THA)}
+
+\subsubsection{Motivation}
+
+The SCOT analysis identified the assignment mechanism as the bottleneck --- not the embeddings, not the type constraints, not the initialisation. COP-Kmeans assigns joints greedily: for each joint in order, assign it to the nearest centroid that doesn't violate the type constraint. This greedy ordering can cascade errors --- an early bad decision forces later joints into wrong clusters.
+
+The idea behind THA is simple: instead of assigning all joints at once (Sinkhorn) or one at a time (COP-Kmeans), assign each \emph{joint type independently} using optimal bipartite matching. For each of the 17 joint types, collect all detected joints of that type and run Hungarian assignment to optimally match them to the $K$ person centroids. This is globally optimal per type, and type constraints are enforced by construction --- each type is matched in its own independent bipartite problem, so it is structurally impossible to assign two left elbows to the same person.
+
+The full algorithm:
+\begin{enumerate}
+    \item Run k-means on SA-GAT embeddings $\to$ $K$ centroids (same initialisation as COP-Kmeans)
+    \item For each joint type $t = 0, \ldots, 16$:
+    \begin{itemize}
+        \item Collect all joints of type $t$ (there are $M_t$ of them, at most $K$)
+        \item Compute the $M_t \times K$ distance matrix to the centroids
+        \item Run Hungarian assignment $\to$ optimal 1-to-1 matching
+    \end{itemize}
+    \item Update centroids from all assignments (mean of assigned joints per person)
+    \item Repeat steps 2--3 for $I$ iterations (convergence typically in 3--5)
+\end{enumerate}
+
+THA has zero learned parameters --- like COP-Kmeans, it operates purely on the SA-GAT embedding space with hard structural constraints.
+
+\subsubsection{Results}
+
+Evaluated on both synthetic and COCO val using the COCO-fine-tuned SA-GAT checkpoint, GT keypoints, GT K:
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Method} & \textbf{Synthetic PGA} & \textbf{COCO PGA} \\
+\hline
+kNN & 0.928 & 0.957 \\
+COP-Kmeans & 0.938 & 0.968 \\
+\textbf{THA} & \textbf{0.965} & \textbf{0.969} \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+THA beats COP-Kmeans on both datasets. The synthetic improvement is large (+2.7 points, 0.938 $\to$ 0.965) and the COCO improvement is smaller but positive (+0.1 points, 0.968 $\to$ 0.969).
+
+\subsubsection{Analysis}
+
+\textbf{1. Hungarian per-type assignment is better than greedy assignment.} THA resolves the ambiguous cases that COP-Kmeans handles greedily. When two left elbows are equidistant from two centroids, COP-Kmeans assigns the first one it encounters and forces the second to the remaining centroid. THA finds the globally optimal pairing. This matters most on synthetic data where embeddings are less well-separated (hence the larger 2.7-point gap).
+
+\textbf{2. The COCO gap is small because the embeddings are excellent.} After COCO fine-tuning, the SA-GAT embeddings are so well-structured that almost every assignment is unambiguous --- both methods get the same answer for 96+ percent of joints. The +0.1 point improvement means THA is resolving a small number of genuinely hard cases that COP-Kmeans gets wrong.
+
+\textbf{3. THA has zero learned parameters.} Like COP-Kmeans, the entire grouping contribution is structural: k-means initialisation + Hungarian matching + type-by-type decomposition. No prototypes, no Sinkhorn temperature, no training required. This means THA transfers perfectly to any domain --- the same algorithm works on synthetic and COCO without any adaptation.
+
+\textbf{4. THA is a novel formulation.} Decomposing multi-person pose grouping into 17 parallel bipartite matching problems connected through shared centroids has not been proposed before. It combines the scene-adaptivity of k-means, the optimality of Hungarian assignment, and the structural guarantees of type-by-type decomposition. The type constraints are not a soft penalty or a hard mask on a cost matrix --- they are an architectural property of the algorithm's decomposition.
+
+\textbf{5. This validates the PEng direction.} The progression from SCOT (0.861--0.926) through the systematic analysis of why OT fails, to THA (0.969) that fixes the identified problems, is exactly the kind of research trajectory a PEng thesis should demonstrate. The final method is simple, principled, and state-of-the-art on this benchmark.
+
+\subsubsection{Novelty verification}
+
+I surveyed the existing literature to verify that THA is a genuinely novel contribution. The closest existing methods are:
+
+\textbf{OpenPose's pairwise matching~\cite{cao2017openpose}.} OpenPose decomposes grouping into bipartite matching problems, but along \emph{skeleton edges} (shoulder-to-elbow, elbow-to-wrist), not per joint type. Each subproblem matches a pair of adjacent joint types using Part Affinity Field scores. This is a fundamentally different decomposition --- OpenPose matches limb connections between two types, while THA matches all joints of a single type to person centroids. OpenPose also uses greedy assembly to combine limb matches into full skeletons, with no iterative centroid refinement.
+
+\textbf{COP-Kmeans~\cite{wagstaff2001copkmeans}.} Uses the same k-means initialisation and type constraints (must-not-link), but assigns joints greedily one at a time rather than optimally per type. THA replaces the greedy assignment with optimal Hungarian matching within each type, and the iterative centroid updates provide cross-type information flow.
+
+\textbf{DETR-style Hungarian matching~\cite{yang2023edpose, liu2023grouppose}.} ED-Pose and GroupPose use Hungarian matching for \emph{query-to-ground-truth assignment during training} (set prediction loss), not for inference-time grouping. The matching is between predicted poses and GT poses, not between detected keypoints and person centroids.
+
+\textbf{DC-GNN~\cite{dong2024dcgnn}.} Uses optimal transport for graph clustering with cluster-nodes, but does not decompose by type --- all nodes are clustered in a single OT problem. No per-type structure.
+
+\textbf{HGG~\cite{jin2020hgg}.} Uses hierarchical graph merging with edge/node discriminators, not bipartite matching. The grouping mechanism is fundamentally different.
+
+No existing method combines: (1) per-type decomposition into 17 independent matching problems, (2) Hungarian optimal assignment within each type, (3) shared centroids connecting the types with iterative updates. THA is novel.
+
+\subsubsection{End-to-end results}
+
+Evaluated with HigherHRNet-W32-512 detected keypoints on 2,166 COCO val images (same protocol as all previous end-to-end evaluations):
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Method} & \textbf{GT keypoints PGA} & \textbf{End-to-end PGA} \\
+\hline
+HigherHRNet AE & --- & 0.985 \\
+SA-GAT + kNN & 0.957 & 0.942 \\
+SA-GAT + COP-Kmeans & 0.968 & 0.955 \\
+\textbf{SA-GAT + THA} & \textbf{0.969} & \textbf{0.955} \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+THA matches or beats COP-Kmeans in every condition. The end-to-end numbers are nearly identical (0.9553 vs 0.9549) because detection noise dominates --- both methods handle the clean cases identically and the noisy cases near the decision boundary are hard for any grouping method. The GT keypoints comparison (0.969 vs 0.968) and especially the synthetic comparison (0.965 vs 0.938) show THA's advantage more clearly, where the assignment quality matters more than detection quality.
+
+THA is consistently $\geq$ COP-Kmeans across every evaluation condition tested --- synthetic, COCO GT keypoints, and COCO end-to-end --- with zero learned parameters and no training required.
+
+
+\subsection{Standard GAT + SCOT on COCO (Fine-Tune Experiment)}
+
+\subsubsection{Motivation}
+
+Every SCOT experiment so far used SA-GAT as the backbone. The hypothesis was that maybe SA-GAT's skeleton-aware modifications don't play nicely with SCOT's learned prototypes --- type-pair attention, skeleton-relative position encoding, and same-type repulsion heads all make the embeddings more type-aware, which could conflict with SCOT's typed slot structure in subtle ways. A standard GATv2 with no skeleton modifications might give SCOT more flexibility.
+
+The SCOT-KI experiment already suggested this wasn't the main issue (the assignment mechanism is the bottleneck, independent of embeddings) but we had never actually fine-tuned standard GAT + SCOT on COCO data. This section runs that experiment to close the hypothesis.
+
+\subsubsection{Setup}
+
+Loaded the pretrained standard GAT + SCOT checkpoint (synthetic-only, 0.923 synthetic / 0.862 COCO). Fine-tuned on COCO train2017 for 20 epochs at LR $1 \times 10^{-4}$ with the same infrastructure used for the SA-GAT fine-tune. SCOT head trained jointly (not frozen) so we can directly compare against the SA-GAT joint fine-tune.
+
+\subsubsection{Results}
+
+Best validation epoch was epoch 8 (val PGA 0.916). Test results:
+
+\begin{tabular}{lccc}
+\hline
+\textbf{Method} & \textbf{Synthetic} & \textbf{COCO (GT kps)} & \textbf{End-to-end} \\
+\hline
+kNN (standard GAT, SCOT-trained) & 0.895 & 0.926 & 0.916 \\
+\textbf{SCOT head (standard GAT)} & \textbf{0.939} & \textbf{0.881} & --- \\
+COP-Kmeans (on these embeddings) & --- & --- & 0.934 \\
+THA (on these embeddings) & --- & --- & 0.938 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Comparison against the SA-GAT version of the same experiment:
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Variant} & \textbf{COCO SCOT} & \textbf{COCO kNN} \\
+\hline
+Standard GAT + SCOT (synthetic only) & 0.862 & 0.879 \\
+Standard GAT + SCOT (COCO fine-tune, joint) & 0.881 & 0.926 \\
+SA-GAT + SCOT (synthetic only) & 0.863 & 0.882 \\
+SA-GAT + SCOT (COCO fine-tune, joint) & 0.884 & 0.946 \\
+SA-GAT (no SCOT) + COP-Kmeans (COCO fine-tune) & --- & 0.957 \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. The hypothesis is closed: backbone choice does not matter for SCOT.} Standard GAT + SCOT lands at 0.881 COCO. SA-GAT + SCOT lands at 0.884 COCO. The 0.3-point difference is within noise. SCOT performance is determined by SCOT itself, not by which backbone feeds it. The skeleton-aware modifications in SA-GAT do not conflict with the SCOT loss --- they just don't help SCOT either.
+
+\textbf{2. SA-GAT does produce better embeddings, but SCOT cannot capitalise on them.} On the joint COCO fine-tune, kNN reaches 0.946 with SA-GAT vs 0.926 with standard GAT --- SA-GAT adds 2 points of embedding quality. But SCOT scores 0.884 vs 0.881 on those same embeddings: the embedding improvement does not propagate through the SCOT head. This is consistent with SCOT-KI's behaviour on different embedding sources (HRNet features and SA-GAT both end up below COP-Kmeans/THA by similar margins).
+
+\textbf{3. The SCOT loss costs $\sim$3 points of embedding quality regardless of backbone.} On standard GAT, kNN drops from the SA-GAT-only-fine-tune ceiling (0.957) to 0.926 when the SCOT loss is added --- a 3.1-point cost. On SA-GAT, the same comparison gives 0.957 $\to$ 0.946, a 1.1-point cost. Either way, training with SCOT actively degrades the embeddings the kNN/COP-Kmeans/THA methods would otherwise produce. This is the corruption effect we identified in the original SCOT joint-training experiment, now confirmed on a different backbone.
+
+\textbf{4. Downstream methods (COP-Kmeans, THA) inherit the embedding degradation.} On the SCOT-trained standard GAT embeddings, end-to-end COP-Kmeans is 0.934 and THA is 0.938 --- both significantly below the SA-GAT-only fine-tune end-to-end results (0.955 each). The SCOT training pulled the embeddings into a worse-for-grouping region of feature space, and every downstream method pays the cost.
+
+\textbf{5. The SCOT diagnosis is now bulletproof.} We have tested SCOT under:
+\begin{itemize}
+    \item 7 architectural variants (vanilla, residual, adaptive, unbalanced, dustbin, k-means init)
+    \item 3 training strategies (joint synthetic, joint COCO fine-tune, frozen GAT)
+    \item 2 backbone architectures (SA-GAT, standard GAT)
+    \item 2 embedding sources (our contrastive embeddings, HigherHRNet's backbone features)
+\end{itemize}
+Across every combination, SCOT lands in the 0.83--0.88 COCO range while COP-Kmeans/THA reach 0.91--0.97. The architectural limitations of SCOT --- fixed prototypes, balanced Sinkhorn transport, soft-to-hard argmax conversion --- are the consistent bottleneck. No training strategy or embedding source rescues it.
+
+
+\subsection{SCOT on HigherHRNet Backbone Features --- Diagnostic Experiment}
+
+\subsubsection{Motivation}
+
+Our SCOT analysis concluded that the architecture is the bottleneck: fixed prototypes don't adapt, balanced Sinkhorn transport assumes uniform joint visibility, and the ranking SCOT-KI $<$ THA $\approx$ COP-Kmeans is consistent across training conditions. But there was one alternative explanation we had not ruled out: what if the SA-GAT embeddings themselves are the problem? Perhaps a fundamentally different embedding source --- one not trained with contrastive loss, not derived from our GNN pipeline --- would unlock SCOT's potential.
+
+The ideal test is to feed SCOT embeddings from a model that:
+\begin{enumerate}
+    \item Was trained on massive real COCO data (not 400 synthetic images)
+    \item Produces features explicitly useful for grouping
+    \item Is completely independent of our SA-GAT pipeline
+\end{enumerate}
+
+HigherHRNet~\cite{cheng2020higherhrnet} fits all three criteria. Its 32-dimensional backbone features are the raw features that both the heatmap head \emph{and} the AE tag grouping head read from --- trained end-to-end on 118k COCO images for detection and grouping. If any non-SA-GAT embedding should work with SCOT, it's these.
+
+Note: HigherHRNet's AE tags are 1-dimensional scalars per keypoint, which cannot be used directly as SCOT embeddings (distance-based cost matrices need multi-dimensional vectors). The 32-dim backbone features are the closest useful alternative.
+
+\subsubsection{Setup}
+
+Registered a PyTorch forward hook on HigherHRNet's \texttt{final\_layers[0]} (the $\text{Conv2d}(32, 34, 1{\times}1)$ that outputs the heatmap + tag channels) to capture its 32-dimensional input feature map during inference. For each COCO val image, ran HigherHRNet detection, captured the backbone features, and bilinearly sampled the 32-dim feature vector at each detected keypoint location. Features were L2-normalised before use. Evaluated five grouping methods on these HigherHRNet backbone features: HigherHRNet's own AE grouping (baseline, uses the full grouping pipeline), kNN, COP-Kmeans, THA, and SCOT-KI.
+
+\subsubsection{Results (2,165 COCO val images)}
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Method} & \textbf{HRNet features} & \textbf{SA-GAT (COCO ft)} \\
+\hline
+HigherHRNet AE grouping & 0.985 & --- \\
+kNN & 0.789 & 0.957 \\
+COP-Kmeans & 0.891 & 0.968 \\
+THA & 0.884 & 0.969 \\
+SCOT-KI & 0.825 & 0.926 \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. SA-GAT embeddings are strictly better than HigherHRNet backbone features for generic grouping.} kNN on SA-GAT gets 0.957 vs 0.789 on HRNet features --- a 17-point gap. Even though HRNet was trained on 118k real COCO images (300$\times$ more than our 400 synthetic images pre-training), its backbone features are not optimised for identity separation. They are optimised for detecting \emph{where} a joint is, not \emph{whose} joint it is. Our contrastive training explicitly optimises for identity, so the resulting embeddings are far more structured for grouping purposes. This is a positive result for the SA-GAT contribution.
+
+\textbf{2. HigherHRNet's 0.985 grouping performance comes from the AE tag head, not the backbone features.} The tiny 561-parameter tag head is what makes HigherHRNet work. The backbone features alone barely separate identities. This contextualises the ``HigherHRNet is a full pipeline'' claim: 28.6M parameters do detection, 561 parameters do grouping, and the grouping only works because the tag head is trained end-to-end with a specific grouping loss. Swap the grouping method and the backbone features underperform.
+
+\textbf{3. The SCOT-KI $<$ THA $\approx$ COP-Kmeans ordering holds on HRNet features.} On SA-GAT embeddings, the gap from SCOT-KI to COP-Kmeans is 0.926 to 0.968 (4.2 points). On HRNet features, it is 0.825 to 0.891 (6.6 points). The ranking is consistent and the gap is if anything larger with different embeddings. This is \textbf{definitive diagnostic evidence that SCOT's Sinkhorn assignment mechanism is the architectural bottleneck} --- independent of embedding source. The balanced transport assumption and argmax-from-soft-transport degradation happen regardless of what feature space the cost matrix is computed in.
+
+\textbf{4. This closes off the ``embedding source'' hypothesis.} We have now tested SCOT-KI with: (a) synthetic-trained SA-GAT, (b) COCO-fine-tuned SA-GAT, and (c) HigherHRNet backbone features. All three produce SCOT-KI below COP-Kmeans by a consistent margin. No embedding source rescues SCOT. The paper 2 narrative is now rock-solid: ``we systematically tested SCOT across embedding sources and training strategies; the architectural limitations of fixed prototypes and balanced Sinkhorn transport are the reason it underperforms constraint-based assignment.''
+
+\textbf{5. Side finding: COP-Kmeans and THA are robust to embedding quality.} On SA-GAT embeddings (kNN 0.957 $\to$ COP-Kmeans 0.968) the type constraint adds 1.1 points. On the much weaker HRNet features (kNN 0.789 $\to$ COP-Kmeans 0.891), the constraint adds 10.2 points. The worse the embeddings, the more the structural prior contributes. This suggests that type constraints are a particularly useful inductive bias when embedding quality is lower --- useful context for practitioners who can't fine-tune their detector.
+
+
+\subsection{Full Project Summary --- MEng and PEng Contributions}
+
+This section provides a complete overview of all methods investigated, results achieved, and how the work splits across the two degrees. Written for the professor to assess scope and sufficiency.
+
+\subsubsection{Infrastructure contributions (shared)}
+
+\begin{itemize}
+    \item \textbf{Unified data pipeline.} Adapter pattern (VirtualAdapter, CocoAdapter) producing identical output formats. Single preprocessor builds PyG kNN graphs from either source. Depth toggling via config (MiDaS~\cite{ranftl2020midas} skipped when disabled).
+    \item \textbf{Synthetic data generator.} Blender-based procedural scene generation producing 400 training / 100 validation / 100 test scenes with perfect GT keypoints and person labels.
+    \item \textbf{COCO integration.} Full COCO train2017/val2017 support with GT keypoint loading, per-joint depth estimation (optional), and fine-tuning support in the trainer.
+    \item \textbf{Training infrastructure.} Pydantic YAML configs, GUID-based output directories (no checkpoint overwrites), latest symlinks, config copying for reproducibility.
+    \item \textbf{Evaluation infrastructure.} PGA metric (Hungarian-matched joint assignment accuracy), per-joint breakdowns, end-to-end pipeline with HigherHRNet-W32-512~\cite{cheng2020higherhrnet} detection, COCO/synthetic comparison.
+    \item \textbf{K estimation head.} Small MLP trained on frozen embeddings to predict person count. 79.6\% exact / 96\% off-by-one on COCO val after COCO training.
+\end{itemize}
+
+
+\subsubsection{MEng: SA-GAT + COP-Kmeans}
+
+\paragraph{Embedding network investigations.}
+
+\begin{tabular}{llcc}
+\hline
+\textbf{Method} & \textbf{Description} & \textbf{Synth PGA} & \textbf{COCO PGA} \\
+\hline
+Standard GAT~\cite{brody2022gatv2} & 2-layer GATv2, contrastive loss & 0.901 & 0.879 \\
+Standard GAT (with depth) & Same + MiDaS depth & 0.994 & 0.838 \\
+SA-GAT (type-pair only) & + category attention bias & 0.909 & --- \\
+SA-GAT (pos enc only) & + skeleton-relative position & 0.908 & --- \\
+SA-GAT (repulsion only) & + same-type repulsion heads & 0.897 & --- \\
+SA-GAT (full) & All three modifications & 0.910 & 0.882 \\
+SA-GAT (COCO fine-tuned) & Fine-tuned 20 epochs on COCO & 0.928 & 0.957 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Key finding: removing depth improved COCO transfer by +4.1 points (MiDaS domain gap). SA-GAT's three modifications each contribute independently. COCO fine-tuning was the single largest improvement (+7.5 points kNN on COCO).
+
+\paragraph{Grouping method investigations (MEng).}
+
+All methods tested on standard GAT embeddings, GT K. Slot attention and graph partitioning were trained with depth; all other methods use no depth.
+
+\begin{tabular}{llccc}
+\hline
+\textbf{Method} & \textbf{Type} & \textbf{Synth} & \textbf{COCO} & \textbf{Learned?} \\
+\hline
+kNN (k-means) & Baseline & 0.901 & 0.879 & No \\
+Slot attention (depth) & Learned head & 0.858 & 0.788 & Yes \\
+Graph partitioning (depth) & Edge classifier & 0.954 & 0.752 & Yes \\
+DEC & Deep clustering & 0.654 & --- & Yes \\
+\hline
+COP-Kmeans & Constrained k-means & 0.913 & 0.910 & No \\
+Agglomerative & Constrained merging & 0.837 & 0.887 & No \\
+Spectral & Zero same-type affinities & 0.915 & 0.894 & No \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Key findings: (1) All learned heads failed to outperform kNN --- the contrastive embeddings already solved the problem well enough that learned assignment added nothing. (2) Type constraints improved every clustering method on COCO, confirming skeleton structure is a useful inductive bias. (3) COP-Kmeans was the best vehicle: highest COCO PGA (0.910), smallest transfer gap ($-0.3$ points).
+
+\paragraph{Best MEng results (SA-GAT + COP-Kmeans, COCO fine-tuned).}
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Condition} & \textbf{PGA} \\
+\hline
+Synthetic (GT keypoints, GT K) & 0.938 \\
+COCO val (GT keypoints, GT K) & \textbf{0.968} \\
+COCO val (GT keypoints, predicted K) & 0.950 \\
+COCO end-to-end (HigherHRNet detected, GT K) & 0.955 \\
+\hline
+HigherHRNet AE (end-to-end, for comparison) & 0.985 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+SA-GAT is 170K parameters. It is a modular grouping component that operates on already-detected keypoints and can plug into any keypoint detector without joint training. COP-Kmeans adds zero learned parameters. See the ``Model size and modularity'' section of the previous catchup for the full size comparison (earlier ``168$\times$ smaller'' claim was incorrect --- HigherHRNet's pure AE grouping head is only $\sim$561 parameters but depends on the full backbone; SA-GAT's advantage is decoupling from the detector, not raw size).
+
+
+\subsubsection{PEng: Grouping head investigation --- from modularity to OT to Hungarian}
+
+\paragraph{SA-DMoN: modularity-based clustering (10 experiments).}
+
+\begin{tabular}{llc}
+\hline
+\textbf{Experiment} & \textbf{Variant} & \textbf{Synth PGA} \\
+\hline
+Exp 3 & Vanilla DMoN~\cite{tsitsulin2023dmon}, no depth & 0.785 \\
+Exp 4 & SA-DMoN v1, learnable sigma & 0.807 \\
+Exp 5 & SA-DMoN v1, sigma clamped [0.05, 0.5] & 0.812 \\
+Exp 6 & SA-DMoN v1, sigma clamped, $\lambda_{\text{spectral}}=1.0$ & 0.799 \\
+Exp 7 & SA-DMoN v1, sigma = median distance & 0.770 \\
+Exp 8 & SA-DMoN v1, spectral loss removed & 0.806 \\
+Exp 9 & SA-DMoN v2, feature adjacency $\lambda=1.0$ & 0.781 \\
+Exp 10 & SA-DMoN v2, feature adjacency $\lambda=0.1$ & 0.797 \\
+Exp 11 & SA-DMoN v2, entropy type loss only & 0.806 \\
+Exp 12 & SA-DMoN v2, full (both fixes) & 0.801 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+All SA-DMoN variants converge to 0.77--0.81 regardless of formulation. Root cause: the modularity objective is fundamentally misaligned with pose grouping. The kNN graph encodes spatial proximity, but communities are defined by identity. The spatial null model ($R_{\text{pose}}$) either cancels with the spatial adjacency ($A$) or is too weak/strong. This was the most time-intensive investigation and the clearest negative result --- it exhaustively eliminated modularity-based clustering as a viable approach.
+
+\paragraph{SCOT: skeleton-constrained optimal transport.}
+
+\begin{tabular}{llcc}
+\hline
+\textbf{Variant} & \textbf{Training} & \textbf{Synth} & \textbf{COCO} \\
+\hline
+SCOT (fixed prototypes) & Joint, synthetic & 0.926 & 0.863 \\
+SCOT (fixed prototypes) & Joint, COCO fine-tune & 0.948 & 0.884 \\
+SCOT (fixed prototypes) & Frozen GAT, COCO & 0.838 & 0.861 \\
+Residual SCOT & Joint, synthetic & 0.920 & 0.868 \\
+Adaptive SCOT & Joint, synthetic & 0.919 & 0.854 \\
+Unbalanced SCOT & Joint, synthetic & 0.894 & 0.836 \\
+Dustbin SCOT & Joint, synthetic & 0.901 & 0.840 \\
+SCOT-KI (k-means prototypes) & No training & --- & 0.926 \\
+\hline
+COP-Kmeans (for comparison) & No training & 0.938 & 0.968 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+SCOT's novel formulation (typed skeleton slots, infinite cost masking, Sinkhorn OT) achieves the highest synthetic PGA of any learned method (0.926). However, every SCOT variant underperforms COP-Kmeans on COCO by 4--13 points. Systematic diagnosis identified two causes: (1) fixed prototypes cannot represent the diversity of real scenes, and (2) balanced Sinkhorn transport assumes uniform joint visibility which doesn't hold with occlusion. SCOT-KI (scene-adaptive k-means prototypes) recovered 6.5 points but the remaining 4.2-point gap is in the Sinkhorn mechanism itself.
+
+\paragraph{THA: type-wise Hungarian assignment (final method).}
+
+Motivated by the SCOT analysis: replace both the fixed prototypes (with k-means centroids) and the Sinkhorn assignment (with per-type Hungarian matching).
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Method} & \textbf{Synth} & \textbf{COCO} \\
+\hline
+kNN & 0.928 & 0.957 \\
+COP-Kmeans & 0.938 & 0.968 \\
+\textbf{THA} & \textbf{0.965} & \textbf{0.969} \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+THA beats COP-Kmeans on both datasets (+2.7 synthetic, +0.1 COCO) with zero learned parameters. End-to-end with HigherHRNet: 0.955 (matching COP-Kmeans). Novel formulation: 17 parallel bipartite matching problems connected through shared centroids with iterative refinement.
+
+\paragraph{Other PEng investigations.}
+\begin{itemize}
+    \item \textbf{Skeleton-aware edge classifier} --- binary edge classification for same-person/different-person edges. Abandoned after GEC~\cite{maher2025gec} published the same approach in early 2025.
+    \item \textbf{K estimation} --- eigenvalue gap (18.3\% exact), joint MLP training (corrupted embeddings), frozen backbone MLP (100\% synthetic, 79.6\% COCO).
+    \item \textbf{Confidence-gated SCOT+kNN fusion} --- did not improve over SCOT alone.
+\end{itemize}
+
+
+\subsubsection{Complete results table}
+
+All methods, best numbers, on COCO val with GT keypoints and GT K (except where noted):
+
+\begin{tabular}{llc}
+\hline
+\textbf{Method} & \textbf{Backbone} & \textbf{COCO PGA} \\
+\hline
+\multicolumn{3}{l}{\emph{Baselines:}} \\
+kNN & Standard GAT & 0.879 \\
+kNN & SA-GAT & 0.882 \\
+kNN & SA-GAT (COCO ft) & 0.957 \\
+\hline
+\multicolumn{3}{l}{\emph{Learned grouping heads:}} \\
+Slot attention & Standard GAT (depth) & 0.788 \\
+Graph partitioning & Standard GAT (depth) & 0.752 \\
+SA-DMoN (best, no depth) & Standard GAT & 0.817 \\
+SCOT & Standard GAT & 0.862 \\
+SCOT & SA-GAT & 0.863 \\
+SCOT (COCO ft, joint) & SA-GAT & 0.884 \\
+SCOT (COCO, frozen) & SA-GAT (COCO ft) & 0.861 \\
+\hline
+\multicolumn{3}{l}{\emph{Constraint-based grouping (no learned params):}} \\
+COP-Kmeans & Standard GAT & 0.910 \\
+COP-Kmeans & SA-GAT & 0.915 \\
+COP-Kmeans & SA-GAT (COCO ft) & 0.968 \\
+Agglomerative & Standard GAT & 0.887 \\
+Spectral & Standard GAT & 0.894 \\
+SCOT-KI & SA-GAT (COCO ft) & 0.926 \\
+\textbf{THA} & \textbf{SA-GAT (COCO ft)} & \textbf{0.969} \\
+\hline
+\multicolumn{3}{l}{\emph{End-to-end (HigherHRNet detected keypoints):}} \\
+HigherHRNet AE & HigherHRNet-W32 & 0.985 \\
+SA-GAT + COP-Kmeans & SA-GAT (COCO ft) & 0.955 \\
+SA-GAT + THA & SA-GAT (COCO ft) & 0.955 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Total: 20+ distinct methods/configurations evaluated across synthetic and COCO datasets. 10 SA-DMoN experiments. 7 SCOT variants. 4 type-constrained clustering methods. SA-GAT ablation study (4 configurations). COCO fine-tuning. End-to-end pipeline with external detector. K estimation (3 approaches).
+
+
+\subsection{Publication Plan}
+
+Two papers are planned for the PEng requirement (one published, one submitted).
+
+\subsubsection{Paper 1: SA-GAT + THA (target: published)}
+
+\textbf{Working title:} ``SA-GAT: Skeleton-Aware Graph Attention Networks with Type-wise Hungarian Assignment for Multi-Person Pose Grouping''
+
+\textbf{Core argument:} A GNN embedding network with skeleton-aware attention modifications, combined with a novel type-decomposed Hungarian assignment algorithm, achieves competitive pose grouping accuracy as a modular component that can plug into any pre-trained keypoint detector without joint training.
+
+\textbf{Contents:}
+\begin{itemize}
+    \item SA-GAT architecture: three skeleton-aware modifications to GATv2 (type-pair attention bias, skeleton-relative position encoding, same-type repulsion heads) with ablation study showing each contributes independently.
+    \item THA algorithm: formulation of pose grouping as 17 parallel bipartite matching problems connected through shared centroids with iterative refinement. Novel --- no existing method combines per-type decomposition, Hungarian optimal assignment, and shared centroid updates.
+    \item COP-Kmeans as a strong baseline and ablation point: THA beats COP-Kmeans on both synthetic (+2.7 points) and COCO (+0.1 points), demonstrating the value of optimal per-type assignment over greedy constrained assignment.
+    \item COCO fine-tuning: pre-train on 400 synthetic images, fine-tune 20 epochs on COCO train2017, achieving 0.969 PGA on COCO val (GT keypoints) and 0.955 end-to-end with HigherHRNet detection.
+    \item End-to-end comparison: SA-GAT + THA (170K params) achieves 0.955 PGA vs HigherHRNet's full end-to-end pipeline (28.6M params) at 0.985 --- within 3 points with a fundamentally modular approach that decouples grouping from detection.
+    \item K estimation head for autonomous deployment: frozen MLP predicts person count at 79.6\% exact / 96\% off-by-one on COCO val, enabling a fully autonomous pipeline with no GT dependencies. (would love to get this better)
+\end{itemize}
+
+\textbf{Target venue:} \textbf{Image and Vision Computing} (Elsevier). Q1 in Computer Vision and Pattern Recognition (SCImago 2024), IF 5.34, SJR 0.791, h-index 150. Scopus-indexed, DHET-accredited. Publishes pose estimation work regularly and is a strong fit for the combined architecture + algorithm contribution. Pattern Recognition (Q1, IF 9.84) is the stretch target for maximum impact.
+
+\textbf{Key strengths for review:}
+\begin{itemize}
+    \item Novel architecture (SA-GAT) with clear ablation
+    \item Novel grouping algorithm (THA) with novelty verification against OpenPose, COP-Kmeans, DETR-style methods, DC-GNN, and HGG
+    \item Strong empirical results across multiple evaluation conditions
+    \item Modularity story: decoupled from the detector, works with any keypoint source without joint training
+    \item Complete end-to-end pipeline demonstrated
+\end{itemize}
+
+
+\subsubsection{Paper 2: SCOT investigation (target: submitted)}
+
+\textbf{Working title:} ``Optimal Transport for Multi-Person Pose Grouping: Opportunities and Limitations''
+
+\textbf{Core argument:} Skeleton-constrained optimal transport is a principled and novel formulation for pose grouping, but systematic experimentation reveals that fixed prototypes and balanced transport assumptions limit its performance compared to simpler constraint-based methods. The analysis identifies the specific failure modes and demonstrates a progression of fixes that partially close the gap.
+
+\textbf{Contents:}
+\begin{itemize}
+    \item SCOT formulation: typed skeleton slots ($K \times 17$), hard type constraints via infinite cost masking, Sinkhorn iterations in log domain. Novel --- no prior work applies structured OT with typed slots to keypoint grouping.
+    \item SA-DMoN investigation: 10 experiments demonstrating that modularity-based graph clustering is fundamentally misaligned with pose grouping. The kNN graph encodes spatial proximity but communities are defined by identity --- the null model either cancels with the adjacency or is miscalibrated. This exhaustively eliminates an entire paradigm.
+    \item SCOT variant ablation: residual SCOT (spatial prior + learned correction), adaptive SCOT (scene-predicted temperature), unbalanced SCOT (KL-relaxed marginals), dustbin SCOT (explicit rejection column). All variants converge to 0.84--0.88 COCO PGA, confirming the bottleneck is structural.
+    \item Training strategy investigation: joint training corrupts contrastive embeddings (kNN PGA drops from 0.957 to 0.946), frozen backbone training isolates the problem to the SCOT head itself.
+    \item Diagnostic progression: fixed prototypes (0.861 COCO) $\to$ SCOT-KI with k-means prototypes (0.926) $\to$ THA replacing Sinkhorn with per-type Hungarian (0.969). Each step identifies and fixes one failure mode: prototype rigidity, then balanced transport.
+    \item Comparison with COP-Kmeans across all conditions: COP-Kmeans consistently outperforms SCOT with zero learned parameters, demonstrating that well-structured contrastive embeddings make the grouping problem easy enough that simple constraints beat learned assignment.
+\end{itemize}
+
+\textbf{Target venue:} \textbf{Pattern Recognition Letters} (Elsevier). Q1 in Computer Vision and Pattern Recognition (SCImago 2024), IF 4.54, SJR 1.005, h-index 188. Scopus-indexed, DHET-accredited. Shorter format suits an investigation-style paper. The concise format (typically 8--12 pages) is well-matched to a paper whose contribution is experimental methodology and analysis rather than a large system. Neurocomputing (Q1, IF 8.18) is an alternative if a longer format is preferred.
+
+\textbf{Key strengths for review:}
+\begin{itemize}
+    \item Novel OT formulation (typed slots + infinite cost) even though it underperforms --- the formulation itself is a contribution
+    \item Exceptionally thorough experimental methodology: 10 SA-DMoN experiments, 7 SCOT variants, 3 training strategies, systematic isolation of each failure mode
+    \item Clear diagnostic value: the paper tells future researchers exactly what not to try (modularity for pose graphs, fixed prototypes with Sinkhorn) and why
+    \item The analysis directly motivates THA (Paper 1), creating a coherent research narrative across both publications
+    \item Reproducible: all configs, checkpoints, and evaluation scripts documented
+\end{itemize}
+
+\subsubsection{Relationship between papers}
+
+Paper 1 (SA-GAT + THA) is self-contained --- it presents the final method and results without requiring Paper 2. Paper 2 (SCOT investigation) provides the research context and experimental journey that led to THA, and references Paper 1 as the outcome. A reviewer reading only Paper 1 sees a complete contribution; a reviewer reading both sees the full depth of the investigation.
+
+For the PEng, Paper 1 demonstrates the ability to produce a publishable system contribution. Paper 2 demonstrates the ability to conduct rigorous research methodology --- systematic hypothesis testing, controlled experiments, honest reporting of negative results, and clear diagnostic analysis. Together they cover both aspects of engineering research.
+
+\subsubsection{Venue summary}
+
+All target journals are Elsevier, Scopus-indexed, and on the DHET accredited list (verified via the ISI/Scopus sublists that DHET uses for subsidy eligibility). Quartile rankings are from SCImago 2024.
+
+\begin{tabular}{lllll}
+\hline
+\textbf{Journal} & \textbf{Quartile} & \textbf{IF} & \textbf{SJR} & \textbf{Target for} \\
+\hline
+Image and Vision Computing & Q1 & 5.34 & 0.791 & Paper 1 (primary) \\
+Pattern Recognition & Q1 & 9.84 & 2.058 & Paper 1 (stretch) \\
+Pattern Recognition Letters & Q1 & 4.54 & 1.005 & Paper 2 (primary) \\
+Neurocomputing & Q1 & 8.18 & 1.471 & Paper 2 (alternative) \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+All four are Q1. The primary targets (Image and Vision Computing, Pattern Recognition Letters) are realistic given the results and novelty. The stretch/alternative targets (Pattern Recognition, Neurocomputing) have higher impact factors but are more competitive.

@@ -3237,9 +3237,9 @@ SA-GAT + COP-Kmeans & 0.908 & \textbf{0.955} \\
 \textbf{6. SCOT fine-tuning is the natural next step for the PEng.} The same fine-tuning approach should be applied to the SA-GAT + SCOT pipeline. The SCOT transfer gap (0.863 vs COP-Kmeans' 0.915 on synthetic-only training) may close substantially when the SCOT prototypes and Sinkhorn transport are trained on real data rather than 400 synthetic scenes.
 
 
-\subsubsection{Model size comparison}
+\subsubsection{Model size and modularity}
 
-An important practical consideration is model size. SA-GAT is a lightweight grouping module designed to operate on a pre-built keypoint graph, not a full image backbone.
+SA-GAT is a grouping module that operates on already-detected keypoints (positions + types), not on raw image features. This makes a direct parameter count comparison against end-to-end methods like HigherHRNet misleading, but it is worth breaking down.
 
 \begin{tabular}{lrr}
 \hline
@@ -3254,26 +3254,29 @@ SCOT head & 35,584 & 0.14 \\
 \textbf{PEng pipeline} (SA-GAT + K-head + SCOT) & \textbf{224,769} & \textbf{0.86} \\
 \hline
 HigherHRNet-W32 (full model) & 28,645,331 & 109.27 \\
+HigherHRNet AE grouping head (alone) & $\sim$561 & $<$0.01 \\
 \hline
 \end{tabular}
 
 \vspace{0.5em}
 
-SA-GAT is \textbf{168$\times$ smaller} than HigherHRNet. The full PEng pipeline (SA-GAT + K-head + SCOT) is \textbf{127$\times$ smaller}. This comparison is not entirely apples-to-apples --- HigherHRNet includes the image backbone and heatmap decoder while SA-GAT only handles grouping --- but it highlights that the grouping problem can be solved with a very small model. SA-GAT adds only 9,952 parameters over the standard GAT (a 6.2\% increase), demonstrating that the three skeleton-aware modifications (type-pair attention, position encoding, repulsion heads) are lightweight architectural changes, not heavy additions.
+\textbf{Correction to earlier size claim.} An initial reading of the parameter counts suggested SA-GAT is 168$\times$ smaller than HigherHRNet. This is misleading. HigherHRNet's \emph{pure grouping component} is tiny: the AE tag prediction is just 17 extra output channels on a single $1 \times 1$ convolution ($32 \times 17 + 17$ = 561 parameters). However, those 17 output channels cannot work alone --- they read from features produced by the full 28.6M-parameter HRNet backbone. The AE grouping is cheap to add but structurally dependent on the backbone.
 
-COP-Kmeans adds zero learned parameters. The entire MEng grouping contribution, from embedding to final person assignment, fits in 0.65\,MB.
+\textbf{SA-GAT's actual advantage is modularity, not size.} At 170,560 parameters SA-GAT is roughly 300$\times$ \emph{larger} than the AE grouping head when measured in isolation. But SA-GAT operates directly on keypoint positions and types --- it has no image backbone and can be dropped onto any keypoint detector without joint training. The AE head cannot; it is only trainable end-to-end with its specific HRNet backbone. The contribution is \textbf{decoupling the grouping step from the detector}, enabling reuse of any pre-trained detector with a consistent grouping module.
+
+SA-GAT adds only 9,952 parameters over the standard GAT (a 6.2\% increase), demonstrating that the three skeleton-aware modifications (type-pair attention, position encoding, repulsion heads) are lightweight architectural changes, not heavy additions. COP-Kmeans adds zero learned parameters. The entire MEng grouping contribution, from embedding to final person assignment, fits in 0.65\,MB and is detector-agnostic.
 
 
 \subsection{Summary and Outlook}
 
 \subsubsection{Where things stand}
 
-The MEng contribution is in strong shape. SA-GAT (a GATv2-based embedding network with three skeleton-aware modifications: type-pair attention bias, skeleton-relative position encoding, and same-type repulsion heads) combined with COP-Kmeans (constrained k-means with must-not-link constraints between same-type keypoints) achieves \textbf{0.968 PGA on COCO val} with GT keypoints after fine-tuning, and \textbf{0.955 PGA end-to-end} with HigherHRNet-detected keypoints. This is within 3 points of HigherHRNet's own jointly-trained associative embedding grouping (0.985), using a model that is 168$\times$ smaller and was pre-trained on just 400 synthetic images before 20 epochs of COCO fine-tuning. COP-Kmeans adds zero learned parameters --- the type constraints are a hard architectural prior, not a trained component.
+The MEng contribution is in strong shape. SA-GAT (a GATv2-based embedding network with three skeleton-aware modifications: type-pair attention bias, skeleton-relative position encoding, and same-type repulsion heads) combined with COP-Kmeans (constrained k-means with must-not-link constraints between same-type keypoints) achieves \textbf{0.968 PGA on COCO val} with GT keypoints after fine-tuning, and \textbf{0.955 PGA end-to-end} with HigherHRNet-detected keypoints. This is within 3 points of HigherHRNet's own jointly-trained associative embedding grouping (0.985), and unlike AE grouping, SA-GAT is a modular component that can plug into any keypoint detector without joint training. It was pre-trained on just 400 synthetic images before 20 epochs of COCO fine-tuning. COP-Kmeans adds zero learned parameters --- the type constraints are a hard architectural prior, not a trained component.
 
 The journey to get here involved a significant amount of negative results that informed the final design:
 \begin{itemize}
-    \item \textbf{Slot attention} (0.824 synthetic) --- learned grouping head, but did not outperform kNN on the same embeddings.
-    \item \textbf{Graph partitioning / edge classification} (0.828 synthetic) --- binary edge classifier for same-person/different-person edges. Reasonable on synthetic data, but the fixed threshold did not transfer to COCO. Independently published as GEC~\cite{maher2025gec} in early 2025.
+    \item \textbf{Slot attention} (0.858 synthetic, 0.788 COCO, with depth) --- learned grouping head, but did not outperform kNN on the same embeddings.
+    \item \textbf{Graph partitioning / edge classification} (0.954 synthetic, 0.752 COCO, with depth) --- binary edge classifier for same-person/different-person edges. High synthetic PGA but detection F1 collapsed to 0.802 on COCO because the fixed threshold did not transfer. Independently published as GEC~\cite{maher2025gec} in early 2025.
     \item \textbf{SA-DMoN v1 and v2} (0.77--0.81 synthetic across 10 experiments) --- skeleton-aware modifications to DMoN's modularity-based clustering. Exhaustively demonstrated that modularity is fundamentally misaligned with pose grouping: the kNN graph encodes spatial proximity, but communities are defined by identity. No null model formulation fixed this.
     \item \textbf{DEC} (0.654 synthetic) --- deep embedded clustering, worse than all other approaches.
 \end{itemize}
