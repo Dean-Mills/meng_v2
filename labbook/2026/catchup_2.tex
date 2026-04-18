@@ -698,15 +698,15 @@ The two degrees address two different framings of the same underlying problem.
 
 The MEng starts from the standard view of bottom-up pose grouping: produce an embedding per keypoint, then cluster them into people. Everything in the MEng is in service of making those embeddings as good as possible for clustering. I started with a vanilla GAT and tried learned grouping heads on top (slot attention, graph partitioning, DEC) --- all of them failed to beat plain k-means on the same embeddings. I then built SA-DMoN and ran ten experiments attempting modularity-based clustering --- all of them plateaued around 0.77--0.81 because the modularity objective is fundamentally misaligned with pose grouping (the kNN graph encodes spatial proximity, but communities are defined by identity).
 
-The lesson from those failures was that \emph{the embeddings are the lever}, not the grouping head on top. SA-GAT --- with three skeleton-aware modifications (type-pair attention bias, skeleton-relative position encoding, same-type repulsion heads) --- is the embedding network that comes out of that lesson. On top of SA-GAT, the simplest clustering that respects skeleton structure (k-means with must-not-link constraints between same-type keypoints, i.e.\ COP-Kmeans) is enough to produce state-of-the-art results.
+The lesson from those failures was that \emph{the embeddings are the lever}, not the grouping head on top. SA-GAT --- with three skeleton-aware modifications (type-pair attention bias, skeleton-relative position encoding, same-type repulsion heads) --- is the embedding network that comes out of that lesson. With well-structured contrastive embeddings, even plain kNN (0.957 COCO end-to-end after fine-tuning) matches or exceeds every learned grouping head tested.
 
 The MEng thesis is: \textbf{multi-person pose grouping reduces to an embedding problem; SA-GAT produces embeddings good enough that simple clustering outperforms every learned grouping head I tried.}
 
 \paragraph{PEng --- grouping is not a clustering problem, it is an assignment problem.}
 
-The PEng starts with a conceptual pivot. COP-Kmeans from the MEng introduces hard type constraints: no two left elbows can belong to the same person. That constraint is not a clustering property --- it is an assignment property. Each person has exactly 17 typed slots (one per COCO joint type), and the grouping task is to assign detected keypoints to slots under the hard constraint that each slot receives at most one keypoint. Viewed this way, pose grouping is structurally closer to the linear assignment problem or optimal transport than it is to k-means clustering.
+The PEng takes SA-GAT's embeddings as a given and pivots conceptually. The starting observation is COP-Kmeans: constrained k-means with a must-not-link constraint that no two left elbows can belong to the same person. COP-Kmeans beats every learned grouping head the MEng tested using zero learned parameters --- but the reason it works is not that it is ``a better cluster algorithm''. The must-not-link constraint is not a clustering property; it is an assignment property. Each person has exactly 17 typed slots (one per COCO joint type), and the grouping task is to assign detected keypoints to slots under the hard constraint that each slot receives at most one keypoint. Viewed this way, pose grouping is structurally closer to the linear assignment problem or optimal transport than it is to k-means clustering.
 
-This reframing is where SCOT comes from: the same hard type constraint that COP-Kmeans enforces greedily, but embedded in a principled differentiable optimal transport formulation with typed skeleton slots ($K \times 17$), infinite cost masking for type violations, and Sinkhorn iterations. SCOT is the formal assignment-based counterpart to COP-Kmeans.
+This reframing is where the rest of the PEng comes from. SCOT formalises the assignment view: the same hard type constraint that COP-Kmeans enforces greedily, embedded in a principled differentiable optimal transport formulation with typed skeleton slots ($K \times 17$), infinite cost masking for type violations, and Sinkhorn iterations.
 
 SCOT underperforms. Through systematic ablation (seven variants, three training strategies, two backbones, two embedding sources) I diagnosed two architectural weaknesses: fixed learned prototypes that do not adapt to scene diversity, and balanced Sinkhorn transport that assumes uniform joint visibility. SCOT-KI (k-means initialised prototypes) fixes the first problem and recovers 6.5 points. THA (Type-wise Hungarian Assignment) fixes both: scene-adaptive k-means centroids plus per-joint-type optimal bipartite matching via Hungarian, which eliminates the balanced transport assumption. THA beats COP-Kmeans on every condition tested.
 
@@ -729,7 +729,9 @@ The MEng builds the embedding machinery under a clustering interpretation and fi
 \end{itemize}
 
 
-\subsubsection{MEng: SA-GAT + COP-Kmeans}
+\subsubsection{MEng: embedding network (grouping-as-clustering)}
+
+The MEng work lives under the clustering framing. It covers (a) the failed learned grouping heads that motivated the embedding-focused approach, (b) SA-DMoN (the most time-intensive negative result), and (c) SA-GAT itself as the embedding network that comes out of those failures.
 
 \paragraph{Embedding network investigations.}
 
@@ -751,50 +753,24 @@ SA-GAT (COCO fine-tuned) & Fine-tuned 20 epochs on COCO & 0.928 & 0.957 \\
 
 Key finding: removing depth improved COCO transfer by +4.1 points (MiDaS domain gap). SA-GAT's three modifications each contribute independently. COCO fine-tuning was the single largest improvement (+7.5 points kNN on COCO).
 
-\paragraph{Grouping method investigations (MEng).}
+\paragraph{Learned grouping head attempts (all failed to beat plain kNN).}
 
-All methods tested on standard GAT embeddings, GT K. Slot attention and graph partitioning were trained with depth; all other methods use no depth.
+All tested on standard GAT embeddings with GT K. Slot attention and graph partitioning were trained with depth (these predate the no-depth standard).
 
-\begin{tabular}{llccc}
+\begin{tabular}{llcc}
 \hline
-\textbf{Method} & \textbf{Type} & \textbf{Synth} & \textbf{COCO} & \textbf{Learned?} \\
+\textbf{Method} & \textbf{Type} & \textbf{Synth} & \textbf{COCO} \\
 \hline
-kNN (k-means) & Baseline & 0.901 & 0.879 & No \\
-Slot attention (depth) & Learned head & 0.858 & 0.788 & Yes \\
-Graph partitioning (depth) & Edge classifier & 0.954 & 0.752 & Yes \\
-DEC & Deep clustering & 0.654 & --- & Yes \\
-\hline
-COP-Kmeans & Constrained k-means & 0.913 & 0.910 & No \\
-Agglomerative & Constrained merging & 0.837 & 0.887 & No \\
-Spectral & Zero same-type affinities & 0.915 & 0.894 & No \\
+kNN (k-means baseline) & No head & 0.901 & 0.879 \\
+Slot attention (depth) & Learned head & 0.858 & 0.788 \\
+Graph partitioning (depth) & Edge classifier & 0.954 & 0.752 \\
+DEC & Deep clustering & 0.654 & --- \\
 \hline
 \end{tabular}
 
 \vspace{0.5em}
 
-Key findings: (1) All learned heads failed to outperform kNN --- the contrastive embeddings already solved the problem well enough that learned assignment added nothing. (2) Type constraints improved every clustering method on COCO, confirming skeleton structure is a useful inductive bias. (3) COP-Kmeans was the best vehicle: highest COCO PGA (0.910), smallest transfer gap ($-0.3$ points).
-
-\paragraph{Best MEng results (SA-GAT + COP-Kmeans, COCO fine-tuned).}
-
-\begin{tabular}{lcc}
-\hline
-\textbf{Condition} & \textbf{PGA} \\
-\hline
-Synthetic (GT keypoints, GT K) & 0.938 \\
-COCO val (GT keypoints, GT K) & \textbf{0.968} \\
-COCO val (GT keypoints, predicted K) & 0.950 \\
-COCO end-to-end (HigherHRNet detected, GT K) & 0.955 \\
-\hline
-HigherHRNet AE (end-to-end, for comparison) & 0.985 \\
-\hline
-\end{tabular}
-
-\vspace{0.5em}
-
-SA-GAT is 170K parameters. It is a modular grouping component that operates on already-detected keypoints and can plug into any keypoint detector without joint training. COP-Kmeans adds zero learned parameters. See the ``Model size and modularity'' section of the previous catchup for the full size comparison (earlier ``168$\times$ smaller'' claim was incorrect --- HigherHRNet's pure AE grouping head is only $\sim$561 parameters but depends on the full backbone; SA-GAT's advantage is decoupling from the detector, not raw size).
-
-
-\subsubsection{PEng: Grouping head investigation --- from modularity to OT to Hungarian}
+Every learned head failed to outperform plain kNN clustering on the same embeddings. The contrastive embeddings were already good enough that learned assignment added nothing. This was the first evidence that the embeddings, not the grouping head, are the real lever.
 
 \paragraph{SA-DMoN: modularity-based clustering (10 experiments).}
 
@@ -818,6 +794,29 @@ Exp 12 & SA-DMoN v2, full (both fixes) & 0.801 \\
 \vspace{0.5em}
 
 All SA-DMoN variants converge to 0.77--0.81 regardless of formulation. Root cause: the modularity objective is fundamentally misaligned with pose grouping. The kNN graph encodes spatial proximity, but communities are defined by identity. The spatial null model ($R_{\text{pose}}$) either cancels with the spatial adjacency ($A$) or is too weak/strong. This was the most time-intensive investigation and the clearest negative result --- it exhaustively eliminated modularity-based clustering as a viable approach.
+
+\paragraph{MEng conclusion.} With SA-GAT producing well-structured contrastive embeddings, grouping-as-clustering is effectively solved. Simple kNN already gets 0.957 on COCO after fine-tuning; any sensible clustering method on top reaches 0.95+. The MEng paper's claim is that pose grouping is an embedding problem and SA-GAT is the right embedding network for it.
+
+
+\subsubsection{PEng: grouping-as-assignment (COP-Kmeans $\to$ SCOT $\to$ THA)}
+
+The PEng work takes SA-GAT as a given and reframes the problem. Hard type constraints (no two left elbows per person) are not a clustering property --- they are an assignment property. This reframing starts with COP-Kmeans, formalises through SCOT, and ends with THA.
+
+\paragraph{Constraint-based assignment variants (on SA-GAT embeddings).}
+
+\begin{tabular}{llcc}
+\hline
+\textbf{Method} & \textbf{Mechanism} & \textbf{Synth} & \textbf{COCO} \\
+\hline
+COP-Kmeans~\cite{wagstaff2001copkmeans} & Greedy constrained k-means (must-not-link) & 0.913 & 0.910 \\
+Agglomerative & Constrained bottom-up merging & 0.837 & 0.887 \\
+Spectral & Zero same-type affinities & 0.915 & 0.894 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+COP-Kmeans is the first clear signal that the constraint is the contribution --- it takes the same embeddings the learned heads use and beats them with no learned parameters. The must-not-link constraint is doing the work. This is the pivot moment: type constraints are an \emph{assignment} construct, not a clustering construct. The remainder of the PEng investigates that reframing properly.
 
 \paragraph{SCOT: skeleton-constrained optimal transport.}
 
@@ -865,7 +864,10 @@ THA beats COP-Kmeans on both datasets (+2.7 synthetic, +0.1 COCO) with zero lear
     \item \textbf{Skeleton-aware edge classifier} --- binary edge classification for same-person/different-person edges. Abandoned after GEC~\cite{maher2025gec} published the same approach in early 2025.
     \item \textbf{K estimation} --- eigenvalue gap (18.3\% exact), joint MLP training (corrupted embeddings), frozen backbone MLP (100\% synthetic, 79.6\% COCO).
     \item \textbf{Confidence-gated SCOT+kNN fusion} --- did not improve over SCOT alone.
+    \item \textbf{SA-GAT v2 with MobileNet features} --- attempt at a third paper (end-to-end pipeline with visual features). Trained for 50 epochs, reached 0.964 end-to-end vs HigherHRNet's 0.985, so the paper was dropped. Visual features do help (+0.8 points) but not enough to beat a jointly-trained AE head. Documented as a negative result for the dissertation.
 \end{itemize}
+
+\paragraph{PEng conclusion.} The assignment framing pays off: COP-Kmeans establishes that the constraint is the contribution, SCOT formalises it as OT but underperforms due to fixed prototypes and balanced transport, and THA realises the framing in a form that beats every clustering baseline while using zero learned parameters. The PEng paper's claim is that pose grouping is structurally an assignment problem with skeleton constraints, and type-decomposed Hungarian matching is the right algorithm for it.
 
 
 \subsubsection{Complete results table}
@@ -913,68 +915,96 @@ Total: 20+ distinct methods/configurations evaluated across synthetic and COCO d
 
 \subsection{Publication Plan}
 
-Two papers are planned for the PEng requirement (one published, one submitted).
+The publication plan mirrors the MEng/PEng conceptual split. The MEng paper presents pose grouping as an embedding problem and shows SA-GAT is the right embedding network for it. The PEng paper reframes the problem as structured assignment and presents THA as the right algorithm for that framing, with SCOT and the investigation behind it as the experimental evidence that motivates the reframing.
 
-\subsubsection{Paper 1: SA-GAT + THA (target: published)}
+\subsubsection{MEng paper: SA-GAT (target: submitted)}
 
-\textbf{Working title:} ``SA-GAT: Skeleton-Aware Graph Attention Networks with Type-wise Hungarian Assignment for Multi-Person Pose Grouping''
+\textbf{Working title:} ``SA-GAT: Skeleton-Aware Graph Attention Networks for Multi-Person Pose Grouping''
 
-\textbf{Core argument:} A GNN embedding network with skeleton-aware attention modifications, combined with a novel type-decomposed Hungarian assignment algorithm, achieves competitive pose grouping accuracy as a modular component that can plug into any pre-trained keypoint detector without joint training.
+\textbf{Core argument:} Multi-person pose grouping is structurally an embedding problem. If the embeddings are good enough, simple clustering outperforms every learned grouping head. SA-GAT is a GATv2-based embedding network with three lightweight skeleton-aware modifications that produce embeddings of this quality, and the resulting SA-GAT + constrained clustering pipeline matches state-of-the-art end-to-end methods while remaining fully decoupled from the keypoint detector.
 
-\textbf{Contents:}
+\textbf{Narrative arc:}
+\begin{enumerate}
+    \item \textbf{Motivation.} Bottom-up pose grouping has traditionally been studied by designing complex grouping heads (slot attention, associative embedding, modularity clustering, edge classification). The paper argues that the embedding space is the real lever.
+    \item \textbf{Baseline and failed alternatives.} Standard GAT + contrastive loss + kNN clustering gives a strong baseline (0.879 COCO). Learned grouping heads on top (slot attention, graph partitioning, DEC) all fail to improve on kNN. SA-DMoN with modularity-based clustering fails across 10 experimental variants because modularity is misaligned with identity-based grouping.
+    \item \textbf{The insight.} When the embeddings are well-structured by contrastive learning, simple constrained clustering (COP-Kmeans with must-not-link constraints between same-type keypoints) outperforms every learned head tested.
+    \item \textbf{SA-GAT.} Three skeleton-aware modifications (type-pair attention bias, skeleton-relative position encoding, same-type repulsion heads) each contribute independently to embedding quality. Total cost: $\sim$10K extra parameters over standard GAT.
+    \item \textbf{Synthetic-to-COCO transfer.} Depth removal fixed the MiDaS domain gap (+4.1 points). COCO fine-tuning closed the transfer gap almost entirely, reaching 0.968 COCO PGA with COP-Kmeans.
+    \item \textbf{End-to-end evaluation.} Paired with HigherHRNet-detected keypoints, SA-GAT + COP-Kmeans achieves 0.955 end-to-end PGA, within 3 points of HigherHRNet's own associative embedding grouping (0.985).
+    \item \textbf{Modularity claim.} SA-GAT is a detector-agnostic grouping module, in contrast to jointly-trained AE heads that are locked to their specific backbone.
+\end{enumerate}
+
+\textbf{Key results:}
 \begin{itemize}
-    \item SA-GAT architecture: three skeleton-aware modifications to GATv2 (type-pair attention bias, skeleton-relative position encoding, same-type repulsion heads) with ablation study showing each contributes independently.
-    \item THA algorithm: formulation of pose grouping as 17 parallel bipartite matching problems connected through shared centroids with iterative refinement. Novel --- no existing method combines per-type decomposition, Hungarian optimal assignment, and shared centroid updates.
-    \item COP-Kmeans as a strong baseline and ablation point: THA beats COP-Kmeans on both synthetic (+2.7 points) and COCO (+0.1 points), demonstrating the value of optimal per-type assignment over greedy constrained assignment.
-    \item COCO fine-tuning: pre-train on 400 synthetic images, fine-tune 20 epochs on COCO train2017, achieving 0.969 PGA on COCO val (GT keypoints) and 0.955 end-to-end with HigherHRNet detection.
-    \item End-to-end comparison: SA-GAT + THA (170K params) achieves 0.955 PGA vs HigherHRNet's full end-to-end pipeline (28.6M params) at 0.985 --- within 3 points with a fundamentally modular approach that decouples grouping from detection.
-    \item K estimation head for autonomous deployment: frozen MLP predicts person count at 79.6\% exact / 96\% off-by-one on COCO val, enabling a fully autonomous pipeline with no GT dependencies. (would love to get this better)
+    \item 0.968 COCO PGA with GT keypoints (COP-Kmeans on COCO-fine-tuned SA-GAT)
+    \item 0.955 COCO PGA end-to-end with HigherHRNet detection
+    \item SA-GAT ablation: each of the three modifications contributes
+    \item Every learned grouping head tested fails to beat simple clustering on the same embeddings
+    \item Detector-agnostic: trained independently of the keypoint detector, works as a drop-in module
 \end{itemize}
 
-\textbf{Target venue:} \textbf{Image and Vision Computing} (Elsevier). Q1 in Computer Vision and Pattern Recognition (SCImago 2024), IF 5.34, SJR 0.791, h-index 150. Scopus-indexed, DHET-accredited. Publishes pose estimation work regularly and is a strong fit for the combined architecture + algorithm contribution. Pattern Recognition (Q1, IF 9.84) is the stretch target for maximum impact.
+\textbf{Target venue:} \textbf{Image and Vision Computing} (Elsevier). Q1 in Computer Vision and Pattern Recognition (SCImago 2024), IF 5.34, SJR 0.791, h-index 150. Scopus-indexed, DHET-accredited. Publishes pose estimation work regularly and fits the architectural-contribution-plus-empirical-study format. Pattern Recognition (Q1, IF 9.84) is the stretch target.
 
 \textbf{Key strengths for review:}
 \begin{itemize}
-    \item Novel architecture (SA-GAT) with clear ablation
-    \item Novel grouping algorithm (THA) with novelty verification against OpenPose, COP-Kmeans, DETR-style methods, DC-GNN, and HGG
-    \item Strong empirical results across multiple evaluation conditions
-    \item Modularity story: decoupled from the detector, works with any keypoint source without joint training
-    \item Complete end-to-end pipeline demonstrated
+    \item A coherent argument supported by negative results (failed learned heads, failed modularity)
+    \item Novel architecture with clean ablation
+    \item Strong empirical results on COCO (both GT keypoints and end-to-end with an external detector)
+    \item Lightweight and modular, unlike jointly-trained end-to-end methods
 \end{itemize}
 
 
-\subsubsection{Paper 2: SCOT investigation (target: submitted)}
+\subsubsection{PEng paper: SCOT \& THA (target: published)}
 
-\textbf{Working title:} ``Optimal Transport for Multi-Person Pose Grouping: Opportunities and Limitations''
+\textbf{Working title:} ``From Clustering to Assignment: Skeleton-Constrained Optimal Transport and Type-wise Hungarian Matching for Multi-Person Pose Grouping''
 
-\textbf{Core argument:} Skeleton-constrained optimal transport is a principled and novel formulation for pose grouping, but systematic experimentation reveals that fixed prototypes and balanced transport assumptions limit its performance compared to simpler constraint-based methods. The analysis identifies the specific failure modes and demonstrates a progression of fixes that partially close the gap.
+\textbf{Core argument:} Multi-person pose grouping is not a clustering problem --- it is a structured assignment problem where each person has exactly 17 typed slots and the task is to assign detected keypoints to slots under hard type constraints. This reframing motivates a family of assignment-based algorithms. SCOT formalises the framing as skeleton-constrained optimal transport; it is novel but underperforms due to specific architectural limitations. Diagnosing those limitations through systematic ablation leads to THA, a type-decomposed Hungarian matching algorithm that realises the assignment-based view of the problem and outperforms clustering-based methods across every condition tested.
 
-\textbf{Contents:}
+\textbf{Narrative arc:}
+\begin{enumerate}
+    \item \textbf{The reframing.} Hard type constraints (no two left elbows in the same person) are not a clustering property, they are an assignment property. Pose grouping is structurally closer to linear assignment than to k-means. This reframing is what motivates the whole paper.
+    \item \textbf{SCOT: formalising the assignment view.} A differentiable optimal transport formulation with typed skeleton slots ($K \times 17$), infinite cost masking for type violations, and Sinkhorn iterations. Novel: no prior work applies structured OT with typed slots to keypoint grouping. Good synthetic performance (0.923 PGA).
+    \item \textbf{SCOT fails to transfer.} On COCO, SCOT drops to 0.862 --- far below the clustering-based COP-Kmeans baseline (0.910). This is the puzzle the paper investigates.
+    \item \textbf{Systematic diagnosis.} Seven SCOT variants (residual, adaptive, unbalanced, dustbin, k-means initialised), three training strategies (joint synthetic, joint COCO fine-tune, frozen backbone), two backbones (SA-GAT, standard GAT), two embedding sources (our contrastive embeddings, HigherHRNet's own backbone features). All land in the same 0.84--0.88 COCO range. The bottleneck is architectural, not training or embedding.
+    \item \textbf{Identified failure modes.} (a) Fixed learned prototypes cannot represent the diversity of real scenes. (b) Balanced Sinkhorn transport assumes uniform joint visibility, which is violated under occlusion. (c) Soft-to-hard argmax conversion loses information near decision boundaries.
+    \item \textbf{SCOT-KI as diagnostic step.} Replacing fixed prototypes with per-scene k-means centroids recovers 6.5 points (0.861 $\to$ 0.926). Confirms prototype rigidity was the first problem; remaining gap to COP-Kmeans is in the Sinkhorn mechanism itself.
+    \item \textbf{THA: the assignment-based algorithm that works.} Per-joint-type bipartite matching via Hungarian, with shared scene-adaptive centroids and iterative refinement. Scene-adaptive (inheriting from COP-Kmeans), globally optimal per-type (inheriting the assignment framing from SCOT), and structurally constrained (each type matched independently). Zero learned parameters.
+    \item \textbf{Novelty verification.} THA's combination of per-type decomposition, Hungarian optimal assignment, and shared iterative centroids has not been published. Related methods (OpenPose pairwise matching, COP-Kmeans greedy constraint resolution, DETR-style Hungarian for set prediction, DC-GNN, HGG) are structurally different.
+    \item \textbf{Results.} THA beats COP-Kmeans on synthetic (+2.7), matches on COCO with GT keypoints (+0.1), matches end-to-end ($\approx$0.955).
+\end{enumerate}
+
+\textbf{Key results:}
 \begin{itemize}
-    \item SCOT formulation: typed skeleton slots ($K \times 17$), hard type constraints via infinite cost masking, Sinkhorn iterations in log domain. Novel --- no prior work applies structured OT with typed slots to keypoint grouping.
-    \item SA-DMoN investigation: 10 experiments demonstrating that modularity-based graph clustering is fundamentally misaligned with pose grouping. The kNN graph encodes spatial proximity but communities are defined by identity --- the null model either cancels with the adjacency or is miscalibrated. This exhaustively eliminates an entire paradigm.
-    \item SCOT variant ablation: residual SCOT (spatial prior + learned correction), adaptive SCOT (scene-predicted temperature), unbalanced SCOT (KL-relaxed marginals), dustbin SCOT (explicit rejection column). All variants converge to 0.84--0.88 COCO PGA, confirming the bottleneck is structural.
-    \item Training strategy investigation: joint training corrupts contrastive embeddings (kNN PGA drops from 0.957 to 0.946), frozen backbone training isolates the problem to the SCOT head itself.
-    \item Diagnostic progression: fixed prototypes (0.861 COCO) $\to$ SCOT-KI with k-means prototypes (0.926) $\to$ THA replacing Sinkhorn with per-type Hungarian (0.969). Each step identifies and fixes one failure mode: prototype rigidity, then balanced transport.
-    \item Comparison with COP-Kmeans across all conditions: COP-Kmeans consistently outperforms SCOT with zero learned parameters, demonstrating that well-structured contrastive embeddings make the grouping problem easy enough that simple constraints beat learned assignment.
+    \item SCOT: novel OT formulation for pose grouping, 0.923 synthetic / 0.862 COCO (GT keypoints)
+    \item SCOT-KI: 0.926 COCO (scene-adaptive prototypes recover 6.5 points)
+    \item THA: 0.965 synthetic / 0.969 COCO / 0.955 end-to-end
+    \item Bulletproof SCOT diagnosis: same ranking (SCOT-KI $<$ THA $\approx$ COP-Kmeans) across 7 variants, 3 training strategies, 2 backbones, 2 embedding sources
+    \item SA-DMoN investigation (10 experiments) as additional evidence that clustering-based approaches hit a ceiling --- included as supporting material
 \end{itemize}
 
-\textbf{Target venue:} \textbf{Pattern Recognition Letters} (Elsevier). Q1 in Computer Vision and Pattern Recognition (SCImago 2024), IF 4.54, SJR 1.005, h-index 188. Scopus-indexed, DHET-accredited. Shorter format suits an investigation-style paper. The concise format (typically 8--12 pages) is well-matched to a paper whose contribution is experimental methodology and analysis rather than a large system. Neurocomputing (Q1, IF 8.18) is an alternative if a longer format is preferred.
+\textbf{Target venue:} \textbf{Pattern Recognition Letters} (Elsevier). Q1 in Computer Vision and Pattern Recognition (SCImago 2024), IF 4.54, SJR 1.005, h-index 188. Scopus-indexed, DHET-accredited. The shorter format suits a paper built around a conceptual reframing with experimental evidence rather than a large system. Neurocomputing (Q1, IF 8.18) is an alternative if a longer format is preferred.
 
 \textbf{Key strengths for review:}
 \begin{itemize}
-    \item Novel OT formulation (typed slots + infinite cost) even though it underperforms --- the formulation itself is a contribution
-    \item Exceptionally thorough experimental methodology: 10 SA-DMoN experiments, 7 SCOT variants, 3 training strategies, systematic isolation of each failure mode
-    \item Clear diagnostic value: the paper tells future researchers exactly what not to try (modularity for pose graphs, fixed prototypes with Sinkhorn) and why
-    \item The analysis directly motivates THA (Paper 1), creating a coherent research narrative across both publications
-    \item Reproducible: all configs, checkpoints, and evaluation scripts documented
+    \item A clear conceptual contribution (pose grouping as structured assignment, not clustering) supported by both theory and experiment
+    \item Two novel algorithms (SCOT, THA) with different roles: SCOT establishes the framing, THA realises it in a form that actually works
+    \item Exceptionally thorough experimental methodology --- 7 SCOT variants, 3 training strategies, 2 backbones, 2 embedding sources
+    \item Honest reporting: the paper does not hide SCOT's underperformance, it uses it as diagnostic evidence for the architectural insights that produce THA
+    \item THA beats the best clustering baseline (COP-Kmeans from the MEng paper), so the conceptual reframing has measurable payoff
 \end{itemize}
 
-\subsubsection{Relationship between papers}
 
-Paper 1 (SA-GAT + THA) is self-contained --- it presents the final method and results without requiring Paper 2. Paper 2 (SCOT investigation) provides the research context and experimental journey that led to THA, and references Paper 1 as the outcome. A reviewer reading only Paper 1 sees a complete contribution; a reviewer reading both sees the full depth of the investigation.
+\subsubsection{Relationship between the papers}
 
-For the PEng, Paper 1 demonstrates the ability to produce a publishable system contribution. Paper 2 demonstrates the ability to conduct rigorous research methodology --- systematic hypothesis testing, controlled experiments, honest reporting of negative results, and clear diagnostic analysis. Together they cover both aspects of engineering research.
+The two papers mirror the MEng/PEng conceptual split.
+
+The MEng paper (SA-GAT) adopts the standard clustering framing of pose grouping and contributes a better embedding network. It is self-contained: SA-GAT + COP-Kmeans is a complete, empirically strong system that does not depend on anything from the PEng paper.
+
+The PEng paper (SCOT/THA) takes SA-GAT as a given (reference is made to the MEng paper) and argues that the clustering framing misses what the problem actually is. The paper reframes pose grouping as structured assignment, presents SCOT as the formal OT realisation of that framing, diagnoses why SCOT does not work as-is, and presents THA as the algorithm that actually realises the assignment-based framing in a form that outperforms clustering baselines.
+
+The papers share infrastructure (synthetic data generator, COCO adapter, evaluation protocol, end-to-end pipeline) but have independent contributions and can each be read standalone. Read together, they tell the full story: \emph{produce good embeddings (MEng), then reason about how to assign them to people (PEng).}
+
+For the PEng degree specifically, the paper-1 / paper-2 structure satisfies the ``one published, one submitted'' requirement while giving each paper a clear and different contribution --- the MEng paper is system-focused (architecture + empirical results), the PEng paper is conceptually focused (reframing + algorithm + diagnostic ablation).
 
 \subsubsection{Venue summary}
 
@@ -994,3 +1024,48 @@ Neurocomputing & Q1 & 8.18 & 1.471 & Paper 2 (alternative) \\
 \vspace{0.5em}
 
 All four are Q1. The primary targets (Image and Vision Computing, Pattern Recognition Letters) are realistic given the results and novelty. The stretch/alternative targets (Pattern Recognition, Neurocomputing) have higher impact factors but are more competitive.
+
+
+\subsubsection{Naming concern --- is ``SA-GAT'' too generic?}
+
+Before submitting the MEng paper I need to consider whether the name ``SA-GAT'' is distinctive enough. ``Skeleton-aware graph attention'' is a general concept that several existing works have already explored in adjacent settings.
+
+\paragraph{Existing adjacent work.} Notable collisions in the literature:
+\begin{itemize}
+    \item \textbf{STGAT / ST-GAT} (Hu et al., \emph{Expert Systems with Applications} 2023)~\cite{hu2023stgat} --- spatial-temporal graph attention for skeleton-based action recognition. Attends over the same COCO-style skeleton graph as SA-GAT but for a completely different task (action classification from joint trajectories).
+    \item \textbf{GAST-Net} (Liu et al., arXiv 2020)~\cite{liu2020gastnet} --- graph attention spatio-temporal convolutional network for single-person 3D pose estimation from video. Uses graph attention to model kinematic constraints within a single person's skeleton.
+    \item \textbf{DGAN, MGSAN, and similar} --- various graph attention variants for skeleton-based action recognition with names that partially overlap.
+\end{itemize}
+
+The broader concept of attending over skeleton joints via graph attention is firmly established prior art. A casual reader searching for ``skeleton-aware graph attention'' would find these papers first.
+
+\paragraph{What is genuinely novel in our SA-GAT.}
+\begin{itemize}
+    \item The three specific architectural modifications --- type-pair attention bias, skeleton-relative position encoding, same-type repulsion heads --- as a package.
+    \item The \emph{repulsion heads} idea specifically (pushing same-type keypoints apart for identity separation) is different from existing methods that attend along skeletal connections.
+    \item The \emph{application} to bottom-up multi-person person-grouping. None of the cited works address grouping; they are all single-person or action recognition.
+\end{itemize}
+
+\paragraph{What is not novel.}
+\begin{itemize}
+    \item Graph attention over skeleton joints (many precedents).
+    \item The phrase ``skeleton-aware'' as a descriptor (widely used).
+\end{itemize}
+
+\paragraph{Options to address this.}
+
+\emph{Option A: Rename to something task-specific.} Candidate names that avoid existing collisions and signal the application clearly:
+\begin{itemize}
+    \item \textbf{PG-GAT} --- Pose Grouping GAT. Most literal, short enough for tables.
+    \item \textbf{GroupGAT} --- emphasises the grouping task.
+    \item \textbf{ID-GAT} --- Identity GAT, signalling the identity-separation objective.
+    \item \textbf{AssignGAT} --- would pair well with the PEng paper's assignment framing.
+\end{itemize}
+
+\emph{Option B: Keep SA-GAT but be explicit in the paper.} Retain the name, but add a paragraph early in the paper that acknowledges the prior art and specifies our contribution as the application and the three specific modifications rather than the general mechanism. Example phrasing: ``We retain `skeleton-aware graph attention' as a descriptor of the mechanism, but our contribution is not the attention mechanism itself (which has antecedents in STGAT~\cite{hu2023stgat} for action recognition and GAST-Net~\cite{liu2020gastnet} for single-person pose) but rather its adaptation to bottom-up multi-person keypoint grouping through three specific modifications.''
+
+\paragraph{Recommendation.} Lean toward Option A, specifically \textbf{PG-GAT} or \textbf{GroupGAT}. Naming collisions hurt discoverability --- if the paper gets indexed alongside action-recognition STGAT variants it will be harder to find via keyword search. A task-specific rename is a cheap change (a few hours of codebase rename + consistent terminology in the paper) that could meaningfully help the paper stand out.
+
+If we do rename, the search-and-replace is straightforward because the module is well-isolated: \texttt{sa\_gat.py}, \texttt{sa\_gat\_v2.py}, the config classes \texttt{SAGATConfig} and \texttt{SAGATV2Config}, and the class \texttt{SAGATEmbedding}. The output directory structure stays the same. No experimental results need to be re-run.
+
+The final decision can wait until we start writing the MEng paper, but the question is flagged here so it is not forgotten.
