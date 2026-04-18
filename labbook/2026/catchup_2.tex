@@ -466,9 +466,256 @@ SCOT-KI & 0.825 & 0.926 \\
 \textbf{5. Side finding: COP-Kmeans and THA are robust to embedding quality.} On SA-GAT embeddings (kNN 0.957 $\to$ COP-Kmeans 0.968) the type constraint adds 1.1 points. On the much weaker HRNet features (kNN 0.789 $\to$ COP-Kmeans 0.891), the constraint adds 10.2 points. The worse the embeddings, the more the structural prior contributes. This suggests that type constraints are a particularly useful inductive bias when embedding quality is lower --- useful context for practitioners who can't fine-tune their detector.
 
 
+\subsection{Visual Feature Augmentation Feasibility (Towards a Paper 3)}
+
+\subsubsection{Motivation}
+
+The MEng and PEng contributions so far are a \emph{grouping module} --- SA-GAT operates on already-detected keypoints and produces person assignments. It is modular: it can plug into any keypoint detector. But it is not an end-to-end pose estimation system. HigherHRNet, DEKR, ED-Pose, and similar methods all couple detection and grouping in a single trainable pipeline.
+
+A potential third paper would close this gap by showing that SA-GAT can act as the grouping component in a full pose estimation system, where a lightweight backbone produces both (a) keypoint detections \emph{and} (b) per-keypoint visual features that SA-GAT consumes alongside positions. The contribution would shift from ``a grouping algorithm'' to ``a complete modular pose estimation pipeline with a learned grouping module that uses visual context.''
+
+The first question to answer before committing to this direction is whether visual features actually help grouping. SA-GAT currently sees only positions and joint types --- no image context, no appearance information. If visual features add little, the contribution is marginal and not worth the engineering investment.
+
+\subsubsection{Setup}
+
+I built a feasibility test (\texttt{eval\_mobilenet\_features.py}) that:
+\begin{enumerate}
+    \item Detects keypoints with HigherHRNet (existing pipeline)
+    \item Runs MobileNetV2 (ImageNet-pretrained) on the same image and captures an intermediate feature map
+    \item Bilinearly samples the feature vector at each detected keypoint location
+    \item Compares two embedding versions on the same scene:
+    \begin{itemize}
+        \item \textbf{pos}: $[x_{\text{norm}}, y_{\text{norm}}, \text{type one-hot}]$ (19-dim baseline)
+        \item \textbf{pos+feat}: above concatenated with the MobileNet feature vector
+    \end{itemize}
+    \item Runs kNN, COP-Kmeans, and THA on both versions
+\end{enumerate}
+
+The test uses raw concatenated features without any learned processing --- it isolates the question ``do visual features carry useful identity signal?'' from ``can SA-GAT learn to use them?'' If the raw signal is useful, training SA-GAT to exploit it should amplify the gain.
+
+I tested two MobileNetV2 layers:
+\begin{itemize}
+    \item \textbf{Mid} (layer 13, 96-dim, $/16$ resolution): mid-level features (textures, parts)
+    \item \textbf{Deep} (layer 17, 320-dim, $/32$ resolution): high-level semantic features (object parts, appearance)
+\end{itemize}
+
+MobileNetV2 was chosen for being lightweight ($\sim$3.5M params), pretrained on ImageNet via torchvision (no Google Drive hunting), and general-purpose (not specialised for keypoint detection, so its features encode visual identity rather than localisation).
+
+\subsubsection{Results (480 COCO val images)}
+
+\textbf{Deep layer (320-dim, semantic):}
+
+\begin{tabular}{lccr}
+\hline
+\textbf{Method} & \textbf{Position only} & \textbf{+ MobileNet} & \textbf{Diff} \\
+\hline
+kNN & 0.691 & 0.758 & $+0.067$ \\
+COP-Kmeans & 0.857 & 0.886 & $+0.029$ \\
+THA & 0.871 & 0.877 & $+0.006$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+\textbf{Mid layer (96-dim, less semantic):}
+
+\begin{tabular}{lccr}
+\hline
+\textbf{Method} & \textbf{Position only} & \textbf{+ MobileNet} & \textbf{Diff} \\
+\hline
+kNN & 0.691 & 0.705 & $+0.014$ \\
+COP-Kmeans & 0.857 & 0.817 & $-0.040$ \\
+THA & 0.871 & 0.797 & $-0.073$ \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. Deep semantic features carry identity signal.} The +6.7-point gain on kNN with deep features is significant --- visual context is genuinely informative for telling people apart. People look like themselves, and MobileNet's high-level features capture appearance differences that pure positions cannot.
+
+\textbf{2. Mid-level features hurt rather than help.} Less semantic features (textures, edges) add noise instead of signal. They encode local visual properties that are similar between people in the same scene (lighting, background) rather than identity-distinguishing features. The deeper the feature, the more useful for grouping.
+
+\textbf{3. The improvement diminishes as the grouping method gets stronger.} kNN gains 6.7 points, COP-Kmeans gains 2.9, THA gains only 0.6. The structural priors (type constraints, Hungarian matching) already do most of the work --- adding visual features mostly helps the weaker baselines catch up. By the time we have THA, the marginal value of visual features is barely above noise.
+
+\textbf{4. Raw concatenation is unfair to the visual features.} This test uses raw concatenated features without any learned processing. SA-GAT could in principle learn to weight visual features differently per joint type, attend to neighbours' features, and combine them with positions in non-trivial ways. The test answers ``is the signal there?'' (yes for kNN, marginal for THA) but not ``can SA-GAT exploit it?'' which requires actual training.
+
+\textbf{5. Feasibility verdict: marginal but worth a deeper test.} The +0.6 point gain on THA is too small to justify a full Paper 3 effort by itself. However, the +6.7 gain on kNN proves the signal exists. The question now is whether a trained SA-GAT v2 (with feature input) can extract more value from the visual features than raw concatenation does. A small training experiment on cached MobileNet features could answer this in 4--6 hours.
+
+\subsubsection{Decision and next step}
+
+Before committing to Paper 3, the next step is to train an SA-GAT v2 that accepts visual features as additional node input, on cached MobileNet (or HRNet) features from COCO train2017, for a few epochs. If the trained version pushes end-to-end PGA past 0.955 (the current SA-GAT + THA ceiling), Paper 3 is real. If it lands in the same 0.95--0.96 range, the visual features are not worth the architectural complexity and we focus on Papers 1 and 2.
+
+This is the cheapest way to get a definitive answer before committing weeks of work to a full end-to-end pipeline.
+
+
+\subsection{SA-GAT v2 --- Training with Visual Features (Actual Results)}
+
+\subsubsection{Implementation}
+
+I built the full pipeline:
+\begin{itemize}
+    \item \texttt{cache\_mobilenet\_features.py} --- runs MobileNetV2 (ImageNet-pretrained, layer 17, 320-dim) on every COCO train2017 and val2017 image, samples features at GT keypoint locations, saves a \texttt{.pt} file per image. 54,564 train / 2,258 val samples cached in $\sim$6 minutes on GPU.
+    \item \texttt{cached\_features\_dataset.py} --- loads the cached \texttt{.pt} files and yields ready-to-use PyG \texttt{Data} objects with a \texttt{features} attribute on each node, bypassing the standard adapter/preprocessor pipeline entirely.
+    \item \texttt{sa\_gat\_v2.py} --- a new SA-GAT variant that accepts a per-node visual feature vector. The features are projected through a $320 \to 32$ linear + LayerNorm + GELU block and concatenated with the standard positional + type embedding before the first GAT layer. All three skeleton-aware modifications (type-pair attention, position encoding, repulsion heads) are unchanged.
+    \item Trainer and evaluator updates to support the SA-GAT v2 code path through optional config fields (fully backwards-compatible with existing configs).
+\end{itemize}
+
+Total SA-GAT v2 parameters: \textbf{197,280} --- only $\sim$27K more than the original SA-GAT (170,560), almost all of that in the $320 \to 32$ visual projection block.
+
+\subsubsection{Training}
+
+Trained from scratch on cached COCO train2017 features (54,564 samples) for 20 epochs at LR $1 \times 10^{-3}$, cosine decay to $1 \times 10^{-5}$, contrastive loss only (no grouping head). Validation on cached COCO val2017 features.
+
+\begin{center}
+\begin{tabular}{lc}
+\hline
+\textbf{Epoch} & \textbf{Val kNN PGA (COCO)} \\
+\hline
+2 & 0.960 \\
+4 & 0.965 \\
+8 & 0.969 \\
+12 & 0.972 \\
+16 & 0.972 \\
+20 & 0.973 \\
+\hline
+\end{tabular}
+\end{center}
+
+The loss kept dropping through epoch 20 (0.081 $\to$ 0.034) and val PGA was still rising, so I trained for another 30 epochs (50 total) starting from the epoch-20 checkpoint at a halved learning rate ($5 \times 10^{-4}$).
+
+\paragraph{Extended training (50 epochs total).}
+
+\begin{center}
+\begin{tabular}{lc}
+\hline
+\textbf{Epoch} & \textbf{Val kNN PGA (COCO)} \\
+\hline
+20 (end of initial run) & 0.9732 \\
+30 & 0.9735 \\
+40 & 0.9751 \\
+50 & \textbf{0.9756} \\
+\hline
+\end{tabular}
+\end{center}
+
+The extended run added only $+0.002$ validation PGA over 30 more epochs. Val PGA plateaued around epoch 22 with tiny fluctuations afterwards --- the model is effectively converged at this scale. Continued training is not going to close the gap to HigherHRNet.
+
+\subsubsection{Results (50-epoch final run)}
+
+All results below are from the best checkpoint of the 50-epoch extended run.
+
+\paragraph{COCO val with GT keypoints.}
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Method} & \textbf{SA-GAT (no features)} & \textbf{SA-GAT v2 (with features)} \\
+\hline
+kNN & 0.957 & \textbf{0.968} \\
+COP-Kmeans & 0.968 & (not tested) \\
+THA & 0.969 & (not tested) \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+\paragraph{End-to-end with HigherHRNet detection (2,166 COCO val images).}
+
+\begin{tabular}{lccc}
+\hline
+\textbf{Method} & \textbf{v1 (no features)} & \textbf{v2 (50 epochs)} & \textbf{$\Delta$} \\
+\hline
+SA-GAT + kNN & 0.942 & 0.958 & $+0.016$ \\
+SA-GAT + COP-Kmeans & 0.955 & 0.963 & $+0.008$ \\
+SA-GAT + THA & 0.955 & \textbf{0.964} & $+0.009$ \\
+\hline
+HigherHRNet AE & 0.985 & 0.985 & --- \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+\paragraph{20 vs 50 epoch comparison.} The extended run gained essentially nothing end-to-end (THA: $0.9631 \to 0.9637$, a $+0.0006$ improvement over 30 additional epochs). This confirms the model is at its ceiling --- more training will not close the gap to HigherHRNet's $0.985$.
+
+\vspace{0.5em}
+
+Visual features helped every method, most for kNN ($+1.6$) and less for the structurally-aware methods ($+0.8$--$+0.9$ for COP-Kmeans and THA). The signal is real but small by the time the structural priors have done their work.
+
+\paragraph{Synthetic test set.}
+
+SA-GAT v2 dropped to 0.909 synthetic PGA (kNN). This is expected: the model was trained exclusively on cached COCO features and never saw synthetic data, and MobileNet's ImageNet-pretrained features on synthetic imagery are out-of-distribution. The synthetic numbers are not meaningful for this model.
+
+\subsubsection{Honest analysis --- this is not a clear victory}
+
+\textbf{1. We still do not beat HigherHRNet.} The end-to-end PGA with SA-GAT v2 + THA is 0.964 (after 50 epochs), compared to HigherHRNet's own associative embedding grouping at 0.985. We are \textbf{2.1 points behind} on the same detected keypoints. Training 30 more epochs on top of the initial 20 added essentially nothing ($+0.0006$), confirming we have hit the ceiling of what SA-GAT v2 can extract from this architecture and data.
+
+\textbf{2. And we added more compute to do worse.} The total model size increased:
+\begin{itemize}
+    \item HigherHRNet alone: 28.6M parameters, 0.985 end-to-end PGA
+    \item HigherHRNet + MobileNetV2 + SA-GAT v2: 30.8M parameters, 0.964 end-to-end PGA
+\end{itemize}
+We added 2.2M parameters (MobileNetV2 backbone) and 197K more (SA-GAT v2), a 7.7\% increase in total parameters, to achieve a 2.1-point drop in accuracy. This is the opposite of progress by any conventional metric.
+
+\textbf{3. The uncomfortable conclusion: HigherHRNet's AE head is a better grouping module than SA-GAT v2 for this problem.} HigherHRNet's AE tag head is 561 parameters, trained end-to-end with the backbone on 118k real images, and achieves 0.985. SA-GAT v2 is 197K parameters, trained on the same backbone's detections plus additional visual features for 50 epochs, and achieves 0.964. The simpler, jointly-trained head wins.
+
+\textbf{4. What the experiment \emph{does} show positively.}
+\begin{itemize}
+    \item \textbf{Visual features do help SA-GAT.} The v2 $\to$ v1 improvement (+0.8 end-to-end) is a real finding: adding appearance context to positional GNN reasoning measurably improves grouping. This validates the architectural intuition.
+    \item \textbf{The modular approach works in principle.} SA-GAT v2 trained purely on cached features, with no joint training with the detector, reaches 0.963 --- within 2.2 points of a jointly-trained system. That's a small number if the story becomes ``detector-agnostic modular grouping'' rather than ``we beat HigherHRNet.''
+    \item \textbf{Feature caching is a practical efficiency win.} 90-minute training on cached features, no detector retraining, portable to new detectors. If the goal is system modularity rather than accuracy maxxing, this is a valid contribution.
+\end{itemize}
+
+\textbf{5. What the experiment does \emph{not} show.} We have not demonstrated:
+\begin{itemize}
+    \item That SA-GAT v2 works with a different detector (we only tested with HigherHRNet)
+    \item That it outperforms HigherHRNet's AE head in any scenario
+    \item That visual features help more with weaker detectors (would be the obvious follow-up)
+\end{itemize}
+
+\textbf{6. Honest framing for Paper 3 (if it happens).} The paper cannot claim ``better than HigherHRNet.'' It would need to claim something like: ``a modular grouping component that achieves 93\% of an end-to-end system's accuracy while being detector-agnostic.'' That's a less exciting story, and whether it's publishable as a stand-alone paper is debatable. More likely, these results belong in the dissertation as an experimental finding (``we investigated end-to-end training with cached visual features and found that the jointly-trained AE baseline remains stronger for a single fixed detector'') rather than as a third paper.
+
+\subsubsection{What to do next}
+
+Three realistic options:
+
+\textbf{Option A: Drop the Paper 3 idea.} Keep the two papers planned (SA-GAT + THA paper, SCOT investigation paper). The SA-GAT v2 work goes into the dissertation as an honest investigation with a negative framing. This is probably the right call.
+
+\textbf{Option B: Pivot Paper 3 to a detector-agnostic story.} Train SA-GAT v2 to work with a second backbone (e.g.\ MMPose's ViTPose-tiny or a ResNet keypoint detector) and demonstrate that the same SA-GAT v2 works across both. The contribution becomes ``one grouping module, multiple backbones'' --- a weaker but still real story. Realistic timeline: 2--3 weeks of integration work.
+
+\textbf{Option C: Find a setting where the AE head fails.} Test HigherHRNet's AE on genuinely difficult scenarios (high occlusion, large K, unusual poses) and see if SA-GAT v2 holds up better. If so, the paper claim becomes ``robust to occlusion'' rather than ``more accurate.'' Requires identifying a real weakness, which isn't guaranteed.
+
+The honest recommendation is Option A. SA-GAT v2 is an interesting experiment that confirms visual features help our positional GNN, but it does not beat the baseline it was designed to compete with. That is a valid finding for the dissertation but not a strong standalone paper.
+
+
 \subsection{Full Project Summary --- MEng and PEng Contributions}
 
 This section provides a complete overview of all methods investigated, results achieved, and how the work splits across the two degrees. Written for the professor to assess scope and sufficiency.
+
+\subsubsection{The conceptual split between the two degrees}
+
+The two degrees address two different framings of the same underlying problem.
+
+\paragraph{MEng --- grouping as a clustering problem, so make the embeddings as good as possible.}
+
+The MEng starts from the standard view of bottom-up pose grouping: produce an embedding per keypoint, then cluster them into people. Everything in the MEng is in service of making those embeddings as good as possible for clustering. I started with a vanilla GAT and tried learned grouping heads on top (slot attention, graph partitioning, DEC) --- all of them failed to beat plain k-means on the same embeddings. I then built SA-DMoN and ran ten experiments attempting modularity-based clustering --- all of them plateaued around 0.77--0.81 because the modularity objective is fundamentally misaligned with pose grouping (the kNN graph encodes spatial proximity, but communities are defined by identity).
+
+The lesson from those failures was that \emph{the embeddings are the lever}, not the grouping head on top. SA-GAT --- with three skeleton-aware modifications (type-pair attention bias, skeleton-relative position encoding, same-type repulsion heads) --- is the embedding network that comes out of that lesson. On top of SA-GAT, the simplest clustering that respects skeleton structure (k-means with must-not-link constraints between same-type keypoints, i.e.\ COP-Kmeans) is enough to produce state-of-the-art results.
+
+The MEng thesis is: \textbf{multi-person pose grouping reduces to an embedding problem; SA-GAT produces embeddings good enough that simple clustering outperforms every learned grouping head I tried.}
+
+\paragraph{PEng --- grouping is not a clustering problem, it is an assignment problem.}
+
+The PEng starts with a conceptual pivot. COP-Kmeans from the MEng introduces hard type constraints: no two left elbows can belong to the same person. That constraint is not a clustering property --- it is an assignment property. Each person has exactly 17 typed slots (one per COCO joint type), and the grouping task is to assign detected keypoints to slots under the hard constraint that each slot receives at most one keypoint. Viewed this way, pose grouping is structurally closer to the linear assignment problem or optimal transport than it is to k-means clustering.
+
+This reframing is where SCOT comes from: the same hard type constraint that COP-Kmeans enforces greedily, but embedded in a principled differentiable optimal transport formulation with typed skeleton slots ($K \times 17$), infinite cost masking for type violations, and Sinkhorn iterations. SCOT is the formal assignment-based counterpart to COP-Kmeans.
+
+SCOT underperforms. Through systematic ablation (seven variants, three training strategies, two backbones, two embedding sources) I diagnosed two architectural weaknesses: fixed learned prototypes that do not adapt to scene diversity, and balanced Sinkhorn transport that assumes uniform joint visibility. SCOT-KI (k-means initialised prototypes) fixes the first problem and recovers 6.5 points. THA (Type-wise Hungarian Assignment) fixes both: scene-adaptive k-means centroids plus per-joint-type optimal bipartite matching via Hungarian, which eliminates the balanced transport assumption. THA beats COP-Kmeans on every condition tested.
+
+The PEng thesis is: \textbf{multi-person pose grouping is structurally an assignment problem with skeleton constraints, not a clustering problem; the right algorithm is type-decomposed optimal bipartite matching.}
+
+\paragraph{The relationship between the two.}
+
+The MEng builds the embedding machinery under a clustering interpretation and finds that constraint-based clustering (COP-Kmeans) beats learned heads. The PEng takes SA-GAT as a given, reframes the grouping task as structured assignment rather than clustering, and investigates assignment-based methods (SCOT, SCOT-KI, THA) that directly target the type constraints as a structural property of the problem. The two degrees share the embedding network and the dataset infrastructure but diverge in how they frame what ``grouping'' actually is.
+
 
 \subsubsection{Infrastructure contributions (shared)}
 

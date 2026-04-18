@@ -229,7 +229,12 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
     virtual_dir = Path(tc.virtual_dir)
 
     # ── Models ────────────────────────────────────────────────────────────────
-    if cfg.sa_gat is not None:
+    if cfg.sa_gat_v2 is not None:
+        from sa_gat_v2 import SAGATV2Embedding
+        gat = SAGATV2Embedding(cfg.sa_gat_v2).to(device)
+        embedding_dim = cfg.sa_gat_v2.output_dim
+        use_depth = cfg.sa_gat_v2.use_depth
+    elif cfg.sa_gat is not None:
         from sa_gat import SAGATEmbedding
         gat = SAGATEmbedding(cfg.sa_gat).to(device)
         embedding_dim = cfg.sa_gat.output_dim
@@ -240,7 +245,33 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
         use_depth = cfg.gat.use_depth
 
     # ── Data ──────────────────────────────────────────────────────────────────
-    if tc.coco_train_dir is not None and tc.coco_train_ann is not None:
+    use_cached_features = tc.cached_features_train is not None
+    if use_cached_features:
+        from cached_features_dataset import CachedFeaturesDataset
+        from torch.utils.data import DataLoader
+        # Cached features dataset returns PyG Data objects directly — no preprocessor needed.
+        train_dataset = CachedFeaturesDataset(
+            cache_dir=Path(tc.cached_features_train),
+            k_neighbors=8,  # will be overridden below if needed
+            use_depth=use_depth,
+        )
+        train_loader = DataLoader(
+            train_dataset, batch_size=1, shuffle=True,
+            num_workers=tc.num_workers, collate_fn=lambda x: x,
+        )
+        if tc.cached_features_val is not None:
+            val_dataset = CachedFeaturesDataset(
+                cache_dir=Path(tc.cached_features_val),
+                k_neighbors=8,
+                use_depth=use_depth,
+            )
+            val_loader = DataLoader(
+                val_dataset, batch_size=1, shuffle=False,
+                num_workers=0, collate_fn=lambda x: x,
+            )
+        else:
+            val_loader = _make_loader(virtual_dir, "val", tc.batch_size, 0)
+    elif tc.coco_train_dir is not None and tc.coco_train_ann is not None:
         from coco_adapter import CocoAdapter
         train_adapter = CocoAdapter(
             img_dir=Path(tc.coco_train_dir),
@@ -250,11 +281,10 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
         train_dataset = PoseDataset(train_adapter)
         train_loader = create_dataloader(train_dataset, batch_size=tc.batch_size,
                                          shuffle=True, num_workers=tc.num_workers)
+        val_loader = _make_loader(virtual_dir, "val", tc.batch_size, 0)
     else:
         train_loader = _make_loader(virtual_dir, "train", tc.batch_size, tc.num_workers)
-
-    # Validation always on virtual (consistent benchmark)
-    val_loader = _make_loader(virtual_dir, "val", tc.batch_size, 0)
+        val_loader = _make_loader(virtual_dir, "val", tc.batch_size, 0)
 
     k_neighbors  = 16 if embedding_dim >= 256 else 8
     preprocessor = PosePreprocessor(device=device, k_neighbors=k_neighbors,
@@ -331,7 +361,11 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
         t0              = time.time()
 
         for batch in train_loader:
-            graphs = preprocessor.process_batch(batch)
+            if use_cached_features:
+                # batch is a list of PyG Data objects already
+                graphs = batch
+            else:
+                graphs = preprocessor.process_batch(batch)
 
             for graph in graphs:
                 # Skip scenes that exceed SCOT's k_max
@@ -389,7 +423,8 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
         # ── Validation ────────────────────────────────────────────────────────
         if epoch % tc.val_every == 0 or epoch == tc.epochs:
             val_pga = _validate(gat, head, head_name, val_loader,
-                                preprocessor, gat_loss_fn, head_loss_fn, device, cfg)
+                                preprocessor, gat_loss_fn, head_loss_fn, device, cfg,
+                                use_cached_features=use_cached_features)
             log += f" | val_pga {val_pga:.4f}"
 
             if tc.save_best and val_pga > best_val_pga:
@@ -421,7 +456,8 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _validate(gat, head, head_name, loader, preprocessor,
-              gat_loss_fn, head_loss_fn, device, cfg) -> float:
+              gat_loss_fn, head_loss_fn, device, cfg,
+              use_cached_features: bool = False) -> float:
     """Run validation, return mean PGA."""
     from evaluator import compute_pga, predict_knn, predict_slot, predict_partition, predict_dmon, predict_sa_dmon, predict_scot, predict_residual_scot, predict_adaptive_scot, predict_unbalanced_scot, predict_dustbin_scot
 
@@ -433,7 +469,10 @@ def _validate(gat, head, head_name, loader, preprocessor,
 
     with torch.no_grad():
         for batch in loader:
-            graphs = preprocessor.process_batch(batch)
+            if use_cached_features:
+                graphs = batch
+            else:
+                graphs = preprocessor.process_batch(batch)
             for graph in graphs:
                 graph      = graph.to(device)
                 embeddings = gat(graph)

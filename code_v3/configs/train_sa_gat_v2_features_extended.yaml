@@ -1,0 +1,51 @@
+name: "train_sa_gat_v2_features_extended"
+description: "Continue training SA-GAT v2 from the 20-epoch checkpoint for another 30 epochs"
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+
+sa_gat_v2:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+  use_type_pair_attention: true
+  use_position_encoding: true
+  use_repulsion_heads: true
+  n_repulsion_heads: 1
+  visual_feature_dim: 320
+  visual_feature_proj_dim: 32
+
+loss:
+  contrastive_margin: 0.5
+
+training:
+  virtual_dir:           data/virtual
+  cached_features_train: data/cached_mobilenet_train
+  cached_features_val:   data/cached_mobilenet_val
+  pretrained:            outputs/train_sa_gat_v2_features/latest/best.pt
+  batch_size:            4
+  num_workers:           4
+  lr:                    5e-4
+  lr_min:                1e-6
+  weight_decay:          1e-4
+  epochs:                30
+  val_every:             2
+  save_best:             true

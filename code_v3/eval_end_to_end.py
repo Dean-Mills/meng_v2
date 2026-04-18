@@ -283,7 +283,14 @@ def evaluate(
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     cfg = ExperimentConfig(**ckpt["config"])
 
-    if cfg.sa_gat is not None:
+    needs_mobilenet = False
+    if cfg.sa_gat_v2 is not None:
+        from sa_gat_v2 import SAGATV2Embedding
+        gat = SAGATV2Embedding(cfg.sa_gat_v2).to(device)
+        embedding_dim = cfg.sa_gat_v2.output_dim
+        use_depth = cfg.sa_gat_v2.use_depth
+        needs_mobilenet = True
+    elif cfg.sa_gat is not None:
         from sa_gat import SAGATEmbedding
         gat = SAGATEmbedding(cfg.sa_gat).to(device)
         embedding_dim = cfg.sa_gat.output_dim
@@ -301,6 +308,13 @@ def evaluate(
     )
 
     print(f"Loaded SA-GAT/GAT checkpoint (epoch {ckpt.get('epoch', '?')})")
+
+    # ── Load MobileNetV2 extractor (only if needed) ───────────────────────
+    mobilenet_extractor = None
+    if needs_mobilenet:
+        from cache_mobilenet_features import MobileNetExtractor, sample_features_at_keypoints
+        mobilenet_extractor = MobileNetExtractor(device)
+        print(f"Loaded MobileNetV2 extractor for SA-GAT v2 visual features")
 
     # ── Load HigherHRNet ─────────────────────────────────────────────────
     from SimpleHigherHRNet import SimpleHigherHRNet
@@ -415,6 +429,18 @@ def evaluate(
                 continue
 
             graph = graph.to(device)
+
+            # If using SA-GAT v2, sample MobileNet features at the matched
+            # keypoint locations and attach to the graph.
+            if mobilenet_extractor is not None:
+                from cache_mobilenet_features import sample_features_at_keypoints
+                imgH, imgW = image.shape[:2]
+                feats_full = mobilenet_extractor.extract(image)
+                feats_at_kps = sample_features_at_keypoints(
+                    feats_full, matched_pos, (imgH, imgW),
+                )
+                graph.features = feats_at_kps.to(device)
+
             embeddings = gat(graph)
 
             # Skip if fewer matched keypoints than people

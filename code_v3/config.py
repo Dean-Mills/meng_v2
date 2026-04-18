@@ -50,6 +50,35 @@ class SAGATConfig(BaseModel):
         return feat_dim + self.joint_embedding_dim
 
 
+class SAGATV2Config(BaseModel):
+    """SA-GAT v2: SA-GAT with optional visual feature input."""
+    num_joint_types: int
+    joint_embedding_dim: int
+    raw_feature_dim: int
+    hidden_dim: int
+    output_dim: int
+    num_layers: int
+    num_heads: int
+    dropout: float
+    use_layer_norm: bool
+    l2_normalize: bool
+    use_depth: bool = True
+    # SA-GAT modifications
+    use_type_pair_attention: bool = True
+    use_position_encoding: bool = True
+    use_repulsion_heads: bool = True
+    n_repulsion_heads: int = 1
+    # Visual feature input
+    visual_feature_dim: int = 320           # input dim of cached features (MobileNetV2 layer 17 = 320)
+    visual_feature_proj_dim: int = 32       # projected visual feature dim concatenated with positions
+
+    @computed_field
+    @property
+    def input_dim(self) -> int:
+        feat_dim = self.raw_feature_dim if self.use_depth else self.raw_feature_dim - 1
+        return feat_dim + self.joint_embedding_dim + self.visual_feature_proj_dim
+
+
 class DECConfig(BaseModel):
     n_clusters:      int   # K — number of people, passed explicitly per scene at inference
     alpha:           float = 1.0    # degrees of freedom for Student's t-distribution
@@ -165,6 +194,10 @@ class TrainingConfig(BaseModel):
     # COCO fine-tuning (optional — if set, trains on COCO instead of virtual)
     coco_train_dir:  Optional[str] = None   # e.g. "data/coco2017/train2017"
     coco_train_ann:  Optional[str] = None   # e.g. "data/coco2017/annotations/person_keypoints_train2017.json"
+    # Cached pre-extracted features (for SA-GAT v2). When set, bypasses adapter
+    # and preprocessor, loads PyG Data objects directly from .pt files.
+    cached_features_train: Optional[str] = None
+    cached_features_val:   Optional[str] = None
     # Pre-trained checkpoint to load before training (for fine-tuning)
     pretrained:      Optional[str] = None
     # Loader
@@ -187,6 +220,7 @@ class ExperimentConfig(BaseModel):
     description: str = ""
     gat: GATConfig
     sa_gat:             Optional[SAGATConfig]             = None
+    sa_gat_v2:          Optional[SAGATV2Config]           = None
     loss: LossConfig
     dec:                Optional[DECConfig]               = None
     slot_attention:     Optional[SlotAttentionConfig]     = None

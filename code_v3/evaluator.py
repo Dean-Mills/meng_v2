@@ -228,8 +228,15 @@ class Evaluator:
         cfg_dict    = ckpt["config"]
         self.cfg    = ExperimentConfig(**cfg_dict)
 
-        # GAT (standard or SA-GAT)
-        if self.cfg.sa_gat is not None:
+        # GAT (standard, SA-GAT, or SA-GAT v2)
+        self._needs_mobilenet = False
+        if self.cfg.sa_gat_v2 is not None:
+            from sa_gat_v2 import SAGATV2Embedding
+            self.gat = SAGATV2Embedding(self.cfg.sa_gat_v2).to(device)
+            self._embedding_dim = self.cfg.sa_gat_v2.output_dim
+            self._use_depth = self.cfg.sa_gat_v2.use_depth
+            self._needs_mobilenet = True
+        elif self.cfg.sa_gat is not None:
             from sa_gat import SAGATEmbedding
             self.gat = SAGATEmbedding(self.cfg.sa_gat).to(device)
             self._embedding_dim = self.cfg.sa_gat.output_dim
@@ -240,6 +247,13 @@ class Evaluator:
             self._use_depth = self.cfg.gat.use_depth
         self.gat.load_state_dict(ckpt["gat_state"])
         self.gat.eval()
+
+        # MobileNet extractor (for SA-GAT v2 only)
+        self._mobilenet = None
+        if self._needs_mobilenet:
+            from cache_mobilenet_features import MobileNetExtractor
+            self._mobilenet = MobileNetExtractor(device)
+            print(f"Loaded MobileNetV2 extractor for SA-GAT v2")
 
         # Head (may be None for knn-only checkpoint)
         self.head      = None
@@ -512,6 +526,26 @@ class Evaluator:
         with torch.no_grad():
             for batch in loader:
                 graphs = self.preprocessor.process_batch(batch)
+
+                # Attach MobileNet features to each graph if using SA-GAT v2.
+                # The keypoint positions in the graph are already scaled to the
+                # 512x512 transformed image, so we sample features on that image.
+                if self._mobilenet is not None:
+                    from cache_mobilenet_features import sample_features_at_keypoints
+                    for i, graph in enumerate(graphs):
+                        img_t = batch["image"][i]  # [3, H, W] uint8
+                        img_bgr = img_t.permute(1, 2, 0).cpu().numpy()[:, :, ::-1]
+                        imgH, imgW = img_bgr.shape[:2]
+                        feats_full = self._mobilenet.extract(img_bgr.copy())
+                        # graph.x[:,0] is x_norm (already in [0,1]), recover pixel coords
+                        px = (graph.x[:, 0] * self.preprocessor.image_size).cpu().numpy()
+                        py = (graph.x[:, 1] * self.preprocessor.image_size).cpu().numpy()
+                        kps_xy = np.stack([px, py], axis=1)
+                        feats = sample_features_at_keypoints(
+                            feats_full, kps_xy, (imgH, imgW),
+                        )
+                        graph.features = feats.to(self.device)
+
                 for graph in graphs:
                     if max_images is not None and n_evaluated >= max_images:
                         break
