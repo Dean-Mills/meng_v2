@@ -75,6 +75,73 @@ class GATOnlyLoss(nn.Module):
         }
 
 
+class HyperbolicContrastiveLoss(nn.Module):
+    """
+    Contrastive loss for hyperbolic SA-GAT.
+
+    Uses geodesic distance on the Lorentz hyperboloid instead of cosine
+    similarity. Same-person pairs are pulled to small distance, different-person
+    pairs pushed beyond a margin.
+
+    Args:
+        config: LossConfig — the `contrastive_margin` is interpreted here as
+                a hyperbolic-distance margin (different semantics than the
+                Euclidean cosine margin).
+        manifold: geoopt Lorentz manifold instance (passed externally so
+                  the loss matches the model's manifold).
+    """
+
+    def __init__(self, config: LossConfig, manifold):
+        super().__init__()
+        self.margin = config.contrastive_margin
+        self.manifold = manifold
+
+    def forward(
+        self,
+        embeddings: torch.Tensor,   # [N, D+1] Lorentz hyperboloid points
+        person_labels: torch.Tensor,
+    ) -> Dict[str, Any]:
+        n = embeddings.size(0)
+
+        if n < 2:
+            return {
+                "total_loss":     torch.tensor(0.0, device=embeddings.device),
+                "pos_similarity": 0.0,
+                "neg_similarity": 0.0,
+            }
+
+        # Pairwise hyperbolic distances [N, N]
+        # geoopt.Lorentz.dist needs contiguous tensors for correct broadcasting
+        a = embeddings.unsqueeze(1).expand(n, n, -1).contiguous()
+        b = embeddings.unsqueeze(0).expand(n, n, -1).contiguous()
+        dist_matrix = self.manifold.dist(a, b)  # [N, N]
+        # Clamp for numerical stability (arcosh domain is [1, inf))
+        dist_matrix = torch.nan_to_num(dist_matrix, nan=0.0, posinf=50.0, neginf=0.0)
+
+        same_person = (person_labels.unsqueeze(0) == person_labels.unsqueeze(1)).float()
+        mask        = 1.0 - torch.eye(n, device=embeddings.device)
+        pos_mask    = same_person * mask
+        neg_mask    = (1.0 - same_person) * mask
+
+        pos_count = pos_mask.sum().clamp(min=1)
+        neg_count = neg_mask.sum().clamp(min=1)
+
+        # Same-person pairs: minimise distance
+        pos_loss = (dist_matrix * pos_mask).sum() / pos_count
+
+        # Different-person pairs: push beyond margin
+        neg_loss = (F.relu(self.margin - dist_matrix) * neg_mask).sum() / neg_count
+
+        avg_pos_dist = (dist_matrix * pos_mask).sum().item() / pos_count.item()
+        avg_neg_dist = (dist_matrix * neg_mask).sum().item() / neg_count.item()
+
+        return {
+            "total_loss":     pos_loss + neg_loss,
+            "pos_similarity": avg_pos_dist,  # reusing key names for compatibility
+            "neg_similarity": avg_neg_dist,
+        }
+
+
 class SlotAttentionLoss(nn.Module):
     """
     Loss for slot attention grouping head.

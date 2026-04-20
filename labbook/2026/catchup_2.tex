@@ -913,6 +913,275 @@ SA-GAT + THA & SA-GAT (COCO ft) & 0.955 \\
 Total: 20+ distinct methods/configurations evaluated across synthetic and COCO datasets. 10 SA-DMoN experiments. 7 SCOT variants. 4 type-constrained clustering methods. SA-GAT ablation study (4 configurations). COCO fine-tuning. End-to-end pipeline with external detector. K estimation (3 approaches).
 
 
+\subsection{Hyperbolic SA-GAT --- Lorentz-Model Embedding Space}
+
+\subsubsection{Motivation}
+
+A late-project experiment driven by a theoretical curiosity: skeletons are trees (kinematic chain from pelvis outward), and multi-person scenes are forests. Hyperbolic space has exponentially growing volume with radius, which exactly matches tree growth, whereas Euclidean space grows only polynomially. This makes hyperbolic geometry a provably better ambient space for tree-structured data at low distortion.
+
+The hypothesis: if SA-GAT is currently spending attention capacity implicitly learning hierarchical structure, replacing the Euclidean output space with a hyperbolic one should encode that hierarchy for free. Two pre-registered hypotheses:
+
+\begin{itemize}
+    \item \textbf{H1:} hyperbolic beats Euclidean at matched embedding dimension.
+    \item \textbf{H2:} hyperbolic matches Euclidean at significantly lower embedding dimension (e.g.\ 32 vs 128).
+\end{itemize}
+
+Realistic priors going in: COCO skeletons have only 17 joints and depth ~4, so the tree-distortion argument is asymptotic and probably weak at this scale. Expected outcomes in order of likelihood: no significant change, small positive gain, improvement at low dim only. Expected cost: $\sim$half a day if the numerics cooperate.
+
+\subsubsection{Implementation}
+
+Created \texttt{sa\_gat\_hyperbolic.py} alongside \texttt{sa\_gat.py} (non-invasive --- no changes to the existing SA-GAT code). Added \texttt{SAGATHyperbolicConfig} and registered it in \texttt{ExperimentConfig} as another optional field, following the same pattern as SA-GAT v2. The trainer, evaluator, and eval\_cop\_kmeans were all updated with a new branch that constructs the hyperbolic model and includes a hyperbolic-to-Euclidean mapping step for downstream grouping.
+
+\textbf{Design: minimal-change hyperbolic embedding.} The internal SA-GAT attention layers remain Euclidean. Only the final output is projected onto the Lorentz hyperboloid via exponential map at the origin. This tests ``is a hyperbolic output metric better for pose grouping?'' without committing to a full hyperbolic attention rewrite.
+
+The Lorentz model (a.k.a.\ hyperboloid model) was chosen over the Poincar\'e ball because it is more numerically stable, which several recent papers note. \texttt{geoopt}'s \texttt{geoopt.Lorentz(k=1.0)} provides the manifold with $\text{expmap}_0$, $\text{logmap}_0$, and geodesic distance.
+
+\textbf{Contrastive loss in hyperbolic space.} The standard GATOnlyLoss uses cosine similarity on L2-normalised Euclidean embeddings. I wrote a new \texttt{HyperbolicContrastiveLoss} that computes pairwise geodesic distances on the Lorentz manifold and applies the standard margin formulation: pull same-person distances to zero, push different-person distances beyond a margin.
+
+\subsubsection{Debugging issues encountered}
+
+\textbf{Issue 1: NaN loss on the first forward pass.} Using \texttt{embeddings.unsqueeze(1).expand(n, n, -1)} to build pairwise tensors without \texttt{.contiguous()} broke geoopt's distance computation in two ways:
+\begin{itemize}
+    \item Diagonal distances (distance from a point to itself) came out as $\sim 5.5$ instead of $0$, indicating the broadcast was silently misaligning the Minkowski inner product calculation.
+    \item Some off-diagonal pairs produced NaN because $\text{arccosh}$ received values slightly below 1 due to floating-point error on the misaligned tensors.
+\end{itemize}
+Fix: add \texttt{.contiguous()} calls on the expanded tensors and add a \texttt{torch.nan\_to\_num} clamp on the distance matrix for residual numerical edge cases. After the fix, diagonal distances were $\sim 10^{-4}$ (acceptable) and no NaN values appeared.
+
+\textbf{Issue 2: Exploding distances at initialisation.} With the final LayerNorm producing tangent vectors of norm $\sim \sqrt{D} \approx 11$, the corresponding hyperboloid points were at geodesic distance $\sim 11$ from the origin, and pairwise distances were in the range $18$--$22$. The default contrastive margin of $1.0$ was meaningless at that scale (all negatives trivially satisfied the margin, no gradient). The initial loss was $\sim 20$ with pos and neg distances nearly identical around $20$.
+
+Fix: added a learnable scalar \texttt{tangent\_scale} parameter that multiplies the tangent vector before the exponential map. Initialised to $1/\sqrt{D}$, which puts initial pairwise distances in the reasonable range $\sim 0.6$--$1.0$. The scale is a free parameter the optimiser can adjust during training. This is a standard trick in hyperbolic deep learning to keep the model away from the numerically dangerous regions of the manifold (far from origin, near the boundary of the Poincar\'e ball, etc.).
+
+\textbf{Issue 3: Margin calibration.} The Euclidean SA-GAT uses a cosine margin of $0.5$, interpreted as ``negative pairs should have cosine similarity below $0.5$''. In hyperbolic space the units are different: the margin is a geodesic distance. After the scale fix, I set the margin to $2.0$ so negative pairs were pushed beyond $2\times$ the initial average distance. Training proceeded smoothly with this setting.
+
+\textbf{Other minor fixes.} The \texttt{eval\_cop\_kmeans.py} and \texttt{evaluator.py} scripts originally only knew about standard GAT and SA-GAT; I extended both to handle the hyperbolic case. For grouping, the hyperbolic embeddings are mapped back to the tangent space at the origin via $\text{logmap}_0$, the extra time coordinate is dropped, and the result is L2-normalised so the existing Euclidean-based grouping methods (kNN, COP-Kmeans, THA) can operate on them directly. This is a principled choice: the tangent space at origin is the Euclidean linearisation of the manifold in the neighbourhood of origin, and distances in it approximate hyperbolic distances for small radii.
+
+\subsubsection{Compromises made}
+
+\begin{itemize}
+    \item \textbf{Hybrid Euclidean/hyperbolic architecture.} The internal SA-GAT layers are Euclidean; only the final embedding is hyperbolic. A full hyperbolic attention mechanism (all layers on the manifold with M\"obius operations and Fr\'echet-mean aggregation) would be a more principled test but a much larger rewrite. If H1 had shown a large gain, the full rewrite would be the next step. With the modest gain observed, the hybrid is sufficient to answer the research question.
+    \item \textbf{Grouping in tangent space.} Downstream clustering (kNN, COP-Kmeans, THA) operates on $\text{logmap}_0$ of the hyperboloid embeddings rather than on the hyperboloid itself. This approximation is good near the origin (where our \texttt{tangent\_scale} keeps most points) but distorts for far-from-origin points. A hyperbolic-metric variant of COP-Kmeans would be more faithful but also a much larger engineering effort.
+    \item \textbf{No Riemannian optimiser.} Parameters are stored in Euclidean tangent space and optimised with standard AdamW. A Riemannian optimiser (RAdam/RSGD from geoopt) would be theoretically more correct when training parameters that live directly on the manifold, but our model has no such parameters --- the only manifold operation is expmap at the forward pass output --- so standard optimisers are fine.
+\end{itemize}
+
+\subsubsection{Results --- H1 (matched dim = 128, 50 epochs)}
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Method} & \textbf{Synth kNN} & \textbf{Synth COP-KM} & \textbf{COCO kNN} & \textbf{COCO COP-KM} \\
+\hline
+SA-GAT Euclidean (baseline) & 0.910 & 0.925 & 0.882 & 0.915 \\
+\textbf{SA-GAT Hyperbolic} & 0.907 & 0.916 & \textbf{0.895} & \textbf{0.924} \\
+$\Delta$ & $-0.003$ & $-0.009$ & $\mathbf{+0.013}$ & $\mathbf{+0.009}$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+\paragraph{Transfer gap (synthetic $\to$ COCO):}
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Variant} & \textbf{Transfer gap (kNN)} & \textbf{Transfer gap (COP-KM)} \\
+\hline
+Euclidean & $-2.8$ & $-1.0$ \\
+\textbf{Hyperbolic} & $-1.2$ & $\mathbf{+0.8}$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+The hyperbolic variant slightly underperforms Euclidean on in-distribution synthetic data ($-0.3$ to $-0.9$ points) but consistently outperforms on zero-shot COCO ($+0.9$ to $+1.3$ points). With COP-Kmeans, hyperbolic on COCO ($0.924$) is actually higher than on synthetic ($0.916$) --- a positive transfer gap, which is unusual for synthetic-trained models.
+
+\subsubsection{Results --- H2 (lower dim = 32, 50 epochs)}
+
+Same training setup as H1 but with \texttt{output\_dim: 32} (a $4\times$ reduction). All other hyperparameters held constant.
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Method} & \textbf{Synth kNN} & \textbf{Synth COP-KM} & \textbf{COCO kNN} & \textbf{COCO COP-KM} \\
+\hline
+SA-GAT Euclidean (dim=128) & 0.910 & 0.925 & 0.882 & 0.915 \\
+SA-GAT Hyperbolic (dim=128) & 0.907 & 0.916 & 0.895 & 0.924 \\
+\textbf{SA-GAT Hyperbolic (dim=32)} & \textbf{0.918} & \textbf{0.930} & \textbf{0.899} & \textbf{0.926} \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+\paragraph{The surprise.} H2 was expected to match Euclidean at best. Instead, \textbf{hyperbolic at dim=32 outperforms both hyperbolic at dim=128 and Euclidean at dim=128 on every metric}. Synthetic kNN: $0.918$ (H2) vs $0.910$ (Euclidean). COCO COP-Kmeans: $0.926$ (H2) vs $0.915$ (Euclidean).
+
+Best validation PGA during training also climbed noticeably higher for H2 (0.882 vs 0.878 for H1). The val-PGA curve was still slowly improving at epoch 45 for H2 (last best-update), which is consistent with a tighter embedding space that the optimiser can exploit further.
+
+\paragraph{Transfer gap:}
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Variant} & \textbf{Transfer gap (kNN)} & \textbf{Transfer gap (COP-KM)} \\
+\hline
+Euclidean (dim=128) & $-2.8$ & $-1.0$ \\
+Hyperbolic (dim=128) & $-1.2$ & $+0.8$ \\
+\textbf{Hyperbolic (dim=32)} & $-1.9$ & $-0.4$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+The dim=32 model has a slightly larger transfer gap than dim=128 hyperbolic but still smaller than Euclidean, and it starts from a higher baseline on both datasets. So the transfer advantage is partially consumed by better in-distribution fit --- but the absolute COCO number is the highest of all three variants.
+
+\subsubsection{Analysis}
+
+\textbf{1. Both H1 and H2 succeeded --- H2 more strongly.} H1 (matched dim 128) showed a small transfer-advantage effect: $-0.3$ to $-0.9$ on synthetic, $+0.9$ to $+1.3$ on COCO. H2 (reduced dim 32) overtook \emph{both} Euclidean dim-128 and hyperbolic dim-128 on every single metric --- synthetic and COCO, kNN and COP-Kmeans. The theoretical argument (hyperbolic space needs less dimension to embed trees without distortion) appears to be empirically supported here, at small but consistent scale.
+
+\textbf{2. Dim=32 hyperbolic is the best pre-COCO-fine-tune embedding tested.} SA-GAT Euclidean at dim=128 gets 0.915 COCO COP-Kmeans. SA-GAT Hyperbolic at dim=32 gets 0.926 on the same. That is $+1.1$ points, achieved with $1/4$ the embedding size. This is a concrete, defensible result: \textbf{same or better pose grouping accuracy at $4\times$ smaller embedding, by replacing Euclidean output with Lorentz-model hyperbolic output.}
+
+\textbf{3. Why might dim=32 beat dim=128?} The theoretical claim is that hyperbolic space can embed trees at arbitrary low distortion in any dimension $\geq 2$, whereas Euclidean space needs $\Omega(\log n)$ dimensions for distortion bounded below a constant. At dim=128 in hyperbolic space, most of the ambient capacity is unused --- the optimiser has too much freedom and the regularisation implicit in LayerNorm $\to$ expmap does not prevent over-parameterisation. At dim=32 the capacity is closer to what the problem actually needs, and the geometry provides the structure the Euclidean model had to learn explicitly. This matches the standard finding in hyperbolic deep learning literature: lower-dimensional hyperbolic often outperforms higher-dimensional Euclidean.
+
+\textbf{4. The positive transfer gap seen with H1 partially disappears for H2.} H1's most striking result was COCO COP-KM ($0.924$) beating synthetic ($0.916$). H2 gets the same COCO number ($0.926$) but a higher synthetic number ($0.930$), so the transfer gap returns to slightly negative ($-0.4$). H2 wins in absolute COCO accuracy but does not reproduce H1's ``better on OOD than ID'' result. The absolute numbers matter more for practical use, so H2 is still the preferred variant --- but H1's oddly-positive transfer gap is worth flagging as an interesting observation in itself.
+
+\textbf{5. The compromises remain, and they still cap the strength of the conclusion.} Internal attention is still Euclidean; grouping is still done in tangent space. A full hyperbolic architecture might show larger effects (or might not --- the distortion argument is asymptotic and pose skeletons are tiny trees). We cannot claim ``hyperbolic is strictly better for pose grouping'' without a full rewrite; we can only claim ``moving the output to hyperbolic, with these specific choices, produces a consistent advantage.''
+
+\textbf{6. This now supports a proper ablation row in the MEng paper.} Two concrete claims that survive scrutiny:
+\begin{itemize}
+    \item ``SA-GAT with Lorentz-model hyperbolic output embeddings at dim=32 matches or beats the Euclidean variant at dim=128 across all tested grouping methods and both datasets.''
+    \item ``This is consistent with the theoretical prediction that hyperbolic space requires fewer dimensions to embed tree-structured data without distortion.''
+\end{itemize}
+Not a headline contribution but not trivial either. Worth 1--2 tables and half a page of discussion in the MEng paper as a principled efficiency result. Gets the thesis a sliver of theoretical grounding it did not previously have.
+
+\subsubsection{What to do next}
+
+Three realistic options:
+
+\textbf{Option A: Stop here.} H2 gave a clear positive result that stands as an ablation row in the MEng paper. We have documented it properly. The marginal value of further hyperbolic experiments is low relative to other work that needs doing (paper writing, figure generation, thesis compilation).
+
+\textbf{Option B: Train a COCO fine-tuned hyperbolic dim=32.} The Euclidean variant fine-tuned goes from $0.915 \to 0.968$ COCO COP-KM ($+5.3$ points). If hyperbolic dim=32 gets a similar jump, we would be at $\sim 0.980$ COCO --- which would be within 0.5 points of HigherHRNet's $0.985$. That is a genuinely thesis-worthy number. Cost: ~90 minutes of training + evaluation. Recommended.
+
+\textbf{Option C: Full hyperbolic architecture.} Rewrite SA-GAT's attention to operate entirely on the manifold (M\"obius operations, Fr\'echet-mean aggregation). This is the principled version. Cost: a week or more. Probably not worth it unless an early reviewer explicitly asks for it.
+
+The honest recommendation is Option B, then stop. It is the cheapest way to convert an ablation into a potentially headline result.
+
+\subsubsection{Option B results --- COCO fine-tuned hyperbolic dim=32}
+
+Ran the COCO fine-tune (Option B) with the same settings as the Euclidean fine-tune: load \texttt{outputs/train\_sa\_gat\_hyperbolic\_dim32/latest/best.pt}, fine-tune on COCO train2017 for 20 epochs at LR $1 \times 10^{-4}$, contrastive loss only, no grouping head.
+
+The prediction ($\sim 0.980$ COCO, within 0.5 points of HigherHRNet) was wrong. The actual numbers came in lower. Full comparison across all four hyperbolic configurations plus the two Euclidean references:
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Model} & \textbf{Synth kNN} & \textbf{COCO kNN} & \textbf{COCO COP-KM} & \textbf{COCO THA} \\
+\hline
+Euclidean dim=128 (synth only) & 0.910 & 0.882 & 0.915 & --- \\
+Euclidean dim=128 (COCO ft) & 0.928 & \textbf{0.957} & \textbf{0.968} & \textbf{0.969} \\
+Hyperbolic dim=128 (synth only) & 0.907 & 0.895 & 0.924 & --- \\
+Hyperbolic dim=32 (synth only) & 0.918 & 0.899 & 0.926 & --- \\
+Hyperbolic dim=32 (COCO ft) & 0.889 & 0.943 & 0.958 & 0.961 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+\paragraph{What the numbers say.}
+
+\begin{itemize}
+    \item \textbf{COCO fine-tuning works for the hyperbolic model.} Real gains on every COCO metric ($+4.4$ kNN, $+3.2$ COP-KM). Absolute numbers are strong in isolation (0.958 COP-KM, 0.961 THA).
+    \item \textbf{Euclidean dim=128 COCO-ft still wins.} The hyperbolic variant trails by 0.8--1.4 points on every COCO metric after both are fine-tuned. The dim=32 advantage from the synthetic-only regime does not survive the fine-tune.
+    \item \textbf{Hyperbolic synthetic performance degraded during fine-tuning.} Synth kNN dropped $0.918 \to 0.889$ ($-2.9$), while the Euclidean variant's synthetic went $0.910 \to 0.928$ (\emph{up} $+1.8$) during its own fine-tune. The hyperbolic model specialised more aggressively to COCO.
+    \item \textbf{The transfer-advantage story partially reversed.} Post-fine-tune, the hyperbolic synth-to-COCO gap is $+5.4$ (COCO $>$ synth) while the Euclidean gap is $+2.9$. The earlier observation that hyperbolic has \emph{smaller} transfer gap applied to the synthetic-only regime only; once fine-tuned, hyperbolic actually has the larger gap.
+\end{itemize}
+
+\paragraph{Why the dim=32 advantage did not compound with fine-tuning.} The synthetic-only result (hyperbolic dim=32 beats Euclidean dim=128 on synthetic) was at least partly an optimisation effect: at dim=128 Euclidean, the model has enough capacity that the optimiser finds a reasonable but not-optimal basin; at dim=32 hyperbolic, the optimiser has less room to wander and lands closer to the geometry's preferred solution. When you introduce fine-tuning, the ``has enough capacity to adapt'' benefit of the larger Euclidean model dominates, and the geometry advantage of hyperbolic becomes secondary.
+
+\paragraph{The defensible claim.} Not ``hyperbolic is better.'' Rather: \textbf{SA-GAT Hyperbolic at output\_dim=32 achieves 0.961 THA on COCO (GT keypoints, after fine-tuning), at $4\times$ smaller embedding than Euclidean dim=128's 0.969}. A $0.8$-point quality cost for a $4\times$ memory/bandwidth saving on the embedding storage. Useful in deployment-constrained settings but not a quality improvement.
+
+\paragraph{Implications for the MEng paper.} The hyperbolic experiments become two ablation rows (synth-only and COCO-ft), framed as an embedding-dimension efficiency study. Not a headline contribution, but a genuine efficiency tradeoff worth documenting. Specifically:
+\begin{itemize}
+    \item Synthetic-only: hyperbolic dim=32 beats Euclidean dim=128 on every metric. Clean positive result.
+    \item COCO-fine-tuned: hyperbolic dim=32 trails Euclidean dim=128 by $\sim 1$ point. Efficiency tradeoff rather than pure improvement.
+\end{itemize}
+
+\paragraph{What to do next.} Option A (stop) is now the right call. The hyperbolic experiment is documented, the answer is clear, and pursuing Option C (full manifold architecture) is not justified by these numbers --- if dim=32 hyperbolic with exp-map-only output fine-tunes to 0.961, a full M\"obius-operations architecture would plausibly reach around the same ceiling, at much higher engineering cost. The marginal value is no longer there.
+
+End-to-end with HigherHRNet detection would close the picture ($\sim 0.948$ expected based on the Euclidean $-0.014$ end-to-end drop), but it is not strictly necessary for the ablation-row story.
+
+
+\subsection{TriGAT --- Triplet-Based Primitive}
+
+\subsubsection{Motivation}
+
+A final architectural experiment from a conversation with a collaborator: instead of embedding joints, embed \emph{triplets} (chains of three skeleton-connected joints A-B-C where A-B and B-C are bones). The angle at the pivot B is rotation-invariant articulation information, which joint embeddings do not directly capture. Two people in a scene with joints in similar absolute positions can still be distinguished by their articulation patterns: different shoulder-elbow-wrist angles, different hip-knee-ankle stances, different head-torso orientations.
+
+The COCO skeleton enumerates exactly 19 canonical triplets (4 head configurations, 4 arm/leg chains, torso configurations around the shoulders and hips). Each person in a scene contributes up to 19 triplet instances (fewer if some joints are invisible). This is a richer primitive than a joint: it encodes geometry and articulation simultaneously.
+
+The pitch was ``we found standard joint embeddings do not capture articulation structure, so we switched to triplet embeddings which do.''
+
+\subsubsection{Implementation}
+
+Created \texttt{trigat.py} with three components:
+\begin{itemize}
+    \item \texttt{build\_triplet\_graph}: converts a joint PyG graph to a triplet PyG graph. For each person in the scene, enumerates the 19 COCO triplets; skips any with missing joints. Each triplet node has features $[\text{pivot\_x}, \text{pivot\_y}, \Delta_{AB}, \Delta_{CB}, \cos\theta, \sin\theta, |BA|, |BC|]$ = 10 continuous values, plus a learnable 16-dim triplet-type embedding (19 types).
+    \item \texttt{TriGATEmbedding}: GATv2-based attention network over the triplet graph. kNN edges over pivot positions, same SA-GAT-like layer stack, outputs per-triplet embeddings.
+    \item \texttt{vote\_joint\_labels}: post-clustering step that votes each joint's person assignment from the cluster labels of triplets containing it. Pivot vote weighted $2\times$ over wing votes (pivot's articulation is more distinguishing).
+\end{itemize}
+
+Person label for a triplet = pivot joint's person ID. Contrastive loss is the same \texttt{GATOnlyLoss} as for joint embeddings.
+
+Also wrote \texttt{eval\_trigat.py} that runs three grouping methods (kNN, COP-Kmeans, THA) on the triplet embeddings, then votes joint-level labels and computes PGA against the GT joint labels.
+
+\subsubsection{Results}
+
+Trained for 50 epochs on synthetic-only data, same training budget as SA-GAT.
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Method} & \textbf{Synth PGA} & \textbf{COCO PGA} \\
+\hline
+\multicolumn{3}{l}{\emph{SA-GAT baselines (synthetic-only, same regime):}} \\
+SA-GAT + kNN & 0.910 & 0.882 \\
+SA-GAT + COP-Kmeans & 0.925 & 0.915 \\
+SA-GAT + THA & 0.938 & — \\
+\hline
+\multicolumn{3}{l}{\emph{TriGAT (triplet graph + voting):}} \\
+Triplets + kNN & 0.898 & 0.855 \\
+Triplets + COP-Kmeans & 0.917 & 0.884 \\
+Triplets + THA & 0.804 & 0.849 \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+\textbf{TriGAT underperforms SA-GAT across every comparison.} The best TriGAT configuration (triplets + COP-Kmeans) scores 0.917 synthetic / 0.884 COCO, compared to SA-GAT's 0.925 / 0.915. The gap widens on COCO, suggesting the triplet representation is losing more information during the sim-to-real transfer than it gains through articulation encoding.
+
+\subsubsection{Why it did not work}
+
+\textbf{1. The voting step is lossy.} Each joint appears in multiple triplets (up to $\sim 3$ triplets per joint). If the triplets for a joint are split across cluster assignments, voting muddies the signal. For a fully-visible person the 19 triplets cover 17 joints unevenly --- the wrists/ankles each appear in 1 triplet, while the shoulders/hips each appear in several. Low-coverage joints depend heavily on a single triplet's cluster assignment.
+
+\textbf{2. THA with voting is catastrophic on synthetic (0.804).} THA's per-type Hungarian matching is decisive: each triplet of type $t$ gets assigned to exactly one cluster. If one triplet in a person is mis-assigned, voting for the joints in that triplet is pulled toward the wrong cluster. On synthetic data with tight, well-separated clusters, the voting amplifies small mistakes rather than absorbing them. COP-Kmeans is more forgiving because its greedy iterative nature produces some softer clusters.
+
+\textbf{3. The angle signal does not transfer well.} The cosine/sine features at the pivot encode local articulation. In synthetic data all people have the same rig and similar pose distributions, so articulation signal is usable. On COCO, real poses vary enormously (sitting, crouching, walking, occluded), and the angle features alone are not a reliable identity marker. The raw position features in SA-GAT (augmented by the attention layers attending over skeletal neighbours) capture absolute spatial structure that transfers more cleanly.
+
+\textbf{4. The triplet type embedding may not be learning what we hoped.} With only 400 synthetic training scenes, the 19-dim triplet-type embedding has ~80 params (19 types $\times$ 16 dims). Each type appears $K$ times per scene, so across 400 scenes with avg 3 people = 1200 examples per type. That should be enough, but the embedding is competing with the raw positional features for gradient signal, and the type embeddings might just be specialising to synthetic-specific angle distributions.
+
+\textbf{5. The graph structure may be fighting itself.} The triplet graph has roughly $19K$ nodes for a $K$-person scene, vs the joint graph's $17K$ nodes. Scale is similar. But the edges are kNN over pivot positions, which means triplets whose pivots are close get attention. In a scene where two people overlap spatially, their triplets' pivots are close but their articulation is different --- exactly the case where triplet embeddings should help. The results suggest that in these overlapping cases, the attention is still dominated by spatial proximity rather than articulation similarity, because the input features are still dominated by positions.
+
+\subsubsection{Analysis}
+
+\textbf{1. This is a clean negative result.} Every TriGAT configuration loses to SA-GAT under identical training conditions. Not a ``close'' experiment --- the gap is consistent and meaningful (1--3 points on strong grouping methods, $>10$ points on THA).
+
+\textbf{2. The architectural idea is not wrong in principle --- the execution has issues.} Angle-based features \emph{should} help for articulated pose, and embedding triplets rather than joints \emph{should} be a richer primitive. But the voting step, the dominance of position features at the input, and the fixed 19-triplet topology (doesn't scale to occluded scenes well) together give up more than the articulation features contribute.
+
+\textbf{3. The single largest problem is almost certainly the voting step.} Triplet-level clustering is not what we want --- we want joint-level assignment. A version that learned the joint assignment directly (e.g., triplet embeddings $\to$ attention $\to$ joint logits) would avoid the vote. But that is essentially reinventing SA-GAT with a different parametrisation, and the more parsimonious conclusion is that joint embeddings are the right primitive.
+
+\textbf{4. The experiment also informs the paper-writing approach.} We have now tested several alternative embedding primitives:
+\begin{itemize}
+    \item Joint position + type (SA-GAT) --- baseline, works well
+    \item Joint + visual features (SA-GAT v2) --- marginal gain, does not beat the simple version
+    \item Lorentz-hyperbolic joint (SA-GAT hyperbolic) --- efficiency trade, not a quality win
+    \item Triplet (TriGAT) --- clean underperformance
+\end{itemize}
+This is useful ablation evidence in the MEng paper: ``we investigated four alternative embedding formulations and the simplest one (positional joint embeddings) remained strongest.'' That is a valid empirical claim.
+
+\textbf{5. Recommendation: close this direction.} Documented as a negative result in the dissertation. The MEng paper can mention it in one sentence during the ablation section (``triplet-based embeddings with majority-vote grouping underperform joint embeddings by $\sim 1$--$3$ points across all methods tested''). No follow-up experiments justified.
+
+
 \subsection{Publication Plan}
 
 The publication plan mirrors the MEng/PEng conceptual split. The MEng paper presents pose grouping as an embedding problem and shows SA-GAT is the right embedding network for it. The PEng paper reframes the problem as structured assignment and presents THA as the right algorithm for that framing, with SCOT and the investigation behind it as the experimental evidence that motivates the reframing.

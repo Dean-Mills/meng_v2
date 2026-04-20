@@ -50,6 +50,49 @@ class SAGATConfig(BaseModel):
         return feat_dim + self.joint_embedding_dim
 
 
+class SAGATHyperbolicConfig(BaseModel):
+    """SA-GAT with Lorentz-model hyperbolic output embeddings."""
+    num_joint_types: int
+    joint_embedding_dim: int
+    raw_feature_dim: int
+    hidden_dim: int
+    output_dim: int        # dim of tangent vector; hyperboloid lives in R^(output_dim+1)
+    num_layers: int
+    num_heads: int
+    dropout: float
+    use_layer_norm: bool
+    l2_normalize: bool = False    # not used for hyperbolic — kept for config compat
+    use_depth: bool = True
+    # SA-GAT modifications
+    use_type_pair_attention: bool = True
+    use_position_encoding: bool = True
+    use_repulsion_heads: bool = True
+    n_repulsion_heads: int = 1
+
+    @computed_field
+    @property
+    def input_dim(self) -> int:
+        feat_dim = self.raw_feature_dim if self.use_depth else self.raw_feature_dim - 1
+        return feat_dim + self.joint_embedding_dim
+
+
+class TriGATConfig(BaseModel):
+    """TriGAT: GAT over skeleton triplets (19 canonical triplets per person).
+
+    Triplets are 3-joint chains A-B-C where A-B and B-C are skeletal edges.
+    Each triplet encodes articulation (angle at pivot B) and is the
+    architectural primitive.
+    """
+    num_layers: int
+    num_heads: int
+    hidden_dim: int
+    output_dim: int
+    triplet_embedding_dim: int = 16   # embedding for 19 triplet type IDs
+    dropout: float = 0.1
+    use_layer_norm: bool = True
+    l2_normalize: bool = True
+
+
 class SAGATV2Config(BaseModel):
     """SA-GAT v2: SA-GAT with optional visual feature input."""
     num_joint_types: int
@@ -221,6 +264,8 @@ class ExperimentConfig(BaseModel):
     gat: GATConfig
     sa_gat:             Optional[SAGATConfig]             = None
     sa_gat_v2:          Optional[SAGATV2Config]           = None
+    sa_gat_hyperbolic:  Optional[SAGATHyperbolicConfig]   = None
+    trigat:             Optional[TriGATConfig]            = None
     loss: LossConfig
     dec:                Optional[DECConfig]               = None
     slot_attention:     Optional[SlotAttentionConfig]     = None

@@ -1,0 +1,45 @@
+name: "train_sa_gat_hyperbolic_dim32"
+description: "SA-GAT Hyperbolic at dim=32 (H2: smaller dim for same accuracy)"
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 32
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+
+sa_gat_hyperbolic:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 32
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  use_depth: false
+  use_type_pair_attention: true
+  use_position_encoding: true
+  use_repulsion_heads: true
+  n_repulsion_heads: 1
+
+loss:
+  contrastive_margin: 2.0
+
+training:
+  virtual_dir:   data/virtual
+  batch_size:    4
+  num_workers:   4
+  lr:            1e-3
+  lr_min:        1e-5
+  weight_decay:  1e-4
+  epochs:        50
+  val_every:     5
+  save_best:     true

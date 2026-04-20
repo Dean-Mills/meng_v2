@@ -228,9 +228,16 @@ class Evaluator:
         cfg_dict    = ckpt["config"]
         self.cfg    = ExperimentConfig(**cfg_dict)
 
-        # GAT (standard, SA-GAT, or SA-GAT v2)
+        # GAT (standard, SA-GAT, SA-GAT v2, or SA-GAT hyperbolic)
         self._needs_mobilenet = False
-        if self.cfg.sa_gat_v2 is not None:
+        self._is_hyperbolic = False
+        if self.cfg.sa_gat_hyperbolic is not None:
+            from sa_gat_hyperbolic import SAGATHyperbolicEmbedding
+            self.gat = SAGATHyperbolicEmbedding(self.cfg.sa_gat_hyperbolic).to(device)
+            self._embedding_dim = self.cfg.sa_gat_hyperbolic.output_dim
+            self._use_depth = self.cfg.sa_gat_hyperbolic.use_depth
+            self._is_hyperbolic = True
+        elif self.cfg.sa_gat_v2 is not None:
             from sa_gat_v2 import SAGATV2Embedding
             self.gat = SAGATV2Embedding(self.cfg.sa_gat_v2).to(device)
             self._embedding_dim = self.cfg.sa_gat_v2.output_dim
@@ -358,6 +365,13 @@ class Evaluator:
         embeddings = self.gat(graph)
         k          = int(graph.num_people)
         gt         = graph.person_labels
+
+        # For hyperbolic embeddings, logmap back to tangent space for
+        # Euclidean-distance-based grouping methods
+        if self._is_hyperbolic:
+            logmap = self.gat.manifold.logmap0(embeddings)
+            embeddings = logmap[..., 1:]  # drop time component
+            embeddings = F.normalize(embeddings, p=2, dim=-1)
 
         results = {}
 

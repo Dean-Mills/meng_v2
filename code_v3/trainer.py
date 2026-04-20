@@ -229,7 +229,19 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
     virtual_dir = Path(tc.virtual_dir)
 
     # ── Models ────────────────────────────────────────────────────────────────
-    if cfg.sa_gat_v2 is not None:
+    use_hyperbolic = cfg.sa_gat_hyperbolic is not None
+    use_trigat = cfg.trigat is not None
+    if use_trigat:
+        from trigat import TriGATEmbedding
+        gat = TriGATEmbedding(cfg.trigat).to(device)
+        embedding_dim = cfg.trigat.output_dim
+        use_depth = False  # triplets built from 2D positions only
+    elif use_hyperbolic:
+        from sa_gat_hyperbolic import SAGATHyperbolicEmbedding
+        gat = SAGATHyperbolicEmbedding(cfg.sa_gat_hyperbolic).to(device)
+        embedding_dim = cfg.sa_gat_hyperbolic.output_dim
+        use_depth = cfg.sa_gat_hyperbolic.use_depth
+    elif cfg.sa_gat_v2 is not None:
         from sa_gat_v2 import SAGATV2Embedding
         gat = SAGATV2Embedding(cfg.sa_gat_v2).to(device)
         embedding_dim = cfg.sa_gat_v2.output_dim
@@ -330,7 +342,11 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
     print(f"Save dir: {save_dir}\n")
 
     # ── Losses ────────────────────────────────────────────────────────────────
-    gat_loss_fn  = GATOnlyLoss(cfg.loss)
+    if use_hyperbolic:
+        from losses import HyperbolicContrastiveLoss
+        gat_loss_fn = HyperbolicContrastiveLoss(cfg.loss, gat.manifold)
+    else:
+        gat_loss_fn = GATOnlyLoss(cfg.loss)
     head_loss_fn = _build_head_loss(cfg)
 
     # ── Optimiser ─────────────────────────────────────────────────────────────
@@ -373,6 +389,26 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
                     continue
 
                 graph = graph.to(device)
+
+                # TriGAT: convert joint graph to triplet graph
+                if use_trigat:
+                    from trigat import build_triplet_graph
+                    tri_graph = build_triplet_graph(graph, k_neighbors=8)
+                    if tri_graph is None:
+                        continue
+                    tri_graph = tri_graph.to(device)
+                    optimizer.zero_grad()
+                    embeddings = gat(tri_graph)
+                    gat_out = gat_loss_fn(embeddings, tri_graph.person_labels)
+                    total = gat_out["total_loss"]
+                    total.backward()
+                    torch.nn.utils.clip_grad_norm_(params, max_norm=1.0)
+                    optimizer.step()
+                    epoch_loss     += total.item()
+                    epoch_gat_loss += gat_out["total_loss"].item()
+                    n_graphs += 1
+                    continue
+
                 optimizer.zero_grad()
 
                 # GAT forward
@@ -467,6 +503,9 @@ def _validate(gat, head, head_name, loader, preprocessor,
 
     all_pga = []
 
+    is_hyperbolic = cfg.sa_gat_hyperbolic is not None
+    is_trigat = cfg.trigat is not None
+
     with torch.no_grad():
         for batch in loader:
             if use_cached_features:
@@ -475,8 +514,35 @@ def _validate(gat, head, head_name, loader, preprocessor,
                 graphs = preprocessor.process_batch(batch)
             for graph in graphs:
                 graph      = graph.to(device)
-                embeddings = gat(graph)
                 k          = int(graph.num_people)
+
+                # TriGAT: build triplet graph, embed, cluster triplets,
+                # vote joint labels, measure joint-level PGA.
+                if is_trigat:
+                    from trigat import build_triplet_graph, vote_joint_labels
+                    tri_graph = build_triplet_graph(graph, k_neighbors=8)
+                    if tri_graph is None:
+                        continue
+                    tri_graph = tri_graph.to(device)
+                    tri_emb = gat(tri_graph)
+                    tri_labels = predict_knn(tri_emb, k)
+                    joint_labels = vote_joint_labels(
+                        tri_labels, tri_graph.joint_pos_in_triplet,
+                        tri_graph.num_joints,
+                    )
+                    pga = compute_pga(joint_labels, graph.person_labels)
+                    all_pga.append(pga)
+                    continue
+
+                embeddings = gat(graph)
+
+                # For hyperbolic embeddings, map back to tangent space at origin
+                # so the Euclidean-based grouping methods can operate on them.
+                if is_hyperbolic:
+                    logmap = gat.manifold.logmap0(embeddings)
+                    # Drop the zero time component
+                    embeddings = logmap[..., 1:]
+                    embeddings = F.normalize(embeddings, p=2, dim=-1)
 
                 if head_name == "slot_attention":
                     pred_labels = predict_slot(head, embeddings, k)

@@ -171,7 +171,13 @@ def evaluate(
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     cfg = ExperimentConfig(**ckpt["config"])
 
-    if cfg.sa_gat is not None:
+    is_hyperbolic = cfg.sa_gat_hyperbolic is not None
+    if is_hyperbolic:
+        from sa_gat_hyperbolic import SAGATHyperbolicEmbedding
+        gat = SAGATHyperbolicEmbedding(cfg.sa_gat_hyperbolic).to(device)
+        embedding_dim = cfg.sa_gat_hyperbolic.output_dim
+        use_depth = cfg.sa_gat_hyperbolic.use_depth
+    elif cfg.sa_gat is not None:
         from sa_gat import SAGATEmbedding
         gat = SAGATEmbedding(cfg.sa_gat).to(device)
         embedding_dim = cfg.sa_gat.output_dim
@@ -221,6 +227,10 @@ def evaluate(
                     break
                 graph = graph.to(device)
                 embeddings = gat(graph)
+                if is_hyperbolic:
+                    import torch.nn.functional as F
+                    logmap = gat.manifold.logmap0(embeddings)
+                    embeddings = F.normalize(logmap[..., 1:], p=2, dim=-1)
                 k = int(graph.num_people)
                 gt = graph.person_labels
 
