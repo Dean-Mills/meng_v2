@@ -1,0 +1,26 @@
+%%
+%%  Department of Electrical, Electronic and Computer Engineering
+%%  MEng Dissertation - Chapter 6: Conclusion
+%%
+
+\chapter{Conclusion}
+\label{chap_6}
+
+This chapter summarises the contributions of the dissertation, consolidates the answers to the research questions, and indicates directions for future work. The PEng follow-up is the main pointer forward, but several MEng-local directions are also noted.
+
+\section{Summary of Contributions}
+\label{sec_conc_contributions}
+
+Restates the five numbered contributions from Section~\ref{sec_intro_contributions}, each now grounded in the numbers from Chapter~\ref{chap_4}. PG-GAT is the main technical contribution. The empirical finding that the embedding dominates the grouping head is the main scientific contribution. The COCO fine-tuning protocol, the hyperbolic variant, and the TriGAT negative result are supporting contributions.
+
+\section{Answers to the Research Questions}
+\label{sec_conc_rq}
+
+Condensed one-paragraph answers to RQ1 (yes --- PG-GAT + kNN reaches 0.957 COCO), RQ2 (all three PG-GAT modifications contribute independently; COCO fine-tuning adds the largest single improvement), and RQ3 (PG-GAT is 0.03 PGA below HigherHRNet AE end-to-end, but is detector-agnostic --- the trade-off is modularity for a small quality cost).
+
+\section{Future Work}
+\label{sec_conc_future}
+
+Three directions. (1) The PEng follow-up re-frames grouping as structured assignment and develops SCOT, SCOT-KI, and THA --- closing on HigherHRNet's 0.985 with algorithmic rather than embedding changes. (2) A fully hyperbolic PG-GAT architecture (hyperbolic attention, not only hyperbolic output) would test the geometric-prior hypothesis more cleanly than the partial variant evaluated here. (3) End-to-end joint training with a detector would give up modularity to regain the coupling advantage AE exploits, and would quantify how much of the 0.03 gap is fundamental versus avoidable.
+
+%% End of File.

@@ -1,0 +1,73 @@
+%%
+%%  Department of Electrical, Electronic and Computer Engineering
+%%  MEng Dissertation / PhD Thesis - Main File
+%%  Copyright (C) 2011-2016 University of Pretoria.
+%%
+
+%% EDIT: The primary option supported by the dissertation / thesis class
+%%   is the official degree code. This code must be correctly set to allow
+%%   the degree descriptions in the template to be atomically set.
+\documentclass[12250091]{diss_thesis}
+
+%% EDIT: Replace the following with your information.
+\renewcommand{\dtthetitleeng}{Title of dissertation or thesis}
+\renewcommand{\dtthetitleafr}{TITEL}
+\renewcommand{\dtthecandidatename}{Dean Spencer Mills}
+\renewcommand{\dtthedate}{January 2025}
+\renewcommand{\dtthesupervisor}{Prof. R. P. Feynman}
+
+\begin{document}
+
+%% ---[ FRONT MATTER ]-------------------------------------------------------
+
+\maketitlepage
+\input{summary}
+\input{abbrev}
+\input{symbols}
+\tableofcontents
+\listoffigures \textcolor{red}{[THE LIST OF FIGURES IS OPTIONAL]} % remove \textcolor{red}{[OPTIONAL]}
+\listoftables \textcolor{red}{[THE LIST OF TABLES IS OPTIONAL]} % remove \textcolor{red}{[OPTIONAL]}
+\updatechaptername
+\newpage
+
+%% Switch to the required header / footer style.
+\pagestyle{normal}
+\setcounter{page}{1}
+
+%% ---[ CONTENT ]------------------------------------------------------------
+
+% EDIT: Include additional chapter files as necessary.
+\input{chapter1}
+\input{chapter2}
+\input{chapter3}
+\input{chapter4}
+\input{chapter5}
+\input{chapter6}
+
+\newpage
+
+%% ---[ BACK MATTER ]--------------------------------------------------------
+
+%\backmatter
+
+%% EDIT: Change the bibliography style if necessary (not recommended).
+\pagestyle{bibliography}
+\bibliographystyle{IEEEtran}
+%\bibliographystyle{elsarticle-harv}
+\updatechaptername
+\addcontentsline{toc}{chapter}{REFERENCES}
+\bibliography{diss_thesis}
+\newpage
+
+\appendix
+\makeatletter
+\renewcommand{\@chapapp}{Appendix}
+\makeatother
+\updatechaptername
+\pagestyle{normal}
+\input{addenduma}
+\newpage
+
+\end{document}
+
+%% End of File.

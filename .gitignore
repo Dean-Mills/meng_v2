@@ -178,3 +178,5 @@ cython_debug/
 .pypirc
 
 /code_v3/vendors
+/thesis
+/dissertation_info

@@ -1,0 +1,41 @@
+%%
+%%  Department of Electrical, Electronic and Computer Engineering
+%%  MEng Dissertation - Chapter 2: Literature Review
+%%
+
+\chapter{Literature Review}
+\label{chap_2}
+
+This chapter situates multi-person pose grouping within the broader human pose estimation literature, reviews the existing families of grouping mechanisms, and surveys the graph neural network and representation-learning work that PG-GAT builds on. The review closes by identifying the specific gap that this dissertation addresses.
+
+\section{Multi-Person Human Pose Estimation}
+\label{sec_lit_hpe}
+
+Overview of top-down (detect-person-then-pose) versus bottom-up (detect-joints-then-group) pipelines. Why bottom-up is attractive (constant time in number of people, robust to overlapping detections) and why it reintroduces the grouping problem. Canonical detectors: Hourglass networks, HRNet, HigherHRNet.
+
+\section{Grouping in Bottom-Up Pose Estimation}
+\label{sec_lit_grouping}
+
+Review of the major grouping mechanisms in the bottom-up literature: part-affinity fields (OpenPose), associative embeddings (Newell et al.), PersonLab mid-range offsets, HGG (graph-based), CenterGroup. How each binds tightly to its host detector and why that limits modularity.
+
+\section{Graph Neural Networks for Pose}
+\label{sec_lit_gnn_pose}
+
+Existing graph-based approaches in the pose literature: STGAT (skeleton-based action recognition), GAST-Net (single-person 3D pose from video), skeleton-aware GCN variants. How these differ from the multi-person keypoint grouping task --- none of the existing ``skeleton-aware'' networks target grouping, which motivates both the PG-GAT contribution and the naming choice (avoiding collision with STGAT/GAST-Net descriptors).
+
+\section{Representation Learning for Clustering}
+\label{sec_lit_rep_learn}
+
+Contrastive learning (InfoNCE, SimCLR), triplet losses, metric learning. Deep clustering lineage: DEC (Xie et al.), IDEC, DeepCluster, DMoN. What these methods assume about the feature space and how those assumptions interact with the pose-grouping task.
+
+\section{Geometric Embedding Spaces}
+\label{sec_lit_geometry}
+
+Euclidean versus non-Euclidean embedding spaces. Hyperbolic embeddings (Poincar\'e ball, Lorentz model) and their suitability for tree-structured data. Relevance to skeletons, which are trees. Sets up the motivation for the hyperbolic PG-GAT variant evaluated in Chapter~\ref{chap_4}.
+
+\section{Research Gap}
+\label{sec_lit_gap}
+
+Synthesises the review: modular grouping modules for bottom-up HPE are under-explored; existing graph-based pose networks target different tasks; the clustering-head literature has not been systematically applied to pose grouping; and the choice of embedding space (Euclidean vs hyperbolic) is untested in this domain. PG-GAT and its ablations address these gaps.
+
+%% End of File.
