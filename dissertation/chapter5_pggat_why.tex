@@ -1,0 +1,4 @@
+\section{Why PG-GAT Works}
+\label{sec_disc_pggat_why}
+
+Discusses what each of the three modifications buys, drawing on the ablation numbers from Chapter~\ref{chap_4}. Type-pair attention lets the network weight joint-type relationships independently. The skeleton-aware positional encoding provides translation/scale invariance that the contrastive loss alone does not enforce. The type-repulsion term addresses the hardest pairs (same-type, different-person keypoints that look locally similar). Together they make the embedding separable enough that kNN works.

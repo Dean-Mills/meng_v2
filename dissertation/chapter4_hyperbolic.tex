@@ -1,0 +1,4 @@
+\section{Hyperbolic PG-GAT}
+\label{sec_res_hyperbolic}
+
+Two-part result. Pre-fine-tune: hyperbolic at $d=32$ matches or slightly beats Euclidean at $d=128$ (0.918 synth / 0.899 COCO kNN, vs Euclidean 0.910 / 0.882) --- consistent with trees needing fewer dimensions in hyperbolic space. Post-fine-tune: the advantage disappears. Hyperbolic $d=32$ COCO-fine-tuned reaches 0.943 kNN, still below Euclidean $d=128$ COCO-fine-tuned (0.957). Reported honestly as an \emph{efficiency trade} (comparable quality at 4$\times$ smaller embedding), not a quality win.

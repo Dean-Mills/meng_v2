@@ -6,46 +6,15 @@
 \chapter{Discussion}
 \label{chap_5}
 
-This chapter interprets the results of Chapter~\ref{chap_4}, answers the research questions from Chapter~\ref{chap_1}, and examines the limitations of the work. The central question of the chapter is \emph{why} the investigated methods succeeded or failed --- not just what the numbers were.
+This chapter interprets the results of Chapter~\ref{chap_4}, answers the research questions from Chapter~\ref{chap_1}, and examines the limitations of the work. The central question of the chapter is \emph{why} the investigated methods succeeded or failed, not merely what the numbers were.
 
-\section{Why the Learned Grouping Heads Failed}
-\label{sec_disc_heads}
-
-Discusses the shared failure mode of DEC, slot attention, and graph partitioning: each added a learned assignment mechanism on top of embeddings that were already close to separable under simple kNN. When the embedding is the bottleneck, stacking a learned head reshapes the assignment space but does not improve separation, and can actively hurt transfer (the learned head overfits to synthetic structure).
-
-\section{Why SA-DMoN Failed}
-\label{sec_disc_sadmon}
-
-Root-cause analysis of the ten SA-DMoN experiments. The modularity objective is fundamentally misaligned with pose grouping: the kNN graph encodes \emph{spatial} proximity, but the communities we want are defined by \emph{identity}. The spatial null model either cancels with the spatial adjacency or is miscalibrated, and no null-model reformulation (learnable / clamped / median $\sigma$, feature-only adjacency, entropy regularisation) repaired the misalignment. This is a structural, not a tuning, problem.
-
-\section{Why PG-GAT Works}
-\label{sec_disc_pggat_why}
-
-Discusses what each of the three modifications buys, drawing on the ablation numbers from Chapter~\ref{chap_4}. Type-pair attention lets the network weight joint-type relationships independently. The skeleton-aware positional encoding provides translation/scale invariance that the contrastive loss alone does not enforce. The type-repulsion term addresses the hardest pairs (same-type, different-person keypoints that look locally similar). Together they make the embedding separable enough that kNN works.
-
-\section{What the Hyperbolic Result Tells Us}
-\label{sec_disc_hyperbolic}
-
-Interprets the dim-32 hyperbolic advantage and its disappearance after fine-tuning. Pre-fine-tune, hyperbolic geometry helps because the model is relying on the geometric prior (trees embed naturally in hyperbolic space). After fine-tuning, the Euclidean model learns a sufficient representation from data, and the geometric prior becomes a constraint rather than a help. The result is a quality-matched efficiency trade, not a quality win.
-
-\section{Why TriGAT Underperformed}
-\label{sec_disc_trigat}
-
-The triplet primitive is semantically richer per-token but introduces a voting step that propagates errors from clusters to joint labels. For decisive matching algorithms (THA), voting is especially fragile because a single mis-voted triplet can cascade across three joints.
-
-\section{Comparison with HigherHRNet AE --- the Modularity Trade-off}
-\label{sec_disc_modularity}
-
-Discusses the 0.955 vs 0.985 gap. HigherHRNet's AE head is tiny ($\sim$561 parameters) but inseparable from its backbone; it gets quality from the backbone features being trained jointly with the tag. PG-GAT is larger (170K parameters) but detector-agnostic --- a capability the AE head cannot offer. The correct comparison is not ``who wins on COCO'' but ``what does each buy.'' This framing matters for the modularity contribution claim.
-
-\section{Answers to the Research Questions}
-\label{sec_disc_rq}
-
-Explicit answers to RQ1, RQ2, RQ3 from Chapter~\ref{chap_1}, grounded in the numbers from Chapter~\ref{chap_4}.
-
-\section{Limitations and Threats to Validity}
-\label{sec_disc_limits}
-
-Known limitations: reliance on detector-supplied $K$ (K-estimation is outside the MEng core); synthetic-to-real domain gap mitigated but not eliminated; only one backbone evaluated end-to-end; PGA is Hungarian-matched joint accuracy, not mAP, so comparison to COCO-standard HPE numbers is indirect; COCO val2017 is the only real-image benchmark reported.
+\input{chapter5_learned_heads}
+\input{chapter5_sa_dmon}
+\input{chapter5_pggat_why}
+\input{chapter5_hyperbolic}
+\input{chapter5_trigat}
+\input{chapter5_modularity}
+\input{chapter5_rq_answers}
+\input{chapter5_limitations}
 
 %% End of File.

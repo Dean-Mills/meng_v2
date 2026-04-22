@@ -1,0 +1,18 @@
+\section{Research Objective and Research Questions}
+\label{sec_intro_objective}
+
+The objective is to design and evaluate a detector-independent, GNN-based pose grouping module. The investigation addresses the following research questions. Bracketed short answers anticipate the findings from Chapter~\ref{chap_4}; full support is provided there.
+
+\begin{itemize}
+\item \textbf{RQ1 --- The lever.} Is the bottleneck for clustering-based pose grouping the embedding, or the grouping algorithm? \textit{[Answer: the embedding. Four learned grouping heads (DEC, slot attention, graph partitioning, SA-DMoN) fail to beat plain kNN on the same embeddings; strengthening the embedding (PG-GAT) then beats every prior configuration.]}
+
+\item \textbf{RQ2 --- Inductive biases.} Which skeleton-aware modifications to a GATv2 embedding improve pose grouping, and by how much? \textit{[Answer: three modifications --- type-pair attention modulation, skeleton-aware positional encoding, and a type-repulsion loss term --- each contribute independently; the full combination is the best configuration.]}
+
+\item \textbf{RQ3 --- Detector independence.} Can a grouping module trained separately from the detector match an integrated end-to-end grouping mechanism (HigherHRNet's associative embedding head) on a real-image benchmark? \textit{[Answer: not fully. PG-GAT + kNN end-to-end is approximately 0.04 PGA below HigherHRNet AE on COCO, with detector-independence as the trade-off.]}
+
+\item \textbf{RQ4 --- Embedding geometry.} Does the choice of embedding space (Euclidean vs hyperbolic) affect pose grouping quality? \textit{[Answer: yes before COCO fine-tuning, where hyperbolic at $d=32$ matches Euclidean at $d=128$ (an efficiency edge). After fine-tuning the advantage disappears --- reported as an efficiency trade, not a quality win.]}
+
+\item \textbf{RQ5 --- Graph primitive.} Is a higher-order graph primitive (skeleton triplets) a better node for pose grouping than single joints? \textit{[Answer: no. TriGAT underperforms joint-level PG-GAT on every comparison, with the voting step (triplet clusters to joint labels) as the dominant failure mode.]}
+
+\item \textbf{RQ6 --- Fine-tuning.} How much does COCO fine-tuning lift a synthetically-trained embedding, and does it damage performance on the synthetic domain? \textit{[Answer: +7.5 PGA on COCO (kNN), the single largest gain of any experiment in this work; synthetic performance is not damaged (0.910 $\rightarrow$ 0.928).]}
+\end{itemize}

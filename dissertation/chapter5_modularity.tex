@@ -1,0 +1,4 @@
+\section{Comparison with HigherHRNet AE --- the Modularity Trade-off}
+\label{sec_disc_modularity}
+
+Discusses the 0.955 vs 0.985 gap. HigherHRNet's AE head is tiny ($\sim$561 parameters) but inseparable from its backbone; it gets quality from the backbone features being trained jointly with the tag. PG-GAT is larger (170K parameters) but detector-agnostic --- a capability the AE head cannot offer. The correct comparison is not ``who wins on COCO'' but ``what does each buy.'' This framing matters for the modularity contribution claim.

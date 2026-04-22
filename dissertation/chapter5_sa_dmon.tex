@@ -1,0 +1,4 @@
+\section{Why SA-DMoN Failed}
+\label{sec_disc_sadmon}
+
+Root-cause analysis of the ten SA-DMoN experiments. The modularity objective is fundamentally misaligned with pose grouping: the kNN graph encodes \emph{spatial} proximity, but the target communities are defined by \emph{identity}. The spatial null model either cancels with the spatial adjacency or is miscalibrated, and no null-model reformulation (learnable / clamped / median $\sigma$, feature-only adjacency, entropy regularisation) repaired the misalignment. This is a structural, not a tuning, problem.

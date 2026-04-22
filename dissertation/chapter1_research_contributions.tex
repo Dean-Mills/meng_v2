@@ -1,0 +1,12 @@
+\section{Research Contributions}
+\label{sec_intro_contributions}
+
+The contributions of this work are:
+
+\begin{enumerate}
+\item \textbf{PG-GAT}, a skeleton-aware graph attention network for pose-keypoint embedding. Three modifications over standard GATv2: type-pair attention modulation, skeleton-aware positional encoding, and a type-repulsion term in the contrastive loss.
+\item \textbf{Empirical evidence that the embedding, not the grouping head, is the decisive lever} for clustering-based pose grouping. Documented across four learned-head approaches (DEC, slot attention, graph partitioning, and ten SA-DMoN variants), none of which outperformed plain kNN on the same embeddings.
+\item \textbf{A COCO fine-tuning protocol} that lifts PG-GAT to 0.957 PGA on COCO val2017 with kNN clustering, and end-to-end to 0.942 when paired with HigherHRNet detection.
+\item \textbf{An alternative-embedding-space study} (hyperbolic PG-GAT in the Lorentz model): hyperbolic at $d=32$ matches Euclidean at $d=128$ pre-fine-tune, but the advantage disappears after COCO fine-tuning --- documented as an efficiency trade, not a quality win.
+\item \textbf{An alternative-primitive study} (TriGAT, triplet nodes): a negative result reported with the failure-mode analysis (voting step propagates errors).
+\end{enumerate}

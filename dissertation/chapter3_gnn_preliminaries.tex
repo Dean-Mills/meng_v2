@@ -1,0 +1,17 @@
+\section{Preliminaries --- Graph Neural Networks}
+\label{sec_meth_gnn}
+
+\subsection{The message-passing framework}
+\label{sec_meth_mp}
+
+General formulation of graph neural networks as iterated message passing. Nodes, edges, neighbourhoods, aggregation, update. Why the message-passing view unifies GCN, GAT, and most variants used in this dissertation.
+
+\subsection{Graph convolutional networks (GCN)}
+\label{sec_meth_gcn}
+
+Derivation from spectral graph theory to the Kipf--Welling simplification. The normalised-adjacency formulation $\tilde{A} = D^{-1/2}(A+I)D^{-1/2}$, the layer equation $H^{(l+1)} = \sigma(\tilde{A} H^{(l)} W^{(l)})$, and the assumptions it makes about edge uniformity. Why uniform edge weights are a limitation for skeletons where joint-pair relationships differ by type.
+
+\subsection{Graph attention networks (GAT and GATv2)}
+\label{sec_meth_gat}
+
+Original GAT (Veli\v{c}kovi\'c et al., 2018) attention: $e_{ij} = \mathrm{LeakyReLU}(\mathbf{a}^\top [W \mathbf{h}_i \mathbin\Vert W \mathbf{h}_j])$, followed by softmax over neighbours. The static-attention limitation (shared neighbour ranking across query nodes). GATv2 (Brody et al., 2022) fix: reorder to $e_{ij} = \mathbf{a}^\top \mathrm{LeakyReLU}(W [\mathbf{h}_i \mathbin\Vert \mathbf{h}_j])$, restoring dynamic attention. All experiments in this work use GATv2 as the attention primitive.

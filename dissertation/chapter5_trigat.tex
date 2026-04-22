@@ -1,0 +1,4 @@
+\section{Why TriGAT Underperformed}
+\label{sec_disc_trigat}
+
+The triplet primitive is semantically richer per-token but introduces a voting step that propagates errors from clusters to joint labels. A single mis-voted triplet cascades across the three joint votes that triplet contributes to, and the cascaded effect dominates the gap between TriGAT and joint-level PG-GAT in the results of Chapter~\ref{chap_4}.

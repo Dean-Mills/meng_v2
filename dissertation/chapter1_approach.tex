@@ -1,0 +1,4 @@
+\section{Approach}
+\label{sec_intro_approach}
+
+Train a graph attention network with contrastive loss on detected keypoints; cluster at test time with kNN. The iteration order mirrors the investigation: standard GAT baseline $\rightarrow$ a series of learned grouping heads (DEC, slot attention, graph partitioning), all of which failed to beat kNN $\rightarrow$ SA-DMoN, a skeleton-aware modularity objective, which also failed $\rightarrow$ PG-GAT, which keeps the clustering head simple but strengthens the embedding with three skeleton-aware modifications. Evaluate on synthetic data (controlled $K$, perfect GT) and COCO val2017 (zero-shot and fine-tuned). Close the loop by integrating with HigherHRNet for end-to-end validation.

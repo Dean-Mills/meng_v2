@@ -8,136 +8,17 @@
 
 This chapter presents the mathematical preliminaries that every method in this dissertation builds on, the problem formulation and data pipeline, and the methodology for each approach investigated --- from the standard GAT baseline, through the series of learned grouping heads that were tried and failed, through SA-DMoN, and finally to PG-GAT. Two variants (hyperbolic PG-GAT, TriGAT) and the integration with a realistic detector are described last.
 
-\section{Preliminaries --- Graph Neural Networks}
-\label{sec_meth_gnn}
-
-\subsection{The message-passing framework}
-\label{sec_meth_mp}
-
-General formulation of graph neural networks as iterated message passing. Nodes, edges, neighbourhoods, aggregation, update. Why the message-passing view unifies GCN, GAT, and most variants used in this dissertation.
-
-\subsection{Graph convolutional networks (GCN)}
-\label{sec_meth_gcn}
-
-Derivation from spectral graph theory to the Kipf--Welling simplification. The normalised-adjacency formulation $\tilde{A} = D^{-1/2}(A+I)D^{-1/2}$, the layer equation $H^{(l+1)} = \sigma(\tilde{A} H^{(l)} W^{(l)})$, and the assumptions it makes about edge uniformity. Why uniform edge weights are a limitation for skeletons where joint-pair relationships differ by type.
-
-\subsection{Graph attention networks (GAT and GATv2)}
-\label{sec_meth_gat}
-
-Original GAT (Veli\v{c}kovi\'c et al., 2018) attention: $e_{ij} = \mathrm{LeakyReLU}(\mathbf{a}^\top [W \mathbf{h}_i \mathbin\Vert W \mathbf{h}_j])$, followed by softmax over neighbours. The static-attention limitation (shared neighbour ranking across query nodes). GATv2 (Brody et al., 2022) fix: reorder to $e_{ij} = \mathbf{a}^\top \mathrm{LeakyReLU}(W [\mathbf{h}_i \mathbin\Vert \mathbf{h}_j])$, restoring dynamic attention. All experiments in this work use GATv2 as the attention primitive.
-
-\section{Preliminaries --- Clustering and Learned Grouping}
-\label{sec_meth_clustering}
-
-\subsection{$k$-means and constrained $k$-means}
-\label{sec_meth_kmeans}
-
-Classical $k$-means objective and Lloyd's algorithm. Constrained $k$-means (must-link / cannot-link) as the family that encodes type constraints. Why $k$-means appears throughout this dissertation as the canonical ``simple'' clustering head, and the basis for PGA scoring with GT $K$.
-
-\subsection{Deep embedded clustering (DEC)}
-\label{sec_meth_dec}
-
-Xie et al.\ (2016) DEC objective: Student's $t$-distribution soft assignments $q_{ij}$, target distribution $p_{ij}$, KL divergence minimisation. Why DEC was a natural candidate (learn embedding and clustering jointly), and how the alternating refinement works.
-
-\subsection{Slot attention}
-\label{sec_meth_slotattn}
-
-Locatello et al.\ (2020) slot attention: iterative attention between a set of learned slots and input features, soft-binding each input to a slot via competitive softmax. Why slot attention suggested itself for pose grouping (slots as person identities) and what the iteration assumes.
-
-\subsection{Graph partitioning (MinCut, NormCut)}
-\label{sec_meth_partition}
-
-Graph-cut objectives: minimum cut, normalised cut (Shi \& Malik). Relaxation to continuous assignment matrices and the eigenvalue connection. How graph partitioning was applied as a learned grouping head.
-
-\subsection{Deep modularity networks (DMoN)}
-\label{sec_meth_dmon}
-
-Tsitsulin et al.\ (2023) DMoN objective: Newman modularity as a soft, differentiable community-detection loss. The modularity matrix $B = A - dd^\top/2m$ and the collapse-prevention regulariser. Why DMoN was the natural follow-up after the three learned heads failed, and what assumption it makes about the relationship between graph structure and cluster membership (this will matter in Chapter~\ref{chap_5}).
-
-\section{Problem Formulation}
-\label{sec_meth_problem}
-
-Formalises the task. Input: set of $N$ keypoints with types $t_i$ and 2D positions $\mathbf{p}_i$. Output: a partition into $K$ groups (one per person) with the type constraint. Evaluation metric: Pose Grouping Accuracy (PGA), defined as the Hungarian-matched joint assignment accuracy between predicted and GT groups.
-
-\section{Dataset Pipeline}
-\label{sec_meth_data}
-
-The synthetic data generator (controlled $K$, perfect GT, procedural skeletons), the COCO keypoints dataset (val2017 used throughout), and the train/val splits. Depth channel handling (retained or removed) and why that decision matters for COCO transfer.
-
-\section{Baseline: Standard GAT + Contrastive + kNN}
-\label{sec_meth_baseline}
-
-The baseline architecture: stacked GATv2 layers on a fully-connected graph over detected keypoints, contrastive loss pulling same-person keypoints together and pushing different-person keypoints apart, kNN clustering at test time. The depth-input variant and the no-depth variant. This is the starting point of the narrative.
-
-\section{Learned Grouping Heads}
-\label{sec_meth_learned_heads}
-
-\subsection{DEC applied to pose grouping}
-\label{sec_meth_dec_pose}
-
-How DEC was instantiated on top of the GAT embeddings: initialisation strategy, cluster-count handling, training objective combined with contrastive loss.
-
-\subsection{Slot attention applied to pose grouping}
-\label{sec_meth_slot_pose}
-
-Slot attention head on top of the GAT embeddings, with slots as person identities. Number of slots, initialisation, iteration count, and the binding-to-assignment readout.
-
-\subsection{Graph partitioning applied to pose grouping}
-\label{sec_meth_partition_pose}
-
-Graph partitioning head on top of the GAT embeddings. Edge-weight construction, normalised-cut objective, and how the soft partition is read out into hard assignments.
-
-\section{SA-DMoN --- Skeleton-Aware Deep Modularity Networks}
-\label{sec_meth_sadmon}
-
-A DMoN-based learned grouping head adapted for skeletons. v1 (learnable $\sigma$, clamped $\sigma$, median $\sigma$, spectral-term variants) and v2 (feature-only adjacency, entropy-only regularisation, full formulation). Ten experiments in total, all tried to fix the modularity misalignment in a different way.
-
-\section{PG-GAT --- Pose Grouping Graph Attention Network}
-\label{sec_meth_pggat}
-
-\subsection{Design intuition}
-\label{sec_meth_pggat_intuition}
-
-Reframes the investigation: every learned head failed to beat kNN on the same embeddings, so the bottleneck is the embedding. PG-GAT strengthens the embedding while keeping the grouping head simple (kNN).
-
-\subsection{Type-pair attention modulation}
-\label{sec_meth_pggat_typeattn}
-
-Per-type-pair learnable bias in the GATv2 attention score, so that different joint-type relationships (e.g.\ left-shoulder-to-right-shoulder vs left-shoulder-to-head) can be weighted independently.
-
-\subsection{Skeleton-aware positional encoding}
-\label{sec_meth_pggat_posenc}
-
-A positional encoding scheme that encodes relative skeleton position (not absolute image position), invariant to translation and scale.
-
-\subsection{Type-repulsion loss term}
-\label{sec_meth_pggat_repulsion}
-
-An auxiliary contrastive term that explicitly pushes same-type keypoints of different people apart (the hard case: two left shoulders from different people must not collapse).
-
-\subsection{Training procedure}
-\label{sec_meth_pggat_training}
-
-Two-stage training: synthetic pretraining (contrastive loss, all three modifications active), then COCO fine-tuning on detected keypoints (20 epochs). Hyperparameters, schedule, optimiser.
-
-\section{Hyperbolic PG-GAT}
-\label{sec_meth_hyperbolic}
-
-A variant that embeds the output into a Lorentz-model hyperbolic space. Euclidean internal attention, Lorentz output projection, logmap for clustering. Motivation: skeletons are trees, and trees embed more faithfully in hyperbolic space with fewer dimensions. The variant tests whether this translates into a quality or efficiency advantage for pose grouping.
-
-\section{TriGAT --- Triplet-Based Primitive}
-\label{sec_meth_trigat}
-
-A variant where the graph nodes are skeleton triplets (A--B--C chains, 19 per person) rather than individual joints. Pivot-angle features are rotation-invariant articulation descriptors. Triplets are embedded, clustered, and joint labels are voted from triplet-cluster assignments. Included to test whether a higher-order primitive improves the embedding.
-
-\section{Integration with a Realistic Detector}
-\label{sec_meth_integration}
-
-How PG-GAT plugs into a HigherHRNet detection pipeline without joint training. Keypoint detection confidence filtering, the K-estimation head (brief treatment --- the full version belongs to the PEng follow-up), end-to-end PGA computation.
-
-\section{Evaluation Protocol and Metrics}
-\label{sec_meth_evaluation}
-
-PGA definition with Hungarian matching. Synthetic evaluation (100-image virtual test set, perfect GT). COCO evaluation zero-shot and after COCO fine-tuning. End-to-end evaluation using HigherHRNet detections. What kNN-PGA measures, what COP-KM-PGA adds, and which numbers are the native MEng headlines (kNN) versus what is mentioned with a pointer to the PEng paper (type-constrained clustering).
+\input{chapter3_gnn_preliminaries}
+\input{chapter3_clustering_preliminaries}
+\input{chapter3_problem_formulation}
+\input{chapter3_dataset}
+\input{chapter3_baseline}
+\input{chapter3_learned_heads}
+\input{chapter3_sa_dmon}
+\input{chapter3_pg_gat}
+\input{chapter3_hyperbolic}
+\input{chapter3_trigat}
+\input{chapter3_integration}
+\input{chapter3_evaluation}
 
 %% End of File.

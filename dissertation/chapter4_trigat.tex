@@ -1,0 +1,4 @@
+\section{TriGAT --- Negative Result}
+\label{sec_res_trigat}
+
+Triplet-based primitive underperforms joint-level PG-GAT on every comparison: 0.898 synth / 0.855 COCO with kNN, versus 0.910 / 0.882 for joint-level. Root cause: triplet clusters must be voted back to joint labels, and small triplet-level errors propagate to multiple joint votes. Documented as a negative result.

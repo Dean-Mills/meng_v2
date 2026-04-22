@@ -1,0 +1,22 @@
+\section{Failed Learned Grouping Heads}
+\label{sec_res_learned_heads}
+
+\subsection{DEC}
+\label{sec_res_dec}
+
+DEC plateaued at 0.654 synth and did not transfer meaningfully to COCO. The Student's-$t$ target distribution concentrates cluster mass but does not separate identities in the pose setting.
+
+\subsection{Slot attention}
+\label{sec_res_slot}
+
+Slot attention underperformed kNN on the same embeddings (0.858 synth / 0.788 COCO with the depth baseline). The competitive softmax does not encode the type constraint.
+
+\subsection{Graph partitioning}
+\label{sec_res_partition}
+
+Graph partitioning was closest to beating kNN on synthetic (0.954) but collapsed on COCO (0.752). Highly sensitive to edge-weight construction, does not transfer.
+
+\subsection{Cross-cutting finding}
+\label{sec_res_heads_finding}
+
+Every learned head failed to beat plain kNN on the same embeddings. This was the first evidence that the lever is the embedding, not the grouping head.

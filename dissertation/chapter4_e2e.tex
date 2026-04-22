@@ -1,0 +1,4 @@
+\section{End-to-End Integration with HigherHRNet}
+\label{sec_res_e2e}
+
+Replace the associative-embedding tag head in HigherHRNet with PG-GAT. End-to-end PGA using HigherHRNet-W32-512 for detection: PG-GAT + kNN = 0.942, PG-GAT + COP-Kmeans = 0.955 (COP-KM detail deferred to the PEng paper), HigherHRNet native AE grouping = 0.985. The gap to 0.985 comes from the tight coupling of the tag head to its backbone features, not from embedding-quality issues.

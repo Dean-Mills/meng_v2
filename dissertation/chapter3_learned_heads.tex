@@ -1,0 +1,17 @@
+\section{Learned Grouping Heads}
+\label{sec_meth_learned_heads}
+
+\subsection{DEC applied to pose grouping}
+\label{sec_meth_dec_pose}
+
+How DEC was instantiated on top of the GAT embeddings: initialisation strategy, cluster-count handling, training objective combined with contrastive loss.
+
+\subsection{Slot attention applied to pose grouping}
+\label{sec_meth_slot_pose}
+
+Slot attention head on top of the GAT embeddings, with slots as person identities. Number of slots, initialisation, iteration count, and the binding-to-assignment readout.
+
+\subsection{Graph partitioning applied to pose grouping}
+\label{sec_meth_partition_pose}
+
+Graph partitioning head on top of the GAT embeddings. Edge-weight construction, normalised-cut objective, and how the soft partition is read out into hard assignments.

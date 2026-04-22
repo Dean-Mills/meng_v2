@@ -1,0 +1,27 @@
+\section{PG-GAT --- Pose Grouping Graph Attention Network}
+\label{sec_meth_pggat}
+
+\subsection{Design intuition}
+\label{sec_meth_pggat_intuition}
+
+Reframes the investigation: every learned head failed to beat kNN on the same embeddings, so the bottleneck is the embedding. PG-GAT strengthens the embedding while keeping the grouping head simple (kNN).
+
+\subsection{Type-pair attention modulation}
+\label{sec_meth_pggat_typeattn}
+
+Per-type-pair learnable bias in the GATv2 attention score, so that different joint-type relationships (e.g.\ left-shoulder-to-right-shoulder vs left-shoulder-to-head) can be weighted independently.
+
+\subsection{Skeleton-aware positional encoding}
+\label{sec_meth_pggat_posenc}
+
+A positional encoding scheme that encodes relative skeleton position (not absolute image position), invariant to translation and scale.
+
+\subsection{Type-repulsion loss term}
+\label{sec_meth_pggat_repulsion}
+
+An auxiliary contrastive term that explicitly pushes same-type keypoints of different people apart (the difficult case: two left shoulders from different people must not collapse).
+
+\subsection{Training procedure}
+\label{sec_meth_pggat_training}
+
+Two-stage training: synthetic pretraining (contrastive loss, all three modifications active), then COCO fine-tuning on detected keypoints (20 epochs). Hyperparameters, schedule, optimiser.

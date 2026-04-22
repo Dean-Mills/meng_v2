@@ -65,7 +65,7 @@
 \contentsline {section}{\numberline {5.1}Why the Learned Grouping Heads Failed}{14}{}%
 \contentsline {section}{\numberline {5.2}Why SA-DMoN Failed}{14}{}%
 \contentsline {section}{\numberline {5.3}Why PG-GAT Works}{14}{}%
-\contentsline {section}{\numberline {5.4}What the Hyperbolic Result Tells Us}{15}{}%
+\contentsline {section}{\numberline {5.4}Interpreting the Hyperbolic Result}{15}{}%
 \contentsline {section}{\numberline {5.5}Why TriGAT Underperformed}{15}{}%
 \contentsline {section}{\numberline {5.6}Comparison with HigherHRNet AE --- the Modularity Trade-off}{15}{}%
 \contentsline {section}{\numberline {5.7}Answers to the Research Questions}{15}{}%

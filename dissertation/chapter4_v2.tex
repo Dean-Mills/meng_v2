@@ -1,0 +1,4 @@
+\section{Visual-Feature Augmentation (PG-GAT v2) --- Negative Result}
+\label{sec_res_v2}
+
+Added MobileNetV2 features sampled at each keypoint location as additional node input. Result: 0.968 COCO kNN / 0.964 E2E --- a 0.8-point E2E improvement at the cost of 2.2M extra parameters. Total pipeline (30.8M) is larger than HigherHRNet (28.6M) while still scoring lower (0.964 vs 0.985). Reported as a negative result; the Paper 3 idea was dropped on this basis.

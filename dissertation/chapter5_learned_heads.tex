@@ -1,0 +1,4 @@
+\section{Why the Learned Grouping Heads Failed}
+\label{sec_disc_heads}
+
+Discusses the shared failure mode of DEC, slot attention, and graph partitioning: each added a learned assignment mechanism on top of embeddings that were already close to separable under simple kNN. When the embedding is the bottleneck, stacking a learned head reshapes the assignment space but does not improve separation, and can actively hurt transfer (the learned head overfits to synthetic structure).

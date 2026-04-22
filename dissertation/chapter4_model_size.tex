@@ -1,0 +1,4 @@
+\section{Model Size and Modularity}
+\label{sec_res_model_size}
+
+Parameter counts: PG-GAT 170{,}560; K-head 18{,}625; HigherHRNet-W32 full model 28{,}645{,}331; HigherHRNet AE tag head alone $\sim$561. Correction to the earlier ``168$\times$ smaller'' claim: PG-GAT is \emph{larger} than the pure AE tag head (170K vs 561). The contribution is modularity --- PG-GAT plugs into any detector's keypoint output without joint training; the AE head cannot.

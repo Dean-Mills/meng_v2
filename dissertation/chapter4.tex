@@ -8,72 +8,15 @@
 
 This chapter reports experimental results for every method presented in Chapter~\ref{chap_3}, in the order of the investigation. Each section follows the lab-book pattern (setup, table of numbers, interpretation). Failed approaches (learned heads, SA-DMoN, TriGAT, visual-feature augmentation) are reported with their numbers \emph{and} explanations of why they failed. Honest caveats are flagged where the numbers are close calls.
 
-\section{Baseline: Standard GAT}
-\label{sec_res_baseline}
-
-Results for the standard GAT baseline with and without the depth channel. The key observation: removing the MiDaS depth channel \emph{improved} COCO transfer by roughly four points (MiDaS has a synthetic-to-real domain gap). Numbers: 0.994 synth kNN / 0.838 COCO kNN with depth; 0.901 / 0.879 without.
-
-\section{Failed Learned Grouping Heads}
-\label{sec_res_learned_heads}
-
-\subsection{DEC}
-\label{sec_res_dec}
-
-DEC plateaued at 0.654 synth and did not transfer meaningfully to COCO. The Student's-$t$ target distribution concentrates cluster mass but does not separate identities in the pose setting.
-
-\subsection{Slot attention}
-\label{sec_res_slot}
-
-Slot attention underperformed kNN on the same embeddings (0.858 synth / 0.788 COCO with the depth baseline). The competitive softmax does not encode the type constraint.
-
-\subsection{Graph partitioning}
-\label{sec_res_partition}
-
-Graph partitioning was closest to beating kNN on synthetic (0.954) but collapsed on COCO (0.752). Highly sensitive to edge-weight construction, does not transfer.
-
-\subsection{Cross-cutting finding}
-\label{sec_res_heads_finding}
-
-Every learned head failed to beat plain kNN on the same embeddings. This was the first evidence that the lever is the embedding, not the grouping head.
-
-\section{SA-DMoN --- Ten Experiments}
-\label{sec_res_sadmon}
-
-Full results table for all ten SA-DMoN variants (v1 with learnable / clamped / median $\sigma$, v1 with $\lambda$ sweeps, v1 without spectral term, v2 with feature-adjacency variants, v2 with entropy-type-only regularisation, v2 full). Every variant plateaus in the 0.77--0.81 synthetic range. Root cause analysis is deferred to Chapter~\ref{chap_5}, but the empirical picture is: no SA-DMoN formulation closes the gap to kNN.
-
-\section{PG-GAT Ablations}
-\label{sec_res_pggat_ablations}
-
-Four-row ablation: type-pair-only, pos-enc-only, repulsion-only, full. Each modification contributes independently; the full variant is the sum. Headline synthetic number: 0.910 synth kNN / 0.882 COCO kNN on the synthetic-only training regime. Table with explicit $\Delta$ against the standard-GAT-no-depth baseline.
-
-\section{COCO Fine-Tuning}
-\label{sec_res_coco_ft}
-
-PG-GAT fine-tuned on COCO keypoints (20 epochs). COCO kNN PGA rises from 0.882 to 0.957. Synthetic PGA rises from 0.910 to 0.928 (the fine-tune is not destructive to synthetic performance). This is the single largest gain of any experiment in the dissertation.
-
-\section{Hyperbolic PG-GAT}
-\label{sec_res_hyperbolic}
-
-Two-part result. Pre-fine-tune: hyperbolic at $d=32$ matches or slightly beats Euclidean at $d=128$ (0.918 synth / 0.899 COCO kNN, vs Euclidean 0.910 / 0.882) --- consistent with trees needing fewer dimensions in hyperbolic space. Post-fine-tune: the advantage disappears. Hyperbolic $d=32$ COCO-fine-tuned reaches 0.943 kNN, still below Euclidean $d=128$ COCO-fine-tuned (0.957). Reported honestly as an \emph{efficiency trade} (comparable quality at 4$\times$ smaller embedding), not a quality win.
-
-\section{TriGAT --- Negative Result}
-\label{sec_res_trigat}
-
-Triplet-based primitive underperforms joint-level PG-GAT on every comparison: 0.898 synth / 0.855 COCO with kNN, versus 0.910 / 0.882 for joint-level. Worst failure is with strict assignment (THA): 0.804 synth. Root cause: triplet clusters must be voted back to joint labels, and small triplet-level errors propagate to multiple joint votes. Documented as a negative result.
-
-\section{End-to-End Integration with HigherHRNet}
-\label{sec_res_e2e}
-
-Replace the associative-embedding tag head in HigherHRNet with PG-GAT. End-to-end PGA using HigherHRNet-W32-512 for detection: PG-GAT + kNN = 0.942, PG-GAT + COP-Kmeans = 0.955 (COP-KM detail deferred to the PEng paper), HigherHRNet native AE grouping = 0.985. The gap to 0.985 comes from the tight coupling of the tag head to its backbone features, not from embedding-quality issues.
-
-\section{Model Size and Modularity}
-\label{sec_res_model_size}
-
-Parameter counts: PG-GAT 170{,}560; K-head 18{,}625; HigherHRNet-W32 full model 28{,}645{,}331; HigherHRNet AE tag head alone $\sim$561. Correction to the earlier ``168$\times$ smaller'' claim: PG-GAT is \emph{larger} than the pure AE tag head (170K vs 561). The contribution is modularity --- PG-GAT plugs into any detector's keypoint output without joint training; the AE head cannot.
-
-\section{Visual-Feature Augmentation (PG-GAT v2) --- Negative Result}
-\label{sec_res_v2}
-
-Added MobileNetV2 features sampled at each keypoint location as additional node input. Result: 0.968 COCO kNN / 0.964 E2E --- a 0.8-point E2E improvement at the cost of 2.2M extra parameters. Total pipeline (30.8M) is larger than HigherHRNet (28.6M) while still scoring lower (0.964 vs 0.985). Reported as a negative result; the Paper 3 idea was dropped on this basis.
+\input{chapter4_baseline}
+\input{chapter4_learned_heads}
+\input{chapter4_sa_dmon}
+\input{chapter4_pggat_ablations}
+\input{chapter4_coco_ft}
+\input{chapter4_hyperbolic}
+\input{chapter4_trigat}
+\input{chapter4_e2e}
+\input{chapter4_model_size}
+\input{chapter4_v2}
 
 %% End of File.

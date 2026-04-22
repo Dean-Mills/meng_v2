@@ -1,0 +1,27 @@
+\section{Preliminaries --- Clustering and Learned Grouping}
+\label{sec_meth_clustering}
+
+\subsection{$k$-means and constrained $k$-means}
+\label{sec_meth_kmeans}
+
+Classical $k$-means objective and Lloyd's algorithm. Constrained $k$-means (must-link / cannot-link) as the family that encodes type constraints. Why $k$-means appears throughout this dissertation as the canonical ``simple'' clustering head, and the basis for PGA scoring with GT $K$.
+
+\subsection{Deep embedded clustering (DEC)}
+\label{sec_meth_dec}
+
+Xie et al.\ (2016) DEC objective: Student's $t$-distribution soft assignments $q_{ij}$, target distribution $p_{ij}$, KL divergence minimisation. Why DEC was a natural candidate (learn embedding and clustering jointly), and how the alternating refinement works.
+
+\subsection{Slot attention}
+\label{sec_meth_slotattn}
+
+Locatello et al.\ (2020) slot attention: iterative attention between a set of learned slots and input features, soft-binding each input to a slot via competitive softmax. Why slot attention suggested itself for pose grouping (slots as person identities) and what the iteration assumes.
+
+\subsection{Graph partitioning (MinCut, NormCut)}
+\label{sec_meth_partition}
+
+Graph-cut objectives: minimum cut, normalised cut (Shi \& Malik). Relaxation to continuous assignment matrices and the eigenvalue connection. How graph partitioning was applied as a learned grouping head.
+
+\subsection{Deep modularity networks (DMoN)}
+\label{sec_meth_dmon}
+
+Tsitsulin et al.\ (2023) DMoN objective: Newman modularity as a soft, differentiable community-detection loss. The modularity matrix $B = A - dd^\top/2m$ and the collapse-prevention regulariser. Why DMoN was the natural follow-up after the three learned heads failed, and what assumption it makes about the relationship between graph structure and cluster membership (this will matter in Chapter~\ref{chap_5}).
