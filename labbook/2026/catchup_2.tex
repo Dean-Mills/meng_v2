@@ -1338,3 +1338,97 @@ The broader concept of attending over skeleton joints via graph attention is fir
 If we do rename, the search-and-replace is straightforward because the module is well-isolated: \texttt{sa\_gat.py}, \texttt{sa\_gat\_v2.py}, the config classes \texttt{SAGATConfig} and \texttt{SAGATV2Config}, and the class \texttt{SAGATEmbedding}. The output directory structure stays the same. No experimental results need to be re-run.
 
 The final decision can wait until we start writing the MEng paper, but the question is flagged here so it is not forgotten.
+
+
+\subsection{COCO Evaluation Composition --- Single-Person Images}
+
+\subsubsection{Motivation}
+
+A code review of the evaluation pipeline identified an important detail in the COCO protocol.
+The COCO validation evaluation currently includes all valid person-keypoint images, including images with only one annotated person.
+This is because \texttt{CocoAdapter} defaults to \texttt{min\_people=1}, and the main evaluation scripts instantiate it without overriding that value.
+
+This is not a bug in the sense of an incorrect metric implementation.
+All methods reported so far were evaluated under the same protocol, so the comparisons between methods remain internally fair.
+However, the detail matters for interpretation because the dissertation is about \emph{multi-person pose grouping}.
+When an image contains only one person, the grouping problem is almost trivial: every keypoint belongs to the same person.
+There is no same-type conflict, no overlapping-person ambiguity, and no meaningful assignment decision between people.
+
+The consequence is that COCO-all PGA is an easier metric than a strict multi-person grouping metric.
+It measures performance over the natural filtered COCO validation distribution used by the project, but it does not isolate the hard grouping cases.
+
+\subsubsection{Dataset composition}
+
+The COCO val2017 person-keypoint annotations contain a large fraction of single-person images under the current filtering.
+Counting valid person-keypoint annotations gives:
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Filter} & \textbf{Images with $\geq 1$ person} & \textbf{Single-person} & \textbf{Multi-person} & \textbf{Single-person fraction} \\
+\hline
+Any keypoint annotation & 2346 & 1098 & 1248 & 46.8\% \\
+At least 3 labelled keypoints & 2258 & 1063 & 1195 & 47.1\% \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Thus, almost half of the current COCO-all evaluation set consists of images that do not stress the grouping component.
+This explains why COCO-all scores are noticeably higher than scores on the multi-person-only subset.
+
+\subsubsection{Diagnostic results}
+
+The existing COCO-all headline was compared with a stricter \texttt{min\_people=2} evaluation on COCO val2017.
+The \texttt{min\_people=2} setting retains 1248 images and removes the single-person cases.
+The hyperbolic rows use the raw tangent-space diagnostic from the code review, which preserves the radial information discarded by the original L2-normalised tangent evaluation.
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Model / grouping method} & \textbf{kNN} & \textbf{COP-KM} & \textbf{THA} & \textbf{Subset} \\
+\hline
+Euclidean PG-GAT, COCO-ft & 0.957 & 0.968 & 0.969 & $\geq 1$ person \\
+Euclidean PG-GAT, COCO-ft & 0.921 & 0.941 & 0.943 & $\geq 2$ people \\
+\hline
+Hyperbolic PG-GAT, COCO-ft (raw tangent) & 0.947 & 0.962 & 0.965 & $\geq 1$ person \\
+Hyperbolic PG-GAT, COCO-ft (raw tangent) & 0.902 & 0.929 & 0.935 & $\geq 2$ people \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+The absolute numbers drop on the multi-person-only subset, as expected.
+For the Euclidean COCO-fine-tuned PG-GAT model, THA drops from 0.969 to 0.943.
+For the hyperbolic COCO-fine-tuned PG-GAT model, THA drops from 0.965 to 0.935.
+The ranking remains stable: Euclidean PG-GAT remains stronger than the hyperbolic variant after COCO fine-tuning, and THA remains stronger than kNN on the stricter subset.
+
+\subsubsection{Interpretation}
+
+\textbf{1. COCO-all is still a reasonable benchmark.} COCO val2017 is a standard evaluation source, and retaining all valid person-keypoint images gives a reproducible distribution. The existing headline numbers are therefore not invalid. They should simply be described as COCO-all results rather than as a pure multi-person grouping stress test.
+
+\textbf{2. Single-person images inflate grouping PGA.} The inflation is structural, not accidental. A single-person scene has $K=1$, so grouping reduces to assigning all nodes to one cluster. This makes the metric easier because the hard part of bottom-up grouping --- separating keypoints from different people --- is absent.
+
+\textbf{3. The stricter subset is the better grouping diagnostic.} The \texttt{min\_people=2} subset directly tests the multi-person grouping problem. It should be reported as a secondary table in the dissertation and paper, especially in the results or discussion section, to show how the method behaves when the grouping ambiguity is actually present.
+
+\textbf{4. The main conclusions survive.} The stricter subset lowers the absolute scores but does not reverse the important ordering. PG-GAT with THA remains better than PG-GAT with kNN, and the hyperbolic variant remains an efficiency trade rather than a quality win. The conclusion becomes more conservative, not weaker.
+
+\textbf{5. CrowdPose is not necessary for the MEng dissertation.} CrowdPose would be a harder crowd-focused benchmark, but adding it would expand the dataset pipeline and evaluation scope late in the project. The cleaner MEng solution is to keep COCO-all for comparability and add COCO multi-person-only as a diagnostic. CrowdPose can be listed as future work or reserved for a later PEng/PhD extension.
+
+\subsubsection{Recommendation for dissertation reporting}
+
+The dissertation should report the COCO results in two layers:
+
+\begin{itemize}
+    \item \textbf{COCO-all:} the existing headline protocol, retained for continuity with the experimental record and comparison with HigherHRNet AE on the same distribution.
+    \item \textbf{COCO multi-person-only:} a stricter diagnostic table using \texttt{min\_people=2}, used to isolate the true multi-person grouping difficulty.
+\end{itemize}
+
+Suggested wording for the dissertation:
+
+\begin{quote}
+COCO val2017 contains both single-person and multi-person images.
+The main COCO results retain all valid person-keypoint images for comparability with the detector-based evaluation.
+Because single-person images do not require a non-trivial grouping decision, a second evaluation is reported on the subset with at least two annotated people.
+This subset provides a stricter diagnostic of the multi-person grouping problem.
+\end{quote}
+
+This avoids overstating the COCO-all numbers while preserving the existing experimental record.

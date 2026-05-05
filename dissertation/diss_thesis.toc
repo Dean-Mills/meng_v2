@@ -19,64 +19,64 @@
 \contentsline {section}{\numberline {2.6}Research Gap}{6}{}%
 \contentsline {chapter}{\numberline {3}Methodology}{7}{}%
 \contentsline {section}{\numberline {3.1}Preliminaries --- Graph Neural Networks}{7}{}%
-\contentsline {subsection}{\numberline {3.1.1}The message-passing framework}{7}{}%
-\contentsline {subsection}{\numberline {3.1.2}Graph convolutional networks (GCN)}{7}{}%
-\contentsline {subsection}{\numberline {3.1.3}Graph attention networks (GAT and GATv2)}{7}{}%
-\contentsline {section}{\numberline {3.2}Preliminaries --- Clustering and Learned Grouping}{8}{}%
-\contentsline {subsection}{\numberline {3.2.1}$k$-means and constrained $k$-means}{8}{}%
-\contentsline {subsection}{\numberline {3.2.2}Deep embedded clustering (DEC)}{8}{}%
-\contentsline {subsection}{\numberline {3.2.3}Slot attention}{8}{}%
-\contentsline {subsection}{\numberline {3.2.4}Graph partitioning (MinCut, NormCut)}{8}{}%
-\contentsline {subsection}{\numberline {3.2.5}Deep modularity networks (DMoN)}{8}{}%
-\contentsline {section}{\numberline {3.3}Problem Formulation}{8}{}%
-\contentsline {section}{\numberline {3.4}Dataset Pipeline}{8}{}%
-\contentsline {section}{\numberline {3.5}Baseline: Standard GAT + Contrastive + kNN}{9}{}%
-\contentsline {section}{\numberline {3.6}Learned Grouping Heads}{9}{}%
-\contentsline {subsection}{\numberline {3.6.1}DEC applied to pose grouping}{9}{}%
-\contentsline {subsection}{\numberline {3.6.2}Slot attention applied to pose grouping}{9}{}%
-\contentsline {subsection}{\numberline {3.6.3}Graph partitioning applied to pose grouping}{9}{}%
-\contentsline {section}{\numberline {3.7}SA-DMoN --- Skeleton-Aware Deep Modularity Networks}{9}{}%
-\contentsline {section}{\numberline {3.8}PG-GAT --- Pose Grouping Graph Attention Network}{9}{}%
-\contentsline {subsection}{\numberline {3.8.1}Design intuition}{9}{}%
-\contentsline {subsection}{\numberline {3.8.2}Type-pair attention modulation}{9}{}%
-\contentsline {subsection}{\numberline {3.8.3}Skeleton-aware positional encoding}{10}{}%
-\contentsline {subsection}{\numberline {3.8.4}Type-repulsion loss term}{10}{}%
-\contentsline {subsection}{\numberline {3.8.5}Training procedure}{10}{}%
-\contentsline {section}{\numberline {3.9}Hyperbolic PG-GAT}{10}{}%
-\contentsline {section}{\numberline {3.10}TriGAT --- Triplet-Based Primitive}{10}{}%
-\contentsline {section}{\numberline {3.11}Integration with a Realistic Detector}{10}{}%
-\contentsline {section}{\numberline {3.12}Evaluation Protocol and Metrics}{10}{}%
-\contentsline {chapter}{\numberline {4}Experimental Results}{11}{}%
-\contentsline {section}{\numberline {4.1}Baseline: Standard GAT}{11}{}%
-\contentsline {section}{\numberline {4.2}Failed Learned Grouping Heads}{11}{}%
-\contentsline {subsection}{\numberline {4.2.1}DEC}{11}{}%
-\contentsline {subsection}{\numberline {4.2.2}Slot attention}{11}{}%
-\contentsline {subsection}{\numberline {4.2.3}Graph partitioning}{11}{}%
-\contentsline {subsection}{\numberline {4.2.4}Cross-cutting finding}{12}{}%
-\contentsline {section}{\numberline {4.3}SA-DMoN --- Ten Experiments}{12}{}%
-\contentsline {section}{\numberline {4.4}PG-GAT Ablations}{12}{}%
-\contentsline {section}{\numberline {4.5}COCO Fine-Tuning}{12}{}%
-\contentsline {section}{\numberline {4.6}Hyperbolic PG-GAT}{12}{}%
-\contentsline {section}{\numberline {4.7}TriGAT --- Negative Result}{12}{}%
-\contentsline {section}{\numberline {4.8}End-to-End Integration with HigherHRNet}{13}{}%
-\contentsline {section}{\numberline {4.9}Model Size and Modularity}{13}{}%
-\contentsline {section}{\numberline {4.10}Visual-Feature Augmentation (PG-GAT v2) --- Negative Result}{13}{}%
-\contentsline {chapter}{\numberline {5}Discussion}{14}{}%
-\contentsline {section}{\numberline {5.1}Why the Learned Grouping Heads Failed}{14}{}%
-\contentsline {section}{\numberline {5.2}Why SA-DMoN Failed}{14}{}%
-\contentsline {section}{\numberline {5.3}Why PG-GAT Works}{14}{}%
-\contentsline {section}{\numberline {5.4}Interpreting the Hyperbolic Result}{15}{}%
-\contentsline {section}{\numberline {5.5}Why TriGAT Underperformed}{15}{}%
-\contentsline {section}{\numberline {5.6}Comparison with HigherHRNet AE --- the Modularity Trade-off}{15}{}%
-\contentsline {section}{\numberline {5.7}Answers to the Research Questions}{15}{}%
-\contentsline {section}{\numberline {5.8}Limitations and Threats to Validity}{15}{}%
-\contentsline {chapter}{\numberline {6}Conclusion}{16}{}%
-\contentsline {section}{\numberline {6.1}Summary of Contributions}{16}{}%
-\contentsline {section}{\numberline {6.2}Answers to the Research Questions}{16}{}%
-\contentsline {section}{\numberline {6.3}Future Work}{16}{}%
+\contentsline {subsection}{\numberline {3.1.1}The Message-Passing Framework}{7}{}%
+\contentsline {subsection}{\numberline {3.1.2}Graph Convolutional Networks (GCN)}{8}{}%
+\contentsline {subsection}{\numberline {3.1.3}Graph Attention Networks (GAT and GATv2)}{9}{}%
+\contentsline {section}{\numberline {3.2}Preliminaries --- Clustering and Learned Grouping}{10}{}%
+\contentsline {subsection}{\numberline {3.2.1}$k$-means and constrained $k$-means}{10}{}%
+\contentsline {subsection}{\numberline {3.2.2}Deep embedded clustering (DEC)}{10}{}%
+\contentsline {subsection}{\numberline {3.2.3}Slot attention}{10}{}%
+\contentsline {subsection}{\numberline {3.2.4}Graph partitioning (MinCut, NormCut)}{10}{}%
+\contentsline {subsection}{\numberline {3.2.5}Deep modularity networks (DMoN)}{10}{}%
+\contentsline {section}{\numberline {3.3}Problem Formulation}{10}{}%
+\contentsline {section}{\numberline {3.4}Dataset Pipeline}{11}{}%
+\contentsline {section}{\numberline {3.5}Baseline: Standard GAT + Contrastive + kNN}{11}{}%
+\contentsline {section}{\numberline {3.6}Learned Grouping Heads}{11}{}%
+\contentsline {subsection}{\numberline {3.6.1}DEC applied to pose grouping}{11}{}%
+\contentsline {subsection}{\numberline {3.6.2}Slot attention applied to pose grouping}{11}{}%
+\contentsline {subsection}{\numberline {3.6.3}Graph partitioning applied to pose grouping}{11}{}%
+\contentsline {section}{\numberline {3.7}SA-DMoN --- Skeleton-Aware Deep Modularity Networks}{11}{}%
+\contentsline {section}{\numberline {3.8}PG-GAT --- Pose Grouping Graph Attention Network}{11}{}%
+\contentsline {subsection}{\numberline {3.8.1}Design intuition}{11}{}%
+\contentsline {subsection}{\numberline {3.8.2}Type-pair attention modulation}{12}{}%
+\contentsline {subsection}{\numberline {3.8.3}Skeleton-aware positional encoding}{12}{}%
+\contentsline {subsection}{\numberline {3.8.4}Type-repulsion loss term}{12}{}%
+\contentsline {subsection}{\numberline {3.8.5}Training procedure}{12}{}%
+\contentsline {section}{\numberline {3.9}Hyperbolic PG-GAT}{12}{}%
+\contentsline {section}{\numberline {3.10}TriGAT --- Triplet-Based Primitive}{12}{}%
+\contentsline {section}{\numberline {3.11}Integration with a Realistic Detector}{12}{}%
+\contentsline {section}{\numberline {3.12}Evaluation Protocol and Metrics}{12}{}%
+\contentsline {chapter}{\numberline {4}Experimental Results}{14}{}%
+\contentsline {section}{\numberline {4.1}Baseline: Standard GAT}{14}{}%
+\contentsline {section}{\numberline {4.2}Failed Learned Grouping Heads}{14}{}%
+\contentsline {subsection}{\numberline {4.2.1}DEC}{14}{}%
+\contentsline {subsection}{\numberline {4.2.2}Slot attention}{14}{}%
+\contentsline {subsection}{\numberline {4.2.3}Graph partitioning}{14}{}%
+\contentsline {subsection}{\numberline {4.2.4}Cross-cutting finding}{15}{}%
+\contentsline {section}{\numberline {4.3}SA-DMoN --- Ten Experiments}{15}{}%
+\contentsline {section}{\numberline {4.4}PG-GAT Ablations}{15}{}%
+\contentsline {section}{\numberline {4.5}COCO Fine-Tuning}{15}{}%
+\contentsline {section}{\numberline {4.6}Hyperbolic PG-GAT}{15}{}%
+\contentsline {section}{\numberline {4.7}TriGAT --- Negative Result}{15}{}%
+\contentsline {section}{\numberline {4.8}End-to-End Integration with HigherHRNet}{16}{}%
+\contentsline {section}{\numberline {4.9}Model Size and Modularity}{16}{}%
+\contentsline {section}{\numberline {4.10}Visual-Feature Augmentation (PG-GAT v2) --- Negative Result}{16}{}%
+\contentsline {chapter}{\numberline {5}Discussion}{17}{}%
+\contentsline {section}{\numberline {5.1}Why the Learned Grouping Heads Failed}{17}{}%
+\contentsline {section}{\numberline {5.2}Why SA-DMoN Failed}{17}{}%
+\contentsline {section}{\numberline {5.3}Why PG-GAT Works}{17}{}%
+\contentsline {section}{\numberline {5.4}Interpreting the Hyperbolic Result}{18}{}%
+\contentsline {section}{\numberline {5.5}Why TriGAT Underperformed}{18}{}%
+\contentsline {section}{\numberline {5.6}Comparison with HigherHRNet AE --- the Modularity Trade-off}{18}{}%
+\contentsline {section}{\numberline {5.7}Answers to the Research Questions}{18}{}%
+\contentsline {section}{\numberline {5.8}Limitations and Threats to Validity}{18}{}%
+\contentsline {chapter}{\numberline {6}Conclusion}{19}{}%
+\contentsline {section}{\numberline {6.1}Summary of Contributions}{19}{}%
+\contentsline {section}{\numberline {6.2}Answers to the Research Questions}{19}{}%
+\contentsline {section}{\numberline {6.3}Future Work}{19}{}%
 \renewcommand *\cftchappresnum {\MakeUppercase []{Chapter}\ }
-\contentsline {chapter}{REFERENCES}{17}{}%
+\contentsline {chapter}{REFERENCES}{20}{}%
 \renewcommand *\cftchappresnum {\MakeUppercase []{Appendix}\ }
-\contentsline {chapter}{\numberline {A} DERIVATION OF HIGHER ORDER MODELS}{18}{}%
-\contentsline {section}{\numberline {A.1}Example Heading}{18}{}%
-\contentsline {subsection}{\numberline {A.1.1}Subheading example}{18}{}%
+\contentsline {chapter}{\numberline {A} DERIVATION OF HIGHER ORDER MODELS}{21}{}%
+\contentsline {section}{\numberline {A.1}Example Heading}{21}{}%
+\contentsline {subsection}{\numberline {A.1.1}Subheading example}{21}{}%

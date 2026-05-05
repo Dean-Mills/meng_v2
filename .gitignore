@@ -181,3 +181,5 @@ cython_debug/
 /thesis
 /dissertation_info
 /docs
+
+/.codex

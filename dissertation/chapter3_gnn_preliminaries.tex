@@ -1,17 +1,140 @@
 \section{Preliminaries --- Graph Neural Networks}
 \label{sec_meth_gnn}
 
-\subsection{The message-passing framework}
+A human skeleton is a graph:
+seventeen keypoints form the nodes and the skeletal connections form the edges.
+A graph neural network (GNN) embeds each node while conditioning on the structure of the graph
+--- the natural choice for producing pose-grouping embeddings that are aware of joint-type and connectivity information.
+This section introduces the message-passing framework that unifies modern GNN variants,
+derives the graph convolutional network (GCN) as the canonical spectral instance,
+and develops the graph attention network (GAT),
+culminating in the GATv2 correction that is used as the attention primitive in every experiment in this dissertation.
+
+\subsection{The Message-Passing Framework}
 \label{sec_meth_mp}
 
-General formulation of graph neural networks as iterated message passing. Nodes, edges, neighbourhoods, aggregation, update. Why the message-passing view unifies GCN, GAT, and most variants used in this dissertation.
+Let $\mathcal{G} = (\mathcal{V}, \mathcal{E})$ denote an undirected graph
+with $N$ nodes and edge set $\mathcal{E} \subseteq \mathcal{V} \times \mathcal{V}$.
+Each node $i \in \mathcal{V}$ is associated with a feature vector $\mathbf{h}_i^{(0)} \in \mathbb{R}^{d_0}$,
+and each edge $(i,j) \in \mathcal{E}$ optionally carries an edge feature $\mathbf{e}_{ij}$.
+The neighbourhood of node $i$ is $\mathcal{N}(i) = \{ j : (i,j) \in \mathcal{E} \}$.
 
-\subsection{Graph convolutional networks (GCN)}
+Almost every modern GNN variant can be expressed as iterated message passing~\cite{gilmer2017mpnn}.
+At layer $l+1$,
+each node receives a message from each of its neighbours,
+aggregates them with a permutation-invariant operator,
+and updates its representation accordingly.
+Formally,
+\begin{equation}
+    \mathbf{m}_{i \leftarrow j}^{(l+1)} = \mathrm{MSG}^{(l)}\!\left(\mathbf{h}_i^{(l)},\, \mathbf{h}_j^{(l)},\, \mathbf{e}_{ij}\right),
+    \label{eq:mpnn_message}
+\end{equation}
+\begin{equation}
+    \mathbf{h}_i^{(l+1)} = \mathrm{UPDATE}^{(l)}\!\left(\mathbf{h}_i^{(l)},\, \bigoplus_{j \in \mathcal{N}(i)} \mathbf{m}_{i \leftarrow j}^{(l+1)}\right),
+    \label{eq:mpnn_update}
+\end{equation}
+where $\bigoplus$ denotes a permutation-invariant aggregator (sum, mean, or max)
+and $\mathrm{MSG}^{(l)}$ and $\mathrm{UPDATE}^{(l)}$ are learnable functions at layer $l$.
+Different choices of these three components recover different GNN architectures.
+GCN (Section~\ref{sec_meth_gcn}) uses a linear message,
+a degree-based weighted sum aggregator,
+and a linear--nonlinear update.
+GAT (Section~\ref{sec_meth_gat}) introduces learned attention weights on the aggregator,
+making each neighbour's contribution data-dependent.
+GraphSAGE~\cite{hamilton2017graphsage} uses concatenated mean--max aggregation with a feedforward update,
+optimised for inductive settings.
+
+The message-passing view clarifies two points that matter for the remainder of this chapter.
+First, the inductive biases of a GNN are encoded in the choice of aggregator and the edge-weighting scheme,
+not in the overall template.
+Second, the number of layers controls the receptive field
+--- a node's representation after $L$ layers aggregates information from its $L$-hop neighbourhood ---
+which, for skeleton graphs with at most four hops between any two joints,
+places a natural upper bound on depth.
+
+\subsection{Graph Convolutional Networks (GCN)}
 \label{sec_meth_gcn}
 
-Derivation from spectral graph theory to the Kipf--Welling simplification. The normalised-adjacency formulation $\tilde{A} = D^{-1/2}(A+I)D^{-1/2}$, the layer equation $H^{(l+1)} = \sigma(\tilde{A} H^{(l)} W^{(l)})$, and the assumptions it makes about edge uniformity. Why uniform edge weights are a limitation for skeletons where joint-pair relationships differ by type.
+The GCN architecture of~\cite{kipf2017gcn} derives from a first-order approximation of spectral graph convolutions.
+Given adjacency matrix $A \in \mathbb{R}^{N \times N}$ and degree matrix $D = \mathrm{diag}(\sum_j A_{ij})$,
+the symmetric normalised adjacency with self-loops is
+\begin{equation}
+    \tilde{A} = \tilde{D}^{-1/2}\,(A + I)\,\tilde{D}^{-1/2},
+    \label{eq:gcn_adjacency}
+\end{equation}
+where $\tilde{D} = \mathrm{diag}(\sum_j (A+I)_{ij})$ is the degree matrix of the self-loop-augmented graph.
+The GCN propagation rule is
+\begin{equation}
+    H^{(l+1)} = \sigma\!\left(\tilde{A}\,H^{(l)}\,W^{(l)}\right),
+    \label{eq:gcn_layer}
+\end{equation}
+where $H^{(l)} \in \mathbb{R}^{N \times d_l}$ stacks the node features row-wise,
+$W^{(l)} \in \mathbb{R}^{d_l \times d_{l+1}}$ is a learnable weight matrix,
+and $\sigma(\cdot)$ is a pointwise nonlinearity.
 
-\subsection{Graph attention networks (GAT and GATv2)}
+Two properties of Equation~\eqref{eq:gcn_layer} motivate the move to attention-based aggregation
+in the pose-grouping setting.
+First, the edge weights are fixed:
+once $\tilde{A}$ is constructed from the graph topology,
+no learning signal modulates the contribution of individual neighbours.
+Two neighbours of the same target node contribute in proportion
+determined only by the degrees of the three nodes involved.
+Second, this uniform treatment is informationally inadequate for skeleton graphs where edge semantics vary sharply:
+the edge from the left shoulder to the left elbow encodes different information
+from the edge from the left shoulder to the head,
+and a pose-grouping embedding should be free to weight them differently.
+Attention-based aggregation, introduced next, provides exactly this flexibility.
+
+\subsection{Graph Attention Networks (GAT and GATv2)}
 \label{sec_meth_gat}
 
-Original GAT (Veli\v{c}kovi\'c et al., 2018) attention: $e_{ij} = \mathrm{LeakyReLU}(\mathbf{a}^\top [W \mathbf{h}_i \mathbin\Vert W \mathbf{h}_j])$, followed by softmax over neighbours. The static-attention limitation (shared neighbour ranking across query nodes). GATv2 (Brody et al., 2022) fix: reorder to $e_{ij} = \mathbf{a}^\top \mathrm{LeakyReLU}(W [\mathbf{h}_i \mathbin\Vert \mathbf{h}_j])$, restoring dynamic attention. All experiments in this work use GATv2 as the attention primitive.
+GAT~\cite{velickovic2018gat} replaces the fixed normalisation of Equation~\eqref{eq:gcn_adjacency}
+with a learned attention weight for each edge.
+For a pair $(i,j)$ with $j \in \mathcal{N}(i)$, the unnormalised attention score is
+\begin{equation}
+    e_{ij}^{\mathrm{GAT}} = \mathrm{LeakyReLU}\!\left( \mathbf{a}^{\top} \left[\, W\mathbf{h}_i \,\|\, W\mathbf{h}_j \,\right] \right),
+    \label{eq:gat_attn}
+\end{equation}
+where $W \in \mathbb{R}^{d' \times d}$ is a shared linear projection,
+$\mathbf{a} \in \mathbb{R}^{2d'}$ is a learned attention vector,
+and $[\cdot \| \cdot]$ denotes vector concatenation.
+The scores are normalised over the neighbourhood with a softmax,
+\begin{equation}
+    \alpha_{ij} = \frac{\exp(e_{ij})}{\sum_{k \in \mathcal{N}(i)} \exp(e_{ik})},
+    \label{eq:gat_softmax}
+\end{equation}
+and the updated node representation is the attention-weighted sum of projected neighbour features,
+\begin{equation}
+    \mathbf{h}_i' = \sigma\!\left( \sum_{j \in \mathcal{N}(i)} \alpha_{ij}\, W \mathbf{h}_j \right).
+    \label{eq:gat_aggregate}
+\end{equation}
+Multi-head attention is recovered by repeating Equations~\eqref{eq:gat_attn}--\eqref{eq:gat_aggregate}
+with independent parameters for each head and concatenating or averaging the outputs.
+
+Equation~\eqref{eq:gat_attn} exposes a subtle limitation that was identified by~\cite{brody2022gatv2}
+and has direct consequences for pose grouping.
+Because $\mathbf{a}^{\top}$ is applied to the concatenation $[W\mathbf{h}_i \| W\mathbf{h}_j]$,
+the attention score decomposes as $\mathbf{a}_1^{\top} W\mathbf{h}_i + \mathbf{a}_2^{\top} W\mathbf{h}_j$
+where $\mathbf{a} = [\mathbf{a}_1; \mathbf{a}_2]$.
+The term $\mathbf{a}_1^{\top} W \mathbf{h}_i$ is independent of $j$,
+so the relative ordering of neighbours by attention score is the same for every query node
+--- a property that~\cite{brody2022gatv2} formalises as \emph{static attention}.
+In other words,
+if node $j_1$ is ranked above node $j_2$ as a neighbour of $i$,
+then $j_1$ is also ranked above $j_2$ as a neighbour of every other node.
+For a pose-grouping network this is undesirable:
+the network should be able to judge that a given left shoulder is important to a right shoulder
+but not to a left ankle of a different person.
+
+GATv2 resolves the limitation by reordering the operations inside the attention score,
+\begin{equation}
+    e_{ij}^{\mathrm{GATv2}} = \mathbf{a}^{\top}\, \mathrm{LeakyReLU}\!\left( W \left[\, \mathbf{h}_i \,\|\, \mathbf{h}_j \,\right] \right).
+    \label{eq:gatv2_attn}
+\end{equation}
+With the nonlinearity now placed inside the query--key interaction,
+the attention score does not decompose into independent per-node terms,
+and the ranking of neighbours is allowed to depend on the query node.
+GATv2 is strictly more expressive than GAT at the same parameter count~\cite{brody2022gatv2},
+and every architecture evaluated in this dissertation uses GATv2 as its attention primitive.
+The remaining GCN and GAT references in Chapters~\ref{chap_4} and~\ref{chap_5}
+refer to baselines and background, not to the working network.
