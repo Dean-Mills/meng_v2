@@ -231,6 +231,28 @@ class SADMoNConfig(BaseModel):
     lambda_supervised:  float = 1.0    # supervised CE
 
 
+class WandbConfig(BaseModel):
+    """Optional Weights & Biases logging.
+
+    When set on an ExperimentConfig, trainer.py will:
+      - call wandb.init() at start of training,
+      - log per-epoch train metrics and val PGA,
+      - log best.pt as a model artifact (alias 'latest') on each new best,
+      - call wandb.finish() at end.
+
+    All wandb calls are guarded by `if cfg.wandb is not None`, so existing
+    YAML configs without a `wandb:` section continue to run unchanged.
+    """
+    project:        str           = "multiperson-pose-grouping"
+    entity:         Optional[str] = "deanmills"
+    group:          Optional[str] = None    # e.g. "pg-gat-arch-sweep"
+    tags:           Optional[list[str]] = None  # e.g. ["meng-paper", "ablation"]
+    notes:          Optional[str] = None
+    mode:           str           = "online"   # "online" | "offline" | "disabled"
+    log_artifacts:  bool          = True       # log best.pt as model artifact
+    log_code:       bool          = True       # save_code=True (snapshot source)
+
+
 class TrainingConfig(BaseModel):
     # Data paths — expect train/ val/ test/ subdirectories of virtual_dir
     virtual_dir:   str = "data/virtual"
@@ -280,6 +302,7 @@ class ExperimentConfig(BaseModel):
     dustbin_scot:       Optional[DustbinSCOTConfig]       = None
     train_k_head:       bool                              = False
     training:           Optional[TrainingConfig]          = None
+    wandb:              Optional[WandbConfig]             = None
 
     @classmethod
     def from_yaml(cls, path: Path) -> "ExperimentConfig":

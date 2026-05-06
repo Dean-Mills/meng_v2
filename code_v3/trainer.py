@@ -196,6 +196,30 @@ def _make_loader(virtual_dir: Path, split: str, batch_size: int, num_workers: in
                              num_workers=num_workers)
 
 
+def _log_checkpoint_artifact(wandb_run, run_name: str, ckpt_path: Path,
+                              *, run_id: str, epoch: int, val_pga: float):
+    """Log a checkpoint as a versioned W&B artifact with the 'latest' alias.
+
+    Artifact name = run_name (the config name). Each run logs a new version of
+    the same artifact, so `latest` auto-rotates and `best` can be set
+    post-hoc by `scripts/promote_best.py`.
+    """
+    import wandb
+    artifact = wandb.Artifact(
+        name=run_name,
+        type="model",
+        metadata={
+            "run_id":         run_id,
+            "wandb_run_url":  wandb_run.url,
+            "epoch":          epoch,
+            "val_pga":        val_pga,
+            "config_name":    run_name,
+        },
+    )
+    artifact.add_file(str(ckpt_path))
+    wandb_run.log_artifact(artifact, aliases=["latest"])
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
@@ -339,7 +363,31 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
     print(f"K head:   {'yes' if k_head else 'no'}")
     print(f"Device:   {device}")
     print(f"Epochs:   {tc.epochs}")
-    print(f"Save dir: {save_dir}\n")
+    print(f"Save dir: {save_dir}")
+
+    # ── W&B (optional) ────────────────────────────────────────────────────────
+    wandb_run = None
+    if cfg.wandb is not None:
+        import wandb
+        wandb_run = wandb.init(
+            project=cfg.wandb.project,
+            entity=cfg.wandb.entity,
+            name=run_id,                              # GUID = wandb run name
+            group=cfg.wandb.group,
+            tags=cfg.wandb.tags or [],
+            notes=cfg.wandb.notes,
+            mode=cfg.wandb.mode,
+            config={
+                "config_name": run_name,
+                "run_id":      run_id,
+                "head":        head_name,
+                "device":      device,
+                **cfg.model_dump(),
+            },
+            save_code=cfg.wandb.log_code,
+        )
+        print(f"W&B:      {wandb_run.url}")
+    print()
 
     # ── Losses ────────────────────────────────────────────────────────────────
     if use_hyperbolic:
@@ -456,18 +504,38 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
                f"(gat {avg_gat:.4f} head {avg_head:.4f}) | "
                f"{elapsed:.1f}s")
 
+        wandb_metrics = {
+            "epoch":           epoch,
+            "train/loss":      avg_loss,
+            "train/gat_loss":  avg_gat,
+            "train/head_loss": avg_head,
+            "train/elapsed_s": elapsed,
+            "lr":              scheduler.get_last_lr()[0],
+        }
+
         # ── Validation ────────────────────────────────────────────────────────
         if epoch % tc.val_every == 0 or epoch == tc.epochs:
             val_pga = _validate(gat, head, head_name, val_loader,
                                 preprocessor, gat_loss_fn, head_loss_fn, device, cfg,
                                 use_cached_features=use_cached_features)
             log += f" | val_pga {val_pga:.4f}"
+            wandb_metrics["val/pga"] = val_pga
 
             if tc.save_best and val_pga > best_val_pga:
                 best_val_pga = val_pga
-                _save_checkpoint(save_dir / "best.pt", gat, head, optimizer,
-                                 epoch, val_pga, cfg, k_head=k_head)
+                ckpt_path = save_dir / "best.pt"
+                _save_checkpoint(ckpt_path, gat, head, optimizer,
+                                 epoch, val_pga, cfg, k_head=k_head,
+                                 wandb_run_id=wandb_run.id if wandb_run else None)
                 log += "  ← best"
+
+                if wandb_run is not None and cfg.wandb.log_artifacts:
+                    _log_checkpoint_artifact(
+                        wandb_run, run_name, ckpt_path,
+                        run_id=run_id, epoch=epoch, val_pga=val_pga,
+                    )
+
+            wandb_metrics["val/best_pga"] = best_val_pga
 
             history.append({
                 "epoch": epoch, "loss": avg_loss,
@@ -475,15 +543,25 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
                 "val_pga": val_pga,
             })
 
+        if wandb_run is not None:
+            wandb_run.log(wandb_metrics, step=epoch)
+
         print(log)
 
     # Always save final
     _save_checkpoint(save_dir / "final.pt", gat, head, optimizer,
-                     tc.epochs, best_val_pga, cfg, k_head=k_head)
+                     tc.epochs, best_val_pga, cfg, k_head=k_head,
+                     wandb_run_id=wandb_run.id if wandb_run else None)
 
     # Save history
     with open(save_dir / "history.json", "w") as f:
         json.dump(history, f, indent=2)
+
+    if wandb_run is not None:
+        wandb_run.summary["best_val_pga"] = best_val_pga
+        wandb_run.summary["total_epochs"] = tc.epochs
+        wandb_run.summary["save_dir"] = str(save_dir)
+        wandb_run.finish()
 
     print(f"\nTraining complete. Best val PGA: {best_val_pga:.4f}")
     print(f"Checkpoints saved to {save_dir}")
@@ -595,7 +673,8 @@ def _validate(gat, head, head_name, loader, preprocessor,
     return sum(all_pga) / max(len(all_pga), 1)
 
 
-def _save_checkpoint(path, gat, head, optimizer, epoch, val_pga, cfg, k_head=None):
+def _save_checkpoint(path, gat, head, optimizer, epoch, val_pga, cfg,
+                     k_head=None, wandb_run_id=None):
     torch.save({
         "epoch":     epoch,
         "val_pga":   val_pga,
@@ -604,12 +683,49 @@ def _save_checkpoint(path, gat, head, optimizer, epoch, val_pga, cfg, k_head=Non
         "k_head_state": k_head.state_dict() if k_head is not None else None,
         "opt_state":  optimizer.state_dict(),
         "config":     cfg.model_dump(),
+        "wandb_run_id": wandb_run_id,
     }, path)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _coerce(value: str):
+    """Coerce a CLI string to int / float / bool / str."""
+    lowered = value.lower()
+    if lowered == "true":  return True
+    if lowered == "false": return False
+    if lowered in ("none", "null"): return None
+    try: return int(value)
+    except ValueError: pass
+    try: return float(value)
+    except ValueError: pass
+    return value
+
+
+def _apply_overrides(cfg_dict: dict, overrides: list[str]) -> dict:
+    """Apply dotted-path overrides to a config dict, in place.
+
+    Each override is a string like "sa_gat.num_layers=4" or
+    "training.lr=1e-3". Used by wandb sweep agents so the same trainer
+    binary can be parameterised from a sweep YAML without per-sweep code.
+    """
+    for spec in overrides:
+        if "=" not in spec:
+            raise ValueError(f"Bad --set value (need key=value): {spec!r}")
+        key, raw_value = spec.split("=", 1)
+        value = _coerce(raw_value)
+        path = key.split(".")
+        d = cfg_dict
+        for k in path[:-1]:
+            if k not in d or d[k] is None:
+                d[k] = {}
+            d = d[k]
+        d[path[-1]] = value
+    return cfg_dict
+
+
 def main():
+    import yaml
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path,
                         default=Path("configs/train_slot.yaml"))
@@ -617,9 +733,44 @@ def main():
                         help="Override run name (default: derived from config filename)")
     parser.add_argument("--device", type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
-    args = parser.parse_args()
+    parser.add_argument("--set", action="append", default=[], dest="overrides",
+                        help="Override config field, e.g. --set sa_gat.num_layers=4. "
+                             "Repeatable. Used by wandb sweep agents.")
+    parser.add_argument("--tag", action="append", default=[], dest="tags",
+                        help="Append a wandb tag (e.g. --tag arch --tag meng-paper). "
+                             "Repeatable. Merged on top of cfg.wandb.tags. "
+                             "No-op if cfg.wandb is not set.")
+    args, unknown = parser.parse_known_args()
 
-    cfg = ExperimentConfig.from_yaml(args.config)
+    # Promote unknown --<key>=<value> args (typically injected by wandb sweep
+    # agents via ${args}) into --set overrides. Double-underscore in keys is
+    # treated as a path separator (`sa_gat__num_layers` → `sa_gat.num_layers`),
+    # since some wandb pipelines disallow dots in parameter names.
+    for tok in unknown:
+        if tok.startswith("--") and "=" in tok:
+            key, value = tok[2:].split("=", 1)
+            key = key.replace("__", ".")
+            args.overrides.append(f"{key}={value}")
+        else:
+            print(f"trainer.py: ignoring unrecognised CLI token {tok!r} "
+                  "(use --<dotted.path>=<value> or --<path__with__underscores>=<value>)")
+
+    if args.overrides:
+        with open(args.config) as f:
+            cfg_dict = yaml.safe_load(f)
+        cfg_dict = _apply_overrides(cfg_dict, args.overrides)
+        cfg = ExperimentConfig(**cfg_dict)
+    else:
+        cfg = ExperimentConfig.from_yaml(args.config)
+
+    # Merge --tag values into cfg.wandb.tags (silently ignored if wandb disabled).
+    if args.tags and cfg.wandb is not None:
+        existing = list(cfg.wandb.tags or [])
+        for t in args.tags:
+            if t not in existing:
+                existing.append(t)
+        cfg.wandb.tags = existing
+
     train(cfg, args.device, config_path=args.config, name_override=args.name)
 
 

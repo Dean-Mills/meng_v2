@@ -1,0 +1,68 @@
+# PG-GAT architecture sweep
+#
+# Defends RQ2 (which architectural choices matter, by how much) for the
+# dissertation. Sweeps over depth, attention heads, hidden dim, output dim,
+# joint embedding dim, dropout. All three SA-GAT modifications stay enabled
+# (use_type_pair_attention, use_position_encoding, use_repulsion_heads); they
+# are evaluated by the existing isolation configs (train_sa_gat_type_pair,
+# train_sa_gat_pos_enc, train_sa_gat_repulsion), not here.
+#
+# Selection metric: val/pga (synth val). The COCO and end-to-end numbers come
+# from re-evaluating the winning checkpoint after the sweep finishes.
+#
+# Budget: 32 runs, hyperband. Estimated wall-clock: ~8-13 GPU-hours on the
+# 5070 Ti at ~15-25 min/run.
+#
+# Parameter names use `__` as a path separator: trainer.py converts
+# `--sa_gat__num_layers=4` into the override `--set sa_gat.num_layers=4`.
+#
+# Launch:
+#   wandb sweep configs/sweeps/pg_gat_arch.yaml
+#   wandb agent deanmills/multiperson-pose-grouping/<sweep_id>
+#
+# After completion:
+#   python scripts/promote_best.py --sweep <sweep_id> --alias champion-arch
+#   python eval_cop_kmeans.py --checkpoint <champion checkpoint> \
+#     --coco_img_dir data/coco2017/val2017 \
+#     --coco_ann_file data/coco2017/annotations/person_keypoints_val2017.json
+
+project: multiperson-pose-grouping
+entity:  deanmills
+program: trainer.py
+method: bayes
+metric:
+  name: val/pga
+  goal: maximize
+
+parameters:
+  sa_gat__num_layers:
+    values: [2, 3, 4, 5]
+  sa_gat__num_heads:
+    values: [2, 4, 8]
+  sa_gat__hidden_dim:
+    values: [64, 128, 256]
+  sa_gat__output_dim:
+    values: [32, 64, 128, 256]
+  sa_gat__joint_embedding_dim:
+    values: [16, 32, 64]
+  sa_gat__dropout:
+    values: [0.0, 0.1, 0.2]
+
+early_terminate:
+  type: hyperband
+  min_iter: 5
+  eta: 2
+
+run_cap: 32
+
+command:
+  - ${env}
+  - python
+  - ${program}
+  - --config=configs/train_sa_gat_sweep_base.yaml
+  - --name=pg_gat_arch_sweep
+  - --set=wandb.group=pg-gat-arch-sweep
+  - --tag=sweep
+  - --tag=arch
+  - --tag=meng-paper
+  - ${args}

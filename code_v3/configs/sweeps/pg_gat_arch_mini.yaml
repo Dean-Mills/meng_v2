@@ -1,0 +1,49 @@
+# Mini smoke-test of the sweep launch flow. 3 runs, 3 epochs each.
+#
+# Identical structure to pg_gat_arch.yaml --- just narrower parameter space,
+# tiny epoch budget, and a distinct wandb group so it doesn't pollute the
+# real sweep.
+#
+# IMPORTANT: parameter names use `__` as the dotted-path separator. The
+# trainer's main() converts `--sa_gat__num_layers=4` into the override
+# `--set sa_gat.num_layers=4`. We use `__` (rather than `.`) in parameter
+# names because some wandb tooling rejects dots in parameter names.
+#
+# Launch:
+#   wandb sweep configs/sweeps/pg_gat_arch_mini.yaml
+#   wandb agent deanmills/multiperson-pose-grouping/<sweep_id>
+
+project: multiperson-pose-grouping
+entity:  deanmills
+program: trainer.py
+method: bayes
+metric:
+  name: val/pga
+  goal: maximize
+
+parameters:
+  sa_gat__num_layers:
+    values: [2, 3]
+  sa_gat__hidden_dim:
+    values: [64, 128]
+
+early_terminate:
+  type: hyperband
+  min_iter: 2
+  eta: 2
+
+run_cap: 3
+
+command:
+  - ${env}
+  - python
+  - ${program}
+  - --config=configs/train_sa_gat_sweep_base.yaml
+  - --name=pg_gat_arch_mini
+  - --set=wandb.group=pg-gat-arch-sweep-mini
+  - --tag=sweep
+  - --tag=arch
+  - --tag=mini-test
+  - --set=training.epochs=3
+  - --set=training.val_every=1
+  - ${args}

@@ -1,0 +1,57 @@
+name: "train_sa_gat_smoke_wandb"
+description: "Smoke test of W&B integration. 5 epochs, identical PG-GAT config to train_sa_gat_full.yaml. Delete the W&B run after verifying logging works."
+
+sa_gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+  use_type_pair_attention: true
+  use_position_encoding: true
+  use_repulsion_heads: true
+  n_repulsion_heads: 1
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+
+loss:
+  contrastive_margin: 0.5
+
+training:
+  virtual_dir:   data/virtual
+  batch_size:    4
+  num_workers:   4
+  lr:            1e-3
+  lr_min:        1e-5
+  weight_decay:  1e-4
+  epochs:        5            # short — smoke test only
+  val_every:     1            # validate every epoch so we exercise artifact logging
+  save_dir:      outputs/checkpoints/sa_gat_smoke_wandb
+  save_best:     true
+
+wandb:
+  project:       "multiperson-pose-grouping"
+  entity:        "deanmills"
+  group:         "smoke-test"
+  tags:          ["smoke-test", "wandb-wiring"]
+  notes:         "Verifies W&B logging integration end-to-end (init, per-epoch metrics, checkpoint artifact, finish). Delete after."
+  mode:          "online"
+  log_artifacts: true
+  log_code:      true

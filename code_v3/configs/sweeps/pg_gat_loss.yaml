@@ -1,0 +1,59 @@
+# PG-GAT loss / regularisation sweep
+#
+# Defends loss-coefficient and regulariser choices for the dissertation.
+# Sweeps over contrastive margin, number of repulsion heads, learning rate,
+# and weight decay. Architecture is fixed at the winner of pg_gat_arch.yaml ---
+# update the `set` block below after that sweep completes.
+#
+# Selection metric: val/pga (synth val). Same recompute-on-COCO protocol as
+# the arch sweep applies to the winning checkpoint.
+#
+# Budget: 24 runs, hyperband. Estimated wall-clock: ~8-12 GPU-hours.
+#
+# Parameter names use `__` as a path separator. See pg_gat_arch_mini.yaml.
+
+project: multiperson-pose-grouping
+entity:  deanmills
+program: trainer.py
+method: bayes
+metric:
+  name: val/pga
+  goal: maximize
+
+parameters:
+  loss__contrastive_margin:
+    values: [0.3, 0.5, 0.7, 1.0]
+  sa_gat__n_repulsion_heads:
+    values: [0, 1, 2]
+  training__lr:
+    distribution: log_uniform_values
+    min: 3.0e-4
+    max: 3.0e-3
+  training__weight_decay:
+    values: [1.0e-5, 1.0e-4, 1.0e-3]
+
+early_terminate:
+  type: hyperband
+  min_iter: 5
+  eta: 2
+
+run_cap: 24
+
+# Architecture below is the pg_gat_arch.yaml winner. Update these `--set`
+# lines after the arch sweep finishes; they currently reflect the manual
+# default (depth 2, heads 4, hidden 64, output 128).
+command:
+  - ${env}
+  - python
+  - ${program}
+  - --config=configs/train_sa_gat_sweep_base.yaml
+  - --name=pg_gat_loss_sweep
+  - --set=wandb.group=pg-gat-loss-sweep
+  - --tag=sweep
+  - --tag=loss
+  - --tag=meng-paper
+  - --set=sa_gat.num_layers=2
+  - --set=sa_gat.num_heads=4
+  - --set=sa_gat.hidden_dim=64
+  - --set=sa_gat.output_dim=128
+  - ${args}

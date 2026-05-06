@@ -519,6 +519,15 @@ def evaluate(
         json.dump(save_data, f, indent=2)
     print(f"Results saved to {save_path}")
 
+    out = {
+        f"{m}_pga": sum(v) / len(v)
+        for m, v in results.items()
+    }
+    out["n_images"]            = n
+    out["detection_recall"]    = recall
+    out["detection_precision"] = precision
+    return out
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -535,9 +544,13 @@ def main():
                         default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--hrnet_device", type=str, default="cpu",
                         help="Device for HigherHRNet (cpu recommended to save GPU memory)")
+    parser.add_argument("--wandb_run_id", type=str, default=None,
+                        help="Attach eval metrics to this W&B run id. "
+                             "Default: read from checkpoint metadata. "
+                             "Pass 'none' to skip.")
     args = parser.parse_args()
 
-    evaluate(
+    metrics = evaluate(
         checkpoint_path=args.checkpoint,
         coco_img_dir=args.coco_img_dir,
         coco_ann_file=args.coco_ann_file,
@@ -546,6 +559,15 @@ def main():
         max_images=args.max_images,
         hrnet_device=args.hrnet_device,
     )
+
+    run_id = args.wandb_run_id
+    if run_id is None:
+        from wandb_helpers import get_wandb_run_id_from_ckpt
+        run_id = get_wandb_run_id_from_ckpt(args.checkpoint)
+    if run_id and run_id.lower() != "none":
+        from wandb_helpers import attach_eval_metrics
+        url = attach_eval_metrics(run_id, "eval/e2e", metrics)
+        if url: print(f"W&B summary updated: {url}")
 
 
 if __name__ == "__main__":

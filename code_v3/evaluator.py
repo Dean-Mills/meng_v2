@@ -658,6 +658,10 @@ def main():
                         help="Override save path (default: next to checkpoint)")
     parser.add_argument("--device",        type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--wandb_run_id",  type=str, default=None,
+                        help="Attach eval metrics to this W&B run id. "
+                             "Default: read from checkpoint metadata. "
+                             "Pass 'none' to skip.")
     args = parser.parse_args()
 
     evaluator = Evaluator(args.checkpoint, device=args.device)
@@ -678,6 +682,23 @@ def main():
         suffix = "coco" if args.coco_img_dir is not None else "virtual"
         save_path = args.checkpoint.parent / f"eval_results_{suffix}.json"
     evaluator.save_results(summary, save_path)
+
+    # ── Attach to W&B run summary (optional) ──────────────────────────────
+    run_id = args.wandb_run_id
+    if run_id is None:
+        from wandb_helpers import get_wandb_run_id_from_ckpt
+        run_id = get_wandb_run_id_from_ckpt(args.checkpoint)
+    if run_id and run_id.lower() != "none":
+        from wandb_helpers import attach_eval_metrics
+        dataset = "coco" if args.coco_img_dir is not None else "synth"
+        # Flatten summary {method: {pga_mean, nmi_mean, ...}} → {method/pga_mean: ...}
+        flat = {}
+        for method, metrics in summary.items():
+            for mk, mv in metrics.items():
+                if mk == "per_joint": continue
+                flat[f"{method}/{mk}"] = mv
+        url = attach_eval_metrics(run_id, f"eval/main/{dataset}", flat)
+        if url: print(f"W&B summary updated: {url}")
 
 
 if __name__ == "__main__":

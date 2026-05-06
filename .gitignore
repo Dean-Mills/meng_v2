@@ -183,3 +183,9 @@ cython_debug/
 /docs
 
 /.codex
+
+# Weights & Biases
+wandb/
+/code_v3/wandb/
+artifacts/
+/code_v3/artifacts/

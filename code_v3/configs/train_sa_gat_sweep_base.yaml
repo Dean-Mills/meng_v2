@@ -1,0 +1,56 @@
+name: "train_sa_gat_sweep_base"
+description: "Base config for PG-GAT W&B sweeps. Sweeps override fields via trainer.py --set. All three SA-GAT mods enabled by default; sweeps narrow architecture and loss only."
+
+sa_gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+  use_type_pair_attention: true
+  use_position_encoding: true
+  use_repulsion_heads: true
+  n_repulsion_heads: 1
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+
+loss:
+  contrastive_margin: 0.5
+
+training:
+  virtual_dir:   data/virtual
+  batch_size:    4
+  num_workers:   4
+  lr:            1e-3
+  lr_min:        1e-5
+  weight_decay:  1e-4
+  epochs:        50            # matches train_sa_gat_full.yaml; sweeps override per-need
+  val_every:     5             # matches train_sa_gat_full.yaml; 10 val events per run
+  save_dir:      outputs/checkpoints/sweep_base
+  save_best:     true
+
+wandb:
+  project:       "multiperson-pose-grouping"
+  entity:        "deanmills"
+  group:         "sweep-base"  # sweeps override per-sweep
+  tags:          ["sweep"]
+  mode:          "online"
+  log_artifacts: true
+  log_code:      true
