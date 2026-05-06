@@ -39,9 +39,9 @@ early_terminate:
 
 run_cap: 24
 
-# Architecture below is the pg_gat_arch.yaml winner. Update these `--set`
-# lines after the arch sweep finishes; they currently reflect the manual
-# default (depth 2, heads 4, hidden 64, output 128).
+# Architecture is fixed at the pg_gat_arch.yaml winner (champion-arch,
+# run 08d0ffde): 3 layers, 4 heads, hidden 64, output 256, joint emb 64,
+# dropout 0.1. The sweep varies only loss / regularisation axes.
 command:
   - ${env}
   - python
@@ -52,8 +52,11 @@ command:
   - --tag=sweep
   - --tag=loss
   - --tag=meng-paper
-  - --set=sa_gat.num_layers=2
+  - --tag=champion-arch
+  - --set=sa_gat.num_layers=3
   - --set=sa_gat.num_heads=4
   - --set=sa_gat.hidden_dim=64
-  - --set=sa_gat.output_dim=128
+  - --set=sa_gat.output_dim=256
+  - --set=sa_gat.joint_embedding_dim=64
+  - --set=sa_gat.dropout=0.1
   - ${args}

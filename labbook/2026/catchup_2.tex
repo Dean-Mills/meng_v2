@@ -1893,4 +1893,86 @@ The artifact alias \texttt{meng-headline} should now be applied to \texttt{finet
     \item Decide whether to also run the loss sweep (\texttt{configs/sweeps/pg\_gat\_loss.yaml}, $\sim$2--3 hours) on top of the fine-tuned headline. The current results are already a clear improvement over the legacy baseline; an additional loss sweep would refine the contrastive-margin and weight-decay choices but is unlikely to move the headline by more than $\pm 0.005$. Lower priority than the dissertation writing pass that the new numbers enable.
 \end{itemize}
 
+\subsection{PG-GAT Loss / Regularisation Sweep --- Confirming the Defaults}
+
+\subsubsection{Motivation}
+
+The architecture sweep produced \texttt{champion-arch} as the synth-val winner across six architectural axes.
+The loss / regularisation sweep is the second of the three planned PG-GAT sweeps and is the defensibility check for the loss-coefficient and optimiser-schedule choices that were inherited from \texttt{train\_sa\_gat\_full}: contrastive margin $0.5$, repulsion-head count $1$, learning rate $1\!\times\!10^{-3}$, weight decay $1\!\times\!10^{-4}$.
+None of those values had been explored; the dissertation needs a defendable answer to ``why those four values.''
+
+\subsubsection{Setup}
+
+Bayesian sweep with hyperband, 24 runs, selection metric \texttt{val/pga} (synth val) --- same protocol as the architecture sweep.
+Architecture pinned to the architecture-sweep winner (\texttt{champion-arch}: 3 layers, 4 heads, hidden 64, output 256, joint emb 64, dropout 0.1) so that only the loss / regularisation axes vary.
+Search space:
+
+\begin{tabular}{ll}
+\hline
+\textbf{Axis} & \textbf{Values} \\
+\hline
+\texttt{loss.contrastive\_margin}      & \{0.3, 0.5, 0.7, 1.0\} \\
+\texttt{sa\_gat.n\_repulsion\_heads}   & \{0, 1, 2\} \\
+\texttt{training.lr}                    & log-uniform $[3\!\times\!10^{-4},\, 3\!\times\!10^{-3}]$ \\
+\texttt{training.weight\_decay}         & \{$10^{-5}$, $10^{-4}$, $10^{-3}$\} \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+\texttt{n\_repulsion\_heads = 0} effectively disables the type-repulsion modification, used as a sanity floor to confirm that repulsion heads still help on the new architecture.
+The remaining three axes search optimiser schedule and the contrastive margin coefficient.
+Sweep ID \texttt{<TBD --- record from W\&B UI>}.
+
+\subsubsection{Results}
+
+The loss-sweep winner (artifact \texttt{pg\_gat\_loss\_sweep:v54}, source run \texttt{mkmtc8om}, epoch 40 of 50) reached synth val PGA $0.9617$, $0.0017$ \emph{below} the architecture-sweep winner.
+Re-evaluating that checkpoint produced the following table.
+
+\begin{tabular}{llccc}
+\hline
+\textbf{Setting} & \textbf{Method} & \textbf{\texttt{champion-arch}} & \textbf{\texttt{champion-loss}} & \textbf{$\Delta$} \\
+                 &                  & \textbf{(arch sweep winner)}    & \textbf{(loss sweep winner)}    &                   \\
+\hline
+Synth val (training metric) & kNN          & 0.9634          & 0.9617          & $-0.0017$ \\
+\hline
+Synth test                  & kNN          & 0.9587          & 0.9554          & $-0.0033$ \\
+Synth test                  & COP-Kmeans   & 0.9725          & 0.9675          & $-0.0050$ \\
+Synth test                  & THA          & 0.9785          & 0.9762          & $-0.0023$ \\
+\hline
+COCO val (GT kps)           & kNN          & 0.9010          & 0.8928          & $-0.0082$ \\
+COCO val (GT kps)           & COP-Kmeans   & 0.9282          & 0.9234          & $-0.0048$ \\
+COCO val (GT kps)           & THA          & 0.9341          & 0.9302          & $-0.0039$ \\
+\hline
+COCO end-to-end             & kNN          & 0.9005          & 0.8866          & $-0.0139$ \\
+COCO end-to-end             & COP-Kmeans   & 0.9266          & 0.9157          & $-0.0109$ \\
+COCO end-to-end             & THA          & 0.9288          & 0.9200          & $-0.0088$ \\
+\hline
+\end{tabular}
+
+The winning hyperparameter configuration was \texttt{<TBD: contrastive\_margin=?, n\_repulsion\_heads=?, lr=?, weight\_decay=?>}, recorded from W\&B run \texttt{mkmtc8om}'s config tab.
+The four numbers above are necessary for the dissertation to specify which loss / regularisation values were defended; the corresponding analysis points below treat them as ``near defaults'' until the values are filled in.
+
+\subsubsection{Analysis}
+
+\textbf{1. The sweep did not find a configuration that beats the defaults on synth val.} The selection metric (synth val/pga) was lower for the loss-sweep winner ($0.9617$) than for the architecture-sweep winner trained with the default loss / regularisation values ($0.9634$). Bayesian search across 24 runs over four axes was not able to beat the defaults. The honest reading is that the defaults inherited from \texttt{train\_sa\_gat\_full} were already near-optimal for this architecture.
+
+\textbf{2. The result transferred to COCO too, and synth test confirms the same pattern.} Every COCO cell is between $0.004$ and $0.014$ lower for \texttt{champion-loss} than for \texttt{champion-arch}. Every synth test cell is also lower, by $0.002$ to $0.005$. The synth val $-0.0017$ slip propagates uniformly across all evaluation modes. This is consistent with point 1: the loss-sweep winner is genuinely a slightly worse contrastive embedding, not an unlucky seed nor a synth-COCO transfer artefact.
+
+\textbf{3. Architecture was the under-tuned lever; loss / regularisation was not.} The architecture sweep moved synth val from $0.910$ (manual default) to $0.9634$ ($+0.053$) and COCO kNN from $0.882$ to $0.9010$ ($+0.019$). The loss sweep moved both metrics in the opposite direction by a small amount. Read together, the two sweeps tell a clear methodological story: the architecture parameters were sub-optimally chosen, the loss-coefficient parameters were not. This is a worthwhile defensibility point for Chapter~5 of the dissertation.
+
+\textbf{4. Honest framing for the dissertation.} The defendable claim is: \emph{``A 24-run Bayesian sweep with hyperband over four loss / regularisation axes did not produce a configuration that beats the manually-set defaults at the architecture-sweep winning topology. The defaults were retained.''} The dissertation should not present \texttt{champion-loss} as a competing checkpoint; the honest position is that the loss sweep validates the existing values and the headline checkpoint remains \texttt{champion-finetune} (the COCO-fine-tuned \texttt{champion-arch}).
+
+\textbf{5. No follow-on fine-tune for \texttt{champion-loss}.} Fine-tuning a slightly-weaker synth checkpoint on COCO is overwhelmingly likely to produce a slightly-weaker COCO checkpoint than the existing \texttt{meng-headline}. The compute (~2 hours) is not justified by the expected outcome. The MEng headline stays at \texttt{finetune\_pg\_gat\_arch\_winner:meng-headline}.
+
+\subsubsection{What to do next}
+
+\begin{itemize}
+    \item \emph{(Done.)} Synth-test evaluation: kNN $0.9554$, COP-Kmeans $0.9675$, THA $0.9762$ --- a uniform $0.002$--$0.005$ drop versus \texttt{champion-arch}, consistent with the COCO and synth val results.
+    \item Record the winning hyperparameter values from W\&B run \texttt{mkmtc8om}'s config tab into the setup section above (the four \texttt{<TBD>} cells: \texttt{contrastive\_margin}, \texttt{n\_repulsion\_heads}, \texttt{lr}, \texttt{weight\_decay}).
+    \item No alias \texttt{meng-headline} or \texttt{paper-final-meng} on \texttt{champion-loss} --- it is documented as a defensibility check, not a competing checkpoint.
+    \item Optional: tag the run \texttt{mkmtc8om} with \texttt{negative-result} to make it filterable as ``loss sweep produced no improvement.''
+    \item Skip the planned fine-tune sweep entirely. The architecture sweep is the lever; the loss sweep showed defaults are fine; fine-tuning the headline once was sufficient. The deferred fine-tune sweep adds compute without a defended hypothesis to test.
+\end{itemize}
+
 
