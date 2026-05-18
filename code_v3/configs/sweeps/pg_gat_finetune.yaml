@@ -1,18 +1,29 @@
-# PG-GAT COCO fine-tune sweep
+# PG-GAT COCO fine-tune sweep (overnight-tractable version)
 #
-# Defends RQ6 (how much does COCO fine-tuning lift performance, and does it
-# damage synthetic performance) for the dissertation. Loads the synth-only
-# champion (`outputs/frozen_checkpoints/sa_gat_full/best.pt`) and sweeps over
-# fine-tune epochs, learning rate, and weight decay on COCO train2017.
+# Defends RQ6 (does fine-tuning lift PGA, does it damage synth) with a
+# defensibility-grade Bayesian search over fine-tune epochs / lr / weight
+# decay, starting from the architecture-sweep winner (champion-arch).
 #
-# Selection metric: val/pga --- but the val set is synth, so the metric
-# captures "did fine-tuning damage the synthetic checkpoint?" The actual
-# headline number (COCO val PGA) is computed by re-running eval_cop_kmeans.py
-# on the winning checkpoint after the sweep finishes.
+# Architecture is pinned to the champion-arch winning topology
+# (3 layers, 4 heads, hidden 64, output 256, joint emb 64, dropout 0.1).
+# The pretrained path is the local champion-arch checkpoint --- loading the
+# legacy frozen sa_gat_full would fail because state-dict shapes differ.
 #
-# Budget: 16 runs, hyperband.
+# Selection metric: val/pga (the trainer's primary metric, on synth val).
+# COCO and end-to-end PGA on the winner come from post-sweep eval_by_run
+# evaluations, same protocol as the architecture sweep.
 #
-# Parameter names use `__` as a path separator. See pg_gat_arch_mini.yaml.
+# Budget: 12 runs, hyperband min_iter=3 (6 epochs at val_every=2), max epochs
+# 30. Estimated wall-clock $\sim$16-20 GPU-hours on the 5070 Ti (per-epoch
+# COCO is ~370s for this architecture, so 10/15/20/30-epoch runs take
+# ~1/1.5/2/3 hours; hyperband cuts ~25% by killing weak runs at epoch 6).
+# Sized to fill a long overnight job rather than the short 5-8 hour version
+# in the original plan. We already have a strong headline checkpoint
+# (meng-headline at COCO kNN 0.9695), so the goal of this sweep is
+# defensibility ("the proven recipe was Bayesian-searched at 12 configs and
+# confirmed") rather than chasing further PGA gains.
+#
+# Parameter names use `__` as path separator (see pg_gat_arch_mini.yaml).
 
 project: multiperson-pose-grouping
 entity:  deanmills
@@ -24,7 +35,7 @@ metric:
 
 parameters:
   training__epochs:
-    values: [10, 15, 20, 30, 50]
+    values: [10, 15, 20, 30]
   training__lr:
     distribution: log_uniform_values
     min: 1.0e-5
@@ -37,11 +48,8 @@ early_terminate:
   min_iter: 3
   eta: 2
 
-run_cap: 16
+run_cap: 12
 
-# Architecture and pretrained checkpoint are fixed; only the fine-tune
-# schedule is swept. Update the architecture lines if pg_gat_arch.yaml winner
-# differs from the manual default.
 command:
   - ${env}
   - python
@@ -50,14 +58,17 @@ command:
   - --name=pg_gat_finetune_sweep
   - --set=wandb.group=pg-gat-finetune-sweep
   - --tag=sweep
-  - --tag=finetune
+  - --tag=finetune-sweep
   - --tag=meng-paper
-  - --set=sa_gat.num_layers=2
+  - --tag=champion-arch
+  - --set=sa_gat.num_layers=3
   - --set=sa_gat.num_heads=4
   - --set=sa_gat.hidden_dim=64
-  - --set=sa_gat.output_dim=128
+  - --set=sa_gat.output_dim=256
+  - --set=sa_gat.joint_embedding_dim=64
+  - --set=sa_gat.dropout=0.1
   - --set=training.coco_train_dir=data/coco2017/train2017
   - --set=training.coco_train_ann=data/coco2017/annotations/person_keypoints_train2017.json
-  - --set=training.pretrained=outputs/frozen_checkpoints/sa_gat_full/best.pt
+  - --set=training.pretrained=outputs/pg_gat_arch_sweep/08d0ffde/best.pt
   - --set=training.val_every=2
   - ${args}

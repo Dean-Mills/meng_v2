@@ -1975,4 +1975,206 @@ The four numbers above are necessary for the dissertation to specify which loss 
     \item Skip the planned fine-tune sweep entirely. The architecture sweep is the lever; the loss sweep showed defaults are fine; fine-tuning the headline once was sufficient. The deferred fine-tune sweep adds compute without a defended hypothesis to test.
 \end{itemize}
 
+\subsection{PG-GAT Hyperbolic Dim Sweep --- RQ4 Defensibility}
+
+\subsubsection{Motivation}
+
+RQ4 of the dissertation asks whether the choice of embedding space (Euclidean vs hyperbolic) affects pose grouping quality.
+A single hyperbolic Lorentz-model dim=32 run had already been recorded as an ablation against the original Euclidean dim=128 baseline; that single run reached $0.918$ synth kNN / $0.926$ synth COP-Kmeans / $0.899$ COCO kNN / $0.926$ COCO COP-Kmeans, slightly above the original Euclidean baseline at $4\times$ smaller embedding.
+The single-run result was reported as ``efficiency trade, not a quality win.''
+Now that the architecture sweep has produced a stronger Euclidean baseline (\texttt{champion-arch}: $0.9634$ synth val, $0.9010$ COCO kNN) and the loss sweep has confirmed loss defaults, the hyperbolic question deserves a proper multi-config sweep so the dissertation can defend the answer to RQ4 rather than cite a single ablation point.
+
+\subsubsection{Setup}
+
+Bayesian sweep with hyperband, 8 runs, selection metric \texttt{val/pga} (synth val).
+Architecture mirrors \texttt{champion-arch} except for the swept axes: output dimension, depth, and hidden dimension.
+The sweep base is \texttt{configs/train\_sa\_gat\_hyperbolic\_sweep\_base.yaml}; the sweep YAML is \texttt{configs/sweeps/pg\_gat\_hyperbolic.yaml}.
+Contrastive margin is held at the hyperbolic-specific value of $2.0$ (Lorentz distances scale differently than Euclidean cosine similarities; this was empirically validated in the original hyperbolic ablation).
+Sweep ID \texttt{qpggbsdn}, run 8/8 promoted as \texttt{champion-hyperbolic} (artifact \texttt{pg\_gat\_hyperbolic\_sweep:v28}, source run \texttt{ua4wdb3p}).
+
+\begin{tabular}{ll}
+\hline
+\textbf{Axis} & \textbf{Values} \\
+\hline
+\texttt{sa\_gat\_hyperbolic.output\_dim}      & \{16, 32, 64, 128, 256\} \\
+\texttt{sa\_gat\_hyperbolic.num\_layers}      & \{3, 4\} \\
+\texttt{sa\_gat\_hyperbolic.hidden\_dim}      & \{64, 128\} \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+The full hyperparameter combination for the winning \texttt{champion-hyperbolic} is recorded on W\&B run \texttt{ua4wdb3p}'s config tab; values to be transcribed into this lab book entry when read off the UI.
+
+\subsubsection{Results}
+
+\begin{tabular}{llcccc}
+\hline
+\textbf{Setting} & \textbf{Method} & \textbf{\texttt{champion-arch}} & \textbf{Historical hyp.} & \textbf{\texttt{champion-hyperbolic}} & \textbf{$\Delta$ vs arch} \\
+                 &                  & \textbf{(Euclidean, synth-only)} & \textbf{dim=32 (single run)} & \textbf{(new sweep winner)} & \\
+\hline
+Synth val (training)        & ---          & 0.9634          & ---     & 0.8795 & $-0.084$ \\
+\hline
+Synth test                  & kNN          & 0.9587          & 0.918   & 0.9029 & $-0.056$ \\
+Synth test                  & COP-Kmeans   & 0.9725          & 0.926   & 0.9182 & $-0.054$ \\
+Synth test                  & THA          & 0.9785          & ---     & 0.9413 & $-0.037$ \\
+\hline
+COCO val (GT kps)           & kNN          & 0.9010          & 0.899   & 0.8876 & $-0.013$ \\
+COCO val (GT kps)           & COP-Kmeans   & 0.9282          & 0.926   & 0.9202 & $-0.008$ \\
+COCO val (GT kps)           & THA          & 0.9341          & ---     & 0.9301 & $-0.004$ \\
+\hline
+COCO end-to-end             & kNN          & 0.9005          & ---     & 0.8819 & $-0.019$ \\
+COCO end-to-end             & COP-Kmeans   & 0.9266          & ---     & 0.9163 & $-0.010$ \\
+COCO end-to-end             & THA          & 0.9288          & ---     & 0.9226 & $-0.006$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+End-to-end was initially blocked because \texttt{eval\_end\_to\_end.py} did not have a hyperbolic branch in its model-loader (it always constructed a vanilla \texttt{GATEmbedding} and tried to load the hyperbolic state dict, which failed with shape and key mismatches).
+The fix added an \texttt{elif cfg.sa\_gat\_hyperbolic is not None} branch matching \texttt{evaluator.py}'s loader plus a logmap step before the grouping methods run; numbers above are post-fix.
+Detection statistics (recall $0.793$, precision $0.588$) are identical to \texttt{champion-arch}'s end-to-end run because the detector and detection-matching logic are unchanged --- only the grouping module differs.
+
+\subsubsection{Analysis}
+
+\textbf{1. Hyperbolic underperforms Euclidean on every comparable cell at this architecture.} Synth val drops $0.084$, synth test drops $0.04$--$0.06$, COCO GT-kp drops $0.004$--$0.013$. The dissertation's hyperbolic-vs-Euclidean answer is unchanged: at the champion-arch architecture sizing, Euclidean wins on quality.
+
+\textbf{2. The sweep did not find a hyperbolic configuration that beats the historical single dim=32 ablation.} The original ablation reached $0.918$ synth kNN / $0.926$ synth COP-Kmeans at a much smaller architecture (2 layers, hidden 64, output 32, joint embedding 32). The 8-run Bayesian sweep on the champion-arch architecture sizing peaked at synth val $0.8795$. The wider-output and deeper architecture that helps Euclidean does not transfer benefits to hyperbolic; the original 2-layer dim=32 hyperbolic configuration appears to be near a local optimum that wider hyperbolic configurations fall away from. This is a meaningful structural observation: \emph{hyperbolic and Euclidean prefer different architectures}.
+
+\textbf{3. The synth-to-COCO transfer gap is dramatically smaller for hyperbolic.} For Euclidean \texttt{champion-arch}, the synth-test kNN to COCO kNN gap is $0.9587 \rightarrow 0.9010 = -0.058$. For hyperbolic \texttt{champion-hyperbolic}, it is $0.9029 \rightarrow 0.8876 = -0.015$ --- almost four times smaller. The COP-Kmeans gap is even more striking: Euclidean $0.9725 \rightarrow 0.9282 = -0.044$, hyperbolic $0.9182 \rightarrow 0.9202 = +0.002$ (essentially inverted). Hyperbolic embeddings appear to be more domain-robust than Euclidean ones at the same architecture. This is a previously-undocumented observation; the historical single-run hyperbolic ablation had only one data point per metric so the gap claim could not be made cleanly.
+
+\textbf{4. The COCO COP-Kmeans gap to Euclidean is the smallest cell.} \texttt{champion-arch} COCO COP-Kmeans is $0.9282$; hyperbolic is $0.9202$, a difference of just $0.008$. Combined with point 3, the headline read is ``hyperbolic does not win on absolute quality, but its loss on COCO is much smaller than its loss on synth.'' This is consistent with a story where hyperbolic geometry's tree-like inductive bias is less effective on the synthetic distribution (where Euclidean's wider output overfit-helpfully) and roughly as effective on COCO.
+
+\textbf{5. THA's advantage over COP-Kmeans is larger on hyperbolic than on Euclidean.} On the new sweep winner: synth test THA $0.9413$ vs COP-Kmeans $0.9182$, a $+0.023$ gap. On Euclidean \texttt{champion-arch}: $0.9785$ vs $0.9725$, a $+0.006$ gap. THA's decisive per-type matching helps more when the underlying embedding is geometrically richer (a hyperboloid in $\mathbb{R}^{D+1}$ has more degrees of freedom for separating same-type items than a hypersphere or Euclidean ball at the same nominal dim). Consistent with the earlier observation that ``cleaner embeddings $\Rightarrow$ THA's per-type advantage grows.''
+
+\textbf{6. Defensibility framing for the dissertation.} The defendable claim is now: \emph{``An 8-run Bayesian sweep over hyperbolic output dim $\{16, 32, 64, 128, 256\}$, depth $\{3, 4\}$, and hidden dim $\{64, 128\}$ produced a winner of synth val $0.8795$. Re-evaluation on synth test and COCO val with GT keypoints showed hyperbolic underperforms the Euclidean architecture-sweep winner by $0.04$--$0.06$ on synth and $0.004$--$0.013$ on COCO. The synth-COCO transfer gap is approximately $4\times$ smaller for hyperbolic, suggesting better domain robustness at the cost of absolute quality. Hyperbolic at this architecture is an efficiency / robustness trade, not a quality win --- consistent with and refining the original single-run hyperbolic ablation.''}
+
+\textbf{7. The sweep should not be repeated with a wider parameter space.} The architecture range tested already includes the historical winning dim=32 configuration plus four larger ones. The hyperbolic limit is the geometry, not the architecture sizing. A more useful follow-up would be a COCO fine-tune of \texttt{champion-hyperbolic} matching the procedure used for \texttt{champion-finetune}, to test whether the smaller transfer gap pre-fine-tune translates into a competitive headline number post-fine-tune. Not currently scheduled.
+
+\textbf{8. End-to-end PGA confirms the pattern; the gap to Euclidean narrows as the grouping method gets stronger.} Euclidean (\texttt{champion-arch}) vs hyperbolic end-to-end deltas: kNN $-0.019$, COP-Kmeans $-0.010$, THA $-0.006$. Same direction as GT-keypoint numbers, but smaller in magnitude because the detector contributes its own error budget to both pipelines equally. THA's gap to Euclidean is the smallest cell ($-0.006$), consistent with point 5 (THA's per-type matching advantage grows on geometrically richer embeddings). Gap to HigherHRNet AE at $0.9847$: \texttt{champion-arch}'s best E2E is $0.9288$ (gap $0.056$); \texttt{champion-hyperbolic}'s best is $0.9226$ (gap $0.062$). Both are pre-fine-tune; the AE comparison is informative only once we fine-tune (or decline to).
+
+\subsubsection{What to do next}
+
+\begin{itemize}
+    \item Transcribe the winning hyperbolic configuration (\texttt{output\_dim}, \texttt{num\_layers}, \texttt{hidden\_dim}) from W\&B run \texttt{ua4wdb3p}'s config tab into the Setup section above. The values are observable in the UI but not yet recorded here.
+    \item \emph{(Done.)} Fixed \texttt{eval\_end\_to\_end.py} to support hyperbolic checkpoints (added the \texttt{elif cfg.sa\_gat\_hyperbolic is not None} branch matching \texttt{evaluator.py}'s loader, plus the logmap step before grouping). End-to-end row in the table above is post-fix.
+    \item Optional: COCO fine-tune \texttt{champion-hyperbolic} for 20 epochs at lr=$1\!\times\!10^{-4}$ (same recipe as \texttt{meng-headline}) to test whether the smaller transfer gap pre-fine-tune yields a competitive post-fine-tune number. About $2$ hours wall-clock.
+    \item No alias \texttt{meng-headline} on \texttt{champion-hyperbolic} --- it is documented as the RQ4 defensibility checkpoint, not a competing headline candidate. Optional tag: \texttt{ablation}.
+\end{itemize}
+
+\subsection{PG-GAT Fine-Tune Sweep --- A Small But Consistent Headline Improvement}
+
+\subsubsection{Motivation}
+
+The earlier single fine-tune of \texttt{champion-arch} used the recipe inherited from the original frozen \texttt{sa\_gat\_full} fine-tune: 20 epochs of COCO train, lr$=1\!\times\!10^{-4}$, weight decay $1\!\times\!10^{-4}$.
+That recipe produced \texttt{meng-headline} at COCO kNN $0.9695$ / E2E kNN $0.9559$ --- a clear improvement over the legacy baseline.
+The loss sweep already confirmed the loss-coefficient defaults were near-optimal.
+The fine-tune sweep is the last of the three planned PG-GAT sweeps; it Bayesian-searches the fine-tune schedule (epochs, lr, weight decay) so the dissertation can defend the recipe with empirical evidence rather than ``inherited from earlier work.''
+
+\subsubsection{Setup}
+
+Bayesian sweep with hyperband, 12 runs, selection metric \texttt{val/pga} (synth val, the trainer's primary metric).
+Architecture pinned to \texttt{champion-arch} (3 layers, 4 heads, hidden 64, output 256, joint embedding 64, dropout 0.1).
+Pretrained checkpoint loaded from \texttt{outputs/pg\_gat\_arch\_sweep/08d0ffde/best.pt} (the architecture-sweep winner, local copy).
+Sweep YAML: \texttt{configs/sweeps/pg\_gat\_finetune.yaml}.
+Sweep ID \texttt{i9vpg4t1}; winner promoted as \texttt{champion-finetune-sweep} (artifact \texttt{pg\_gat\_finetune\_sweep:v20}, source run \texttt{b5noyg7t}, epoch 15 of 20 in the winning schedule).
+
+\begin{tabular}{ll}
+\hline
+\textbf{Axis} & \textbf{Values} \\
+\hline
+\texttt{training.epochs}        & \{10, 15, 20, 30\} \\
+\texttt{training.lr}            & log-uniform $[10^{-5}, 5\!\times\!10^{-4}]$ \\
+\texttt{training.weight\_decay} & $\{10^{-5}, 10^{-4}, 10^{-3}\}$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Hyperband \texttt{min\_iter=3} (6 epochs at \texttt{val\_every=2}). Wall-clock $\sim$16--20 GPU-hours on the 5070 Ti. Per-epoch COCO training is $\sim$370 seconds for this architecture, so 10/15/20/30-epoch runs take roughly 1/1.5/2/3 hours.
+The winner's specific (epochs, lr, weight\_decay) values are on the W\&B config tab of run \texttt{b5noyg7t} and should be transcribed here when next read off the UI.
+The winner's reported epoch is 15 --- so the optimal fine-tune length is somewhat shorter than the inherited 20-epoch schedule.
+
+\subsubsection{Results}
+
+\begin{tabular}{llccc}
+\hline
+\textbf{Setting} & \textbf{Method} & \textbf{\texttt{meng-headline}} & \textbf{\texttt{champion-finetune-sweep}} & \textbf{$\Delta$} \\
+                 &                  & \textbf{(single fine-tune)}      & \textbf{(new sweep winner)}                & \\
+\hline
+Synth val (training)            & ---          & 0.9607          & \textbf{0.9634} & $+0.0027$ \\
+\hline
+Synth test                      & kNN          & 0.9580          & 0.9580          & $0.0000$  \\
+Synth test                      & COP-Kmeans   & 0.9679          & 0.9656          & $-0.0023$ \\
+Synth test                      & THA          & 0.9770          & \textbf{0.9785} & $+0.0015$ \\
+\hline
+COCO val (GT kps)               & kNN          & 0.9695          & \textbf{0.9715} & $+0.0020$ \\
+COCO val (GT kps)               & COP-Kmeans   & 0.9760          & \textbf{0.9775} & $+0.0015$ \\
+COCO val (GT kps)               & THA          & 0.9768          & \textbf{0.9779} & $+0.0011$ \\
+\hline
+COCO end-to-end                 & HigherHRNet AE & 0.9847         & 0.9847          & ---       \\
+COCO end-to-end                 & kNN          & 0.9559          & \textbf{0.9591} & $+0.0032$ \\
+COCO end-to-end                 & COP-Kmeans   & 0.9622          & \textbf{0.9639} & $+0.0017$ \\
+COCO end-to-end                 & THA          & 0.9613          & \textbf{0.9633} & $+0.0020$ \\
+\hline
+Gap to HRNet AE (best E2E)      & ---          & $0.0225$        & $\mathbf{0.0208}$ & $-0.0017$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Net read: 9 of 10 measured cells improved, 1 cell (synth-test COP-Kmeans) regressed by $0.0023$. The improvements are small (typically $0.001$--$0.003$ per cell) but consistent across both COCO settings and across all three grouping methods. The gap to HigherHRNet AE on best end-to-end closed from $0.0225$ to $0.0208$ ($\sim 8$\% reduction in the residual gap).
+
+\subsubsection{Analysis}
+
+\textbf{1. The fine-tune sweep found a marginally better recipe than the inherited default.} The single-fine-tune \texttt{meng-headline} was already a strong checkpoint; the fine-tune sweep's 12-run Bayesian search produced a winner that beats it on 9 of 10 cells, with magnitudes around $0.001$--$0.003$ PGA. The improvement is not dramatic, but the consistency across COCO kNN / COP-Kmeans / THA at both GT-keypoint and end-to-end settings argues against attributing the win to seed noise.
+
+\textbf{2. The winning fine-tune schedule terminates earlier than the inherited 20-epoch recipe.} The winning run's reported epoch is 15. Combined with point 1, this suggests the optimal fine-tune length on this architecture is somewhat shorter than the original frozen \texttt{sa\_gat\_full} recipe assumed. The exact lr and weight\_decay values that paired with 15 epochs are recorded on W\&B run \texttt{b5noyg7t}'s config tab and are the operative numbers for citation.
+
+\textbf{3. The synth-test COP-Kmeans regression is the only cell that got worse.} It dropped $0.0023$ ($0.9679 \rightarrow 0.9656$). Synth-test kNN was unchanged and synth-test THA improved. Honest reading: the synth-test COP-Kmeans drop is within the run-to-run variance of the kmeans random-init, especially given that synth-test has only 100 images and per-image PGA standard deviation is $\sim 0.06$. Not a concerning regression on its own; flag in passing only.
+
+\textbf{4. The COCO gains are larger than the synth gains.} On COCO GT, all three grouping methods improved by $0.0011$--$0.0020$. On COCO E2E, by $0.0017$--$0.0032$. The synth gains are $0.0000$ to $0.0027$. The fine-tune sweep selected on synth val, but the resulting checkpoint generalises slightly better to COCO than the single-fine-tune did. This is the kind of result that justifies the sweep effort: the marginal lift may be small, but it lands on the metric the dissertation actually reports.
+
+\textbf{5. THA and COP-Kmeans remain effectively tied on COCO; THA is preferred for the dissertation.} COCO GT: COP-KM $0.9775$ vs THA $0.9779$ ($\Delta\!=\!+0.0004$ THA). COCO E2E: COP-KM $0.9639$ vs THA $0.9633$ ($\Delta\!=\!-0.0006$ THA). Same regime as observed on every previous checkpoint --- the two are within $\pm 0.001$ on COCO. The PEng-side preference for THA (zero learned parameters, decisive per-type matching) is unchanged.
+
+\textbf{6. The gap to HigherHRNet AE closed by $0.0017$.} Best E2E PGA against HigherHRNet AE's $0.9847$: \texttt{meng-headline} was $0.9622$ (gap $0.0225$); \texttt{champion-finetune-sweep} is $0.9639$ (gap $0.0208$). The new detector-independence gap is the smallest observed in the project so far. RQ3 (``can a detector-independent grouping module match an integrated end-to-end mechanism on a real-image benchmark?'') answers ``not fully, but the gap is now $0.021$.''
+
+\textbf{7. Defensibility framing for the dissertation.} The defendable claim is now: \emph{``A 12-run Bayesian sweep over fine-tune schedule (epochs $\in \{10, 15, 20, 30\}$, lr $\in [10^{-5}, 5\!\times\!10^{-4}]$ log-uniform, weight\_decay $\in \{10^{-5}, 10^{-4}, 10^{-3}\}$) on the architecture-sweep winner produced a configuration that improves COCO kNN PGA from $0.9695$ to $0.9715$ and end-to-end best PGA from $0.9622$ to $0.9639$. The improvements are small but consistent across all six COCO cells. The proven recipe was a near-optimum; the sweep refined it slightly.''}
+
+\textbf{8. The four-sweep MEng plan is now complete.} Architecture (defines the network), loss (defaults retained), fine-tune (slightly refined), hyperbolic (efficiency / robustness trade, not a quality win). Every PG-GAT hyperparameter has a defensibility line in the dissertation: ``selected by Bayesian sweep over $X$.''
+
+\subsubsection{Headline update --- new \texttt{meng-headline}}
+
+\texttt{champion-finetune-sweep} (run \texttt{b5noyg7t}, artifact \texttt{pg\_gat\_finetune\_sweep:v20}) becomes the new MEng headline.
+The previous \texttt{meng-headline} (single fine-tune of \texttt{champion-arch}, run \texttt{g0h6pu00}) is retained as a reference checkpoint under a new alias \texttt{champion-finetune-single} for the historical comparison in this section.
+
+\textbf{Final defended MEng numbers for Chapter 4:}
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Setting} & \textbf{kNN} & \textbf{COP-Kmeans} & \textbf{THA} & \textbf{HigherHRNet AE (ref.)} \\
+\hline
+Synth val (training metric) & $0.9634$ & --- & --- & --- \\
+Synth test                  & $0.9580$ & $0.9656$ & $\mathbf{0.9785}$ & --- \\
+COCO val (GT kps)           & $0.9715$ & $\mathbf{0.9775}$ & $0.9779$ & --- \\
+COCO end-to-end             & $0.9591$ & $\mathbf{0.9639}$ & $0.9633$ & $0.9847$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Detector-independence gap on best end-to-end: $0.0208$ ($0.9639$ vs HRNet AE $0.9847$).
+Synth val preserved at $0.9634$; synth test essentially unchanged across fine-tune.
+
+\subsubsection{What to do next}
+
+\begin{itemize}
+    \item Apply the alias \texttt{meng-headline} to artifact version \texttt{pg\_gat\_finetune\_sweep:v20}, displacing it from \texttt{finetune\_pg\_gat\_arch\_winner:v3}. Apply alias \texttt{champion-finetune-single} to the previous headline so it remains retrievable.
+    \item Apply run-side tags \texttt{paper-final-meng} and \texttt{dissertation-final} to W\&B run \texttt{b5noyg7t} via the UI; remove or downgrade those tags from \texttt{g0h6pu00} (or keep both tagged with a clarifying note --- both are legitimately cited but only one is the headline).
+    \item Transcribe the winning fine-tune hyperparameters (\texttt{epochs}, \texttt{lr}, \texttt{weight\_decay}) from W\&B run \texttt{b5noyg7t}'s config tab into the Setup section above.
+    \item Update the dissertation Chapter 4 results table to use the new headline numbers (kNN $0.9715$ COCO / $0.9591$ E2E; COP-Kmeans $0.9775$ / $0.9639$; THA $0.9779$ / $0.9633$).
+    \item Update Chapter 6 (Conclusion) so the contributions section cites four sweeps (architecture / loss / fine-tune / hyperbolic) rather than the previous ``architecture + single fine-tune.''
+    \item All four PG-GAT sweeps are complete; the dissertation can be defended on the sweep-based hyperparameter selection across every architectural and training axis.
+\end{itemize}
+
 

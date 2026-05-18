@@ -1,0 +1,55 @@
+# PG-GAT hyperbolic dim sweep --- defends RQ4 (Euclidean vs hyperbolic).
+#
+# The existing single hyperbolic dim=32 run (from the original ablation)
+# beat the matched Euclidean dim=128 baseline on synth-only metrics, but the
+# advantage disappeared after COCO fine-tuning. The dissertation needs a
+# defendable answer to "what hyperbolic dim is best, and how does it compare
+# to Euclidean champion-arch (output_dim=256)?" --- this sweep is that
+# answer.
+#
+# Architecture mirrors champion-arch otherwise; the sweep varies the output
+# dimension (the tangent-vector dim; the hyperboloid lives in R^(dim+1))
+# and a small ablation over num_layers and hidden_dim to confirm the
+# narrow-hidden / wide-output pattern still holds in hyperbolic space.
+#
+# Selection metric: val/pga (synth val). The COCO and end-to-end numbers
+# come from re-evaluating the winner via eval_by_run after the sweep.
+#
+# Budget: 8 runs, hyperband min_iter=5 (epoch 25, halfway), 50 epochs synth.
+# Per-epoch wall-clock $\sim$5-10s on synth depending on output_dim;
+# estimated total wall-clock $\sim$1-2 hours on the 5070 Ti.
+
+project: multiperson-pose-grouping
+entity:  deanmills
+program: trainer.py
+method: bayes
+metric:
+  name: val/pga
+  goal: maximize
+
+parameters:
+  sa_gat_hyperbolic__output_dim:
+    values: [16, 32, 64, 128, 256]      # the RQ4 axis
+  sa_gat_hyperbolic__num_layers:
+    values: [3, 4]                       # confirm depth=3 still wins
+  sa_gat_hyperbolic__hidden_dim:
+    values: [64, 128]                    # confirm narrow-hidden still wins
+
+early_terminate:
+  type: hyperband
+  min_iter: 5
+  eta: 2
+
+run_cap: 8
+
+command:
+  - ${env}
+  - python
+  - ${program}
+  - --config=configs/train_sa_gat_hyperbolic_sweep_base.yaml
+  - --name=pg_gat_hyperbolic_sweep
+  - --set=wandb.group=pg-gat-hyperbolic-sweep
+  - --tag=sweep
+  - --tag=hyperbolic
+  - --tag=meng-paper
+  - ${args}

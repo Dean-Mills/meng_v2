@@ -1,0 +1,54 @@
+name: "train_sa_gat_hyperbolic_sweep_base"
+description: "Base config for the hyperbolic dim sweep. Architecture mirrors champion-arch (3L/4H/64-256/64emb/0.1drop); the output dimension and a couple of architectural axes vary across the sweep. Hyperbolic-specific contrastive_margin=2.0 (Lorentz distances scale differently than Euclidean)."
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 64
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128                # ignored on the hyperbolic path; kept for cfg compat
+  num_layers: 3
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+
+sa_gat_hyperbolic:
+  num_joint_types: 17
+  joint_embedding_dim: 64
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128                # sweep overrides
+  num_layers: 3
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  use_depth: false
+  use_type_pair_attention: true
+  use_position_encoding: true
+  use_repulsion_heads: true
+  n_repulsion_heads: 1
+
+loss:
+  contrastive_margin: 2.0          # hyperbolic-specific (Lorentz distance scale)
+
+training:
+  virtual_dir:   data/virtual
+  batch_size:    4
+  num_workers:   4
+  lr:            1e-3
+  lr_min:        1e-5
+  weight_decay:  1e-4
+  epochs:        50
+  val_every:     5
+  save_best:     true
+
+wandb:
+  project:       "multiperson-pose-grouping"
+  entity:        "deanmills"
+  group:         "pg-gat-hyperbolic-sweep"
+  tags:          ["hyperbolic"]
+  mode:          "online"
+  log_artifacts: true
+  log_code:      true

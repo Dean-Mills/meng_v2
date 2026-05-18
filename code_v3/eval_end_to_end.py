@@ -284,7 +284,14 @@ def evaluate(
     cfg = ExperimentConfig(**ckpt["config"])
 
     needs_mobilenet = False
-    if cfg.sa_gat_v2 is not None:
+    is_hyperbolic = False
+    if cfg.sa_gat_hyperbolic is not None:
+        from sa_gat_hyperbolic import SAGATHyperbolicEmbedding
+        gat = SAGATHyperbolicEmbedding(cfg.sa_gat_hyperbolic).to(device)
+        embedding_dim = cfg.sa_gat_hyperbolic.output_dim
+        use_depth = cfg.sa_gat_hyperbolic.use_depth
+        is_hyperbolic = True
+    elif cfg.sa_gat_v2 is not None:
         from sa_gat_v2 import SAGATV2Embedding
         gat = SAGATV2Embedding(cfg.sa_gat_v2).to(device)
         embedding_dim = cfg.sa_gat_v2.output_dim
@@ -442,6 +449,15 @@ def evaluate(
                 graph.features = feats_at_kps.to(device)
 
             embeddings = gat(graph)
+
+            # Hyperbolic models output points on the Lorentz hyperboloid;
+            # logmap back to the tangent space at the origin so the
+            # Euclidean-based grouping methods (kNN, COP-Kmeans, THA) operate
+            # on comparable vectors. Drop the zero time component, L2-normalise.
+            if is_hyperbolic:
+                import torch.nn.functional as F
+                logmap = gat.manifold.logmap0(embeddings)
+                embeddings = F.normalize(logmap[..., 1:], p=2, dim=-1)
 
             # Skip if fewer matched keypoints than people
             if len(matched_det_idx) < n_gt_people:
