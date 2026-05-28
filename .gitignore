@@ -189,3 +189,22 @@ wandb/
 /code_v3/wandb/
 artifacts/
 /code_v3/artifacts/
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.synctex.gz
+*.toc
+*.nav
+*.snm
+*.vrb
+*.bcf
+*.run.xml
+*-blx.bib
