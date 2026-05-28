@@ -34,3 +34,13 @@ training:
   val_every:     5
   save_dir:      outputs/checkpoints/partition
   save_best:     true
+
+wandb:
+  project:       "multiperson-pose-grouping"
+  entity:        "deanmills"
+  group:         "meng-rerun-learned-heads"
+  tags:          ["ablation", "meng-paper", "dissertation-final", "meng-rerun", "negative-result"]
+  notes:         "Graph Partitioning learned head - failed; re-run for W&B."
+  mode:          "online"
+  log_artifacts: true
+  log_code:      true

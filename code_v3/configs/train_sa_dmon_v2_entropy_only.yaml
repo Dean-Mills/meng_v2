@@ -42,3 +42,13 @@ training:
   val_every:     5
   save_dir:      outputs/checkpoints/sa_dmon_v2_entropy_only
   save_best:     true
+
+wandb:
+  project:       "multiperson-pose-grouping"
+  entity:        "deanmills"
+  group:         "meng-rerun-sa-dmon"
+  tags:          ["ablation", "meng-paper", "dissertation-final", "meng-rerun", "negative-result"]
+  notes:         "SA-DMoN v2 entropy type loss only - Exp v2c re-run."
+  mode:          "online"
+  log_artifacts: true
+  log_code:      true

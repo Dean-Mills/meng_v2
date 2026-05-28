@@ -43,3 +43,13 @@ training:
   epochs:        50
   val_every:     5
   save_best:     true
+
+wandb:
+  project:       "multiperson-pose-grouping"
+  entity:        "deanmills"
+  group:         "meng-rerun-hyperbolic"
+  tags:          ["ablation", "meng-paper", "dissertation-final", "meng-rerun"]
+  notes:         "Hyperbolic PG-GAT dim=32 (H2) - single-run ablation re-run."
+  mode:          "online"
+  log_artifacts: true
+  log_code:      true

@@ -47,3 +47,13 @@ training:
   val_every:     5
   save_dir:      outputs/checkpoints/sa_gat_k_head
   save_best:     true
+
+wandb:
+  project:       "multiperson-pose-grouping"
+  entity:        "deanmills"
+  group:         "meng-rerun-k-head"
+  tags:          ["ablation", "meng-paper", "dissertation-final", "meng-rerun", "negative-result"]
+  notes:         "K-head joint training (Attempt 2) - corrupts embeddings; re-run for W&B."
+  mode:          "online"
+  log_artifacts: true
+  log_code:      true

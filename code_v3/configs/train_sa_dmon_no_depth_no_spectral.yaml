@@ -39,3 +39,13 @@ training:
   val_every:     5
   save_dir:      outputs/checkpoints/sa_dmon_no_depth_no_spectral
   save_best:     true
+
+wandb:
+  project:       "multiperson-pose-grouping"
+  entity:        "deanmills"
+  group:         "meng-rerun-sa-dmon"
+  tags:          ["ablation", "meng-paper", "dissertation-final", "meng-rerun", "negative-result"]
+  notes:         "SA-DMoN v1 spectral removed - Exp 8 re-run."
+  mode:          "online"
+  log_artifacts: true
+  log_code:      true

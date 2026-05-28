@@ -49,3 +49,13 @@ training:
   epochs:                30
   val_every:             2
   save_best:             true
+
+wandb:
+  project:       "multiperson-pose-grouping"
+  entity:        "deanmills"
+  group:         "meng-rerun-v2"
+  tags:          ["ablation", "meng-paper", "dissertation-final", "meng-rerun", "negative-result"]
+  notes:         "PG-GAT v2 (MobileNet features, 50 epochs) - re-run for W&B."
+  mode:          "online"
+  log_artifacts: true
+  log_code:      true

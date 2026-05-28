@@ -48,6 +48,13 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--device", type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--wandb-project", type=str, default=None,
+                        help="W&B project. If unset, wandb logging is disabled.")
+    parser.add_argument("--wandb-entity", type=str, default="deanmills")
+    parser.add_argument("--wandb-group", type=str, default=None)
+    parser.add_argument("--wandb-tags", type=str, default="",
+                        help="Comma-separated list of tags.")
+    parser.add_argument("--wandb-notes", type=str, default=None)
     args = parser.parse_args()
 
     device = args.device
@@ -129,6 +136,31 @@ def main():
     print(f"Epochs:  {args.epochs}")
     print(f"Save dir: {save_dir}\n")
 
+    # ── W&B (optional) ────────────────────────────────────────────────
+    wandb_run = None
+    if args.wandb_project:
+        import wandb
+        tags = [t.strip() for t in args.wandb_tags.split(",") if t.strip()]
+        wandb_run = wandb.init(
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            name=run_id,
+            group=args.wandb_group,
+            tags=tags,
+            notes=args.wandb_notes,
+            config={
+                "run_id":        run_id,
+                "checkpoint":    str(args.checkpoint),
+                "epochs":        args.epochs,
+                "lr":            args.lr,
+                "embedding_dim": embedding_dim,
+                "training_data": "coco" if args.coco_train_dir else "virtual",
+                "config":        ckpt["config"],
+            },
+            save_code=True,
+        )
+        print(f"W&B:     {wandb_run.url}\n")
+
     # ── Training ──────────────────────────────────────────────────────
     best_val_acc = 0.0
 
@@ -205,10 +237,33 @@ def main():
                 }, save_dir / "best.pt")
                 log += "  ← best"
 
+                if wandb_run is not None:
+                    import wandb
+                    artifact = wandb.Artifact(
+                        name=args.name, type="model",
+                        metadata={"epoch": epoch, "val_k_accuracy": exact_acc},
+                    )
+                    artifact.add_file(str(save_dir / "best.pt"))
+                    wandb_run.log_artifact(artifact, aliases=["latest"])
+
             print(log)
+
+            if wandb_run is not None:
+                wandb_run.log({
+                    "epoch":          epoch,
+                    "train/loss":     avg_loss,
+                    "val/exact":      exact_acc,
+                    "val/off_by_one": off1_acc,
+                    "val/best_exact": best_val_acc,
+                }, step=epoch)
         else:
             print(f"Epoch {epoch:3d}/{args.epochs} | "
                   f"loss {avg_loss:.4f} | {elapsed:.1f}s")
+            if wandb_run is not None:
+                wandb_run.log({
+                    "epoch":      epoch,
+                    "train/loss": avg_loss,
+                }, step=epoch)
 
     # Save final
     torch.save({
@@ -222,6 +277,12 @@ def main():
 
     print(f"\nTraining complete. Best val K accuracy: {best_val_acc:.3f}")
     print(f"Saved to {save_dir}")
+
+    if wandb_run is not None:
+        wandb_run.summary["best_val_k_exact"] = best_val_acc
+        wandb_run.summary["total_epochs"]     = args.epochs
+        wandb_run.summary["save_dir"]         = str(save_dir)
+        wandb_run.finish()
 
 
 if __name__ == "__main__":

@@ -60,6 +60,17 @@ def predict_knn(embeddings: torch.Tensor, k: int) -> torch.Tensor:
     return torch.tensor(labels, device=embeddings.device, dtype=torch.long)
 
 
+def predict_dec(head, embeddings: torch.Tensor, k: int) -> torch.Tensor:
+    """Run DEC head, return [N] label tensor (argmax of soft assignment q).
+
+    Centres are k-means++ initialised fresh per scene; calling DEC.forward
+    directly would reuse the stale per-scene cache and break across batches.
+    """
+    head.initialise_centres(embeddings, k)
+    q = head.soft_assignment(embeddings)
+    return q.argmax(dim=1)
+
+
 def predict_slot(
     head,
     embeddings: torch.Tensor,

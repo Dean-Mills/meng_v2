@@ -27,3 +27,13 @@ training:
   val_every:     5
   save_dir:      outputs/checkpoints/knn_only
   save_best:     true
+
+wandb:
+  project:       "multiperson-pose-grouping"
+  entity:        "deanmills"
+  group:         "meng-rerun-baseline"
+  tags:          ["ablation", "meng-paper", "dissertation-final", "meng-rerun"]
+  notes:         "Baseline GAT (depth=on) - synth+COCO Exp 1/2 re-run for W&B."
+  mode:          "online"
+  log_artifacts: true
+  log_code:      true

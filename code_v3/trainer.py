@@ -38,6 +38,11 @@ from virtual_adapter import VirtualAdapter
 
 def _build_head(cfg: ExperimentConfig, embedding_dim: int):
     """Instantiate the grouping head from config."""
+    if cfg.dec is not None:
+        from dec import DEC
+        return DEC(cfg.dec, embedding_dim=embedding_dim,
+                   update_interval=cfg.dec.update_interval)
+
     if cfg.slot_attention is not None:
         from slot_attention import SlotAttention
         return SlotAttention(cfg.slot_attention, embedding_dim=embedding_dim)
@@ -83,6 +88,9 @@ def _build_head(cfg: ExperimentConfig, embedding_dim: int):
 
 def _build_head_loss(cfg: ExperimentConfig):
     """Instantiate the head loss from config."""
+    if cfg.dec is not None:
+        from losses import DECLoss
+        return DECLoss(cfg.loss)
     if cfg.slot_attention is not None:
         return SlotAttentionLoss(cfg.loss)
     if cfg.graph_partitioning is not None:
@@ -115,6 +123,16 @@ def _head_forward(head, embeddings, graph):
     """
     if head is None:
         return None, None
+
+    from dec import DEC
+    if isinstance(head, DEC):
+        k = int(graph.num_people)
+        # Re-init centres fresh per scene; computing p from the current q
+        # avoids DEC's stale per-scene cache mismatching N across batches.
+        head.initialise_centres(embeddings, k)
+        q = head.soft_assignment(embeddings)
+        p = head.target_distribution(q.detach())
+        return (q, p), (q, p, graph.person_labels)
 
     from slot_attention import SlotAttention
     from graph_partitioning import EdgeClassifier
@@ -339,6 +357,7 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
         print(f"Loaded pretrained weights from {tc.pretrained}")
 
     head_name = (
+        "dec"                if cfg.dec                 is not None else
         "slot_attention"     if cfg.slot_attention     is not None else
         "graph_partitioning" if cfg.graph_partitioning is not None else
         "dmon"               if cfg.dmon               is not None else
@@ -573,7 +592,7 @@ def _validate(gat, head, head_name, loader, preprocessor,
               gat_loss_fn, head_loss_fn, device, cfg,
               use_cached_features: bool = False) -> float:
     """Run validation, return mean PGA."""
-    from evaluator import compute_pga, predict_knn, predict_slot, predict_partition, predict_dmon, predict_sa_dmon, predict_scot, predict_residual_scot, predict_adaptive_scot, predict_unbalanced_scot, predict_dustbin_scot
+    from evaluator import compute_pga, predict_knn, predict_dec, predict_slot, predict_partition, predict_dmon, predict_sa_dmon, predict_scot, predict_residual_scot, predict_adaptive_scot, predict_unbalanced_scot, predict_dustbin_scot
 
     gat.eval()
     if head is not None:
@@ -622,7 +641,9 @@ def _validate(gat, head, head_name, loader, preprocessor,
                     embeddings = logmap[..., 1:]
                     embeddings = F.normalize(embeddings, p=2, dim=-1)
 
-                if head_name == "slot_attention":
+                if head_name == "dec":
+                    pred_labels = predict_dec(head, embeddings, k)
+                elif head_name == "slot_attention":
                     pred_labels = predict_slot(head, embeddings, k)
                 elif head_name == "graph_partitioning":
                     pred_labels = predict_partition(

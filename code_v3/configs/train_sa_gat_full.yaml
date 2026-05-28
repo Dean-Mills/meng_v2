@@ -45,3 +45,13 @@ training:
   val_every:     5
   save_dir:      outputs/checkpoints/sa_gat_full
   save_best:     true
+
+wandb:
+  project:       "multiperson-pose-grouping"
+  entity:        "deanmills"
+  group:         "meng-rerun-pggat-ablations"
+  tags:          ["ablation", "meng-paper", "dissertation-final", "meng-rerun"]
+  notes:         "PG-GAT full (all three modifications) re-run for W&B."
+  mode:          "online"
+  log_artifacts: true
+  log_code:      true

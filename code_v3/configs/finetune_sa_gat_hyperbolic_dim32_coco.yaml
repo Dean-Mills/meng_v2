@@ -46,3 +46,13 @@ training:
   epochs:          20
   val_every:       2
   save_best:       true
+
+wandb:
+  project:       "multiperson-pose-grouping"
+  entity:        "deanmills"
+  group:         "meng-rerun-hyperbolic"
+  tags:          ["finetune", "meng-paper", "dissertation-final", "meng-rerun"]
+  notes:         "Hyperbolic dim=32 COCO fine-tune (Option B) - re-run for W&B."
+  mode:          "online"
+  log_artifacts: true
+  log_code:      true

@@ -38,3 +38,13 @@ training:
   epochs:        50
   val_every:     5
   save_best:     true
+
+wandb:
+  project:       "multiperson-pose-grouping"
+  entity:        "deanmills"
+  group:         "meng-rerun-trigat"
+  tags:          ["ablation", "meng-paper", "dissertation-final", "meng-rerun", "negative-result"]
+  notes:         "TriGAT triplet primitive (negative result) - re-run for W&B."
+  mode:          "online"
+  log_artifacts: true
+  log_code:      true

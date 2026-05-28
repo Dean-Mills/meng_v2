@@ -226,6 +226,66 @@ class SlotAttentionLoss(nn.Module):
         }
 
 
+class DECLoss(nn.Module):
+    """
+    KL-divergence loss for Deep Embedded Clustering.
+
+    DEC is unsupervised. The head provides:
+      - q: soft assignments (Student's t over distance to cluster centres)
+      - p: a sharpened target distribution refreshed every `update_interval`
+           steps by the head itself
+
+    The loss pushes q toward p, encouraging higher-confidence assignments
+    without ever seeing ground-truth labels. An accuracy metric is logged
+    via Hungarian matching against `person_labels` for monitoring only;
+    the matching has no effect on the gradient.
+
+    Args:
+        config: LossConfig — uses dec_weight.
+    """
+
+    def __init__(self, config: LossConfig):
+        super().__init__()
+        self.weight = config.dec_weight
+
+    def forward(
+        self,
+        q: torch.Tensor,
+        p: torch.Tensor,
+        person_labels: torch.Tensor,
+    ) -> Dict[str, Any]:
+        eps  = 1e-9
+        loss = (p * (torch.log(p + eps) - torch.log(q + eps))).sum(dim=1).mean()
+        loss = loss * self.weight
+
+        with torch.no_grad():
+            unique = torch.unique(person_labels)
+            num_people = len(unique)
+            label_map = {v.item(): i for i, v in enumerate(unique)}
+            mapped = torch.tensor(
+                [label_map[l.item()] for l in person_labels],
+                device=q.device, dtype=torch.long,
+            )
+            k = q.size(1)
+            cost = torch.zeros(num_people, k, device=q.device)
+            for j in range(num_people):
+                mask = (mapped == j).float()
+                cost[j] = -(q * mask.unsqueeze(1)).sum(dim=0)
+            from scipy.optimize import linear_sum_assignment
+            row, col = linear_sum_assignment(cost.cpu().numpy())
+            cluster_for_person = torch.zeros(num_people, dtype=torch.long, device=q.device)
+            for r, c in zip(row, col):
+                cluster_for_person[r] = c
+            targets  = cluster_for_person[mapped]
+            pred     = q.argmax(dim=1)
+            accuracy = (pred == targets).float().mean().item()
+
+        return {
+            "total_loss": loss,
+            "accuracy":   accuracy,
+        }
+
+
 class GraphPartitioningLoss(nn.Module):
     """
     Loss for graph partitioning grouping head.

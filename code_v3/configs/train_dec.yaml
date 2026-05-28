@@ -1,5 +1,5 @@
-name: "train_slot"
-description: "GAT + slot attention trained end-to-end on virtual data"
+name: "train_dec"
+description: "GAT + DEC (Deep Embedded Clustering) end-to-end on virtual data, no depth. Per-scene k-means++ cluster-centre init; KL(p || q) sharpening loss. Documented failed learned head."
 
 gat:
   num_joint_types: 17
@@ -12,14 +12,16 @@ gat:
   dropout: 0.1
   use_layer_norm: true
   l2_normalize: true
+  use_depth: false
 
-slot_attention:
-  num_iterations: 7
-  slot_weight:    1.0
+dec:
+  n_clusters:      10     # placeholder; DEC.forward(emb, k) re-inits centres per scene with the scene's k
+  alpha:           1.0
+  update_interval: 100
 
 loss:
   contrastive_margin: 0.5
-  slot_weight:        1.0
+  dec_weight:         1.0
 
 training:
   virtual_dir:   data/virtual
@@ -30,7 +32,7 @@ training:
   weight_decay:  1e-4
   epochs:        50
   val_every:     5
-  save_dir:      outputs/checkpoints/slot
+  save_dir:      outputs/checkpoints/dec
   save_best:     true
 
 wandb:
@@ -38,7 +40,7 @@ wandb:
   entity:        "deanmills"
   group:         "meng-rerun-learned-heads"
   tags:          ["ablation", "meng-paper", "dissertation-final", "meng-rerun", "negative-result"]
-  notes:         "Slot Attention learned head - failed; re-run for W&B."
+  notes:         "DEC learned head on real synth data - first failed learned head. KL(p || q) is unsupervised; expected to match kNN baseline because the sharpening cannot fix wrong assignments."
   mode:          "online"
   log_artifacts: true
   log_code:      true
