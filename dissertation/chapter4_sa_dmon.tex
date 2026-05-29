@@ -1,4 +1,118 @@
-\section{SA-DMoN --- Ten Experiments}
+\section{SA-DMoN}
 \label{sec_res_sadmon}
 
-Full results table for all ten SA-DMoN variants (v1 with learnable / clamped / median $\sigma$, v1 with $\lambda$ sweeps, v1 without spectral term, v2 with feature-adjacency variants, v2 with entropy-type-only regularisation, v2 full). Every variant plateaus in the 0.77--0.81 synthetic range. Root cause analysis is deferred to Chapter~\ref{chap_5}, but the empirical picture is: no SA-DMoN formulation closes the gap to kNN.
+This section reports the results for the eleven SA-DMoN variants of Section~\ref{sec_meth_sadmon}:
+the vanilla DMoN baseline,
+five v1 configurations that parameterise the spatial-bandwidth $\sigma$ of the skeleton-aware null,
+four v2 configurations that decouple the spectral-loss adjacency from the message-passing adjacency and replace the supervised type loss with an entropy formulation,
+and a no-spectral diagnostic that removes the modularity term entirely.
+The collective result motivates abandoning modularity-driven heads as a research direction:
+every SA-DMoN configuration plateaus inside a $0.77$--$0.79$ band on synthetic validation,
+well below the no-depth baseline of $0.8783$.
+No bandwidth schedule, no null-model modification, and no type-loss reformulation moves the result above this plateau.
+
+\subsection{Setup}
+\label{sec_res_sadmon_setup}
+
+All eleven configurations share the GAT backbone of Section~\ref{sec_meth_baseline}
+and the optimiser and schedule of Section~\ref{sec_meth_baseline_training};
+the only differences are the head loss and, in v2, the adjacency feeding the spectral term.
+The v1 configurations train for 150 epochs and the v2 configurations for 100 epochs;
+the longer v1 schedule was reserved for variants whose head loss had not plateaued by 100 epochs
+to give every opportunity to escape the plateau,
+and the v2 schedule was set to the shorter value after empirical verification that all v2 head losses converge well before 100 epochs.
+The head-loss weight $\lambda_{\text{spectral}}$ is reported per-variant in the table below;
+the orthogonality and collapse-prevention weights are fixed at $0.1$ (the values in the original DMoN paper~\cite{tsitsulin2023dmon}),
+and the supervised-CE term retains weight $1.0$ throughout.
+
+\subsection{Headline numbers}
+\label{sec_res_sadmon_numbers}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{llccl}
+\toprule
+ID & Configuration & Synth val PGA & COCO val PGA (kNN, GT kp) & W\&B run \\
+\midrule
+& Standard GAT baseline (depth off) & 0.8783 & 0.8841 & \texttt{jkd1ln4a} \\
+\midrule
+Exp 3-bis & Vanilla DMoN, $\lambda_{\text{spectral}} = 0.1$               & 0.7879 & [Phase C] & \texttt{124ykt2c} \\
+Exp 4     & SA-DMoN v1, learnable $\sigma$, unconstrained                & 0.7872 & [Phase C] & \texttt{69yfqshy} \\
+Exp 5     & SA-DMoN v1, learnable $\sigma$, clamped $[0.05, 0.5]$        & 0.7918 & [Phase C] & \texttt{rvd7qaow} \\
+Exp 6     & SA-DMoN v1, clamped $\sigma$, $\lambda_{\text{spectral}} = 1.0$ & 0.7892 & [Phase C] & \texttt{2ok6u2k3} \\
+Exp 7     & SA-DMoN v1, $\sigma$ = per-graph median pairwise distance     & 0.7769 & [Phase C] & \texttt{usjwc380} \\
+Exp 8     & SA-DMoN v1, spectral term removed                             & 0.7889 & [Phase C] & \texttt{2ucbx3e0} \\
+Exp v2a   & SA-DMoN v2, feature adjacency only, $\lambda_{\text{spectral}} = 1.0$ & 0.7849 & [Phase C] & \texttt{x6v3wfnv} \\
+Exp v2b   & SA-DMoN v2, feature adjacency only, $\lambda_{\text{spectral}} = 0.1$ & 0.7925 & [Phase C] & \texttt{qn7rv98j} \\
+Exp v2c   & SA-DMoN v2, entropy type loss only                            & 0.7934 & [Phase C] & \texttt{zz2sj7an} \\
+Exp v2d   & SA-DMoN v2, feature adjacency + entropy type loss             & 0.7910 & [Phase C] & \texttt{02jqs33r} \\
+\bottomrule
+\end{tabular}
+\caption{All eleven SA-DMoN configurations.
+Synthetic-validation PGA stays within the $0.77$--$0.79$ band across every configuration,
+spanning a range of $0.0165$ across the eleven runs ---
+smaller than the per-image standard deviation of the metric.
+The variation between rows is statistically indistinguishable from seed noise,
+which is the strongest possible evidence that the modifications under test do not produce any useful gradient signal on the keypoint $k$NN graph.}
+\label{tab:sadmon_headline}
+\end{table}
+
+\subsection{Interpretation}
+\label{sec_res_sadmon_discussion}
+
+The eleven configurations of Table~\ref{tab:sadmon_headline} are reported as a group rather than as eleven independent ablations,
+because the dominant signal in the data is the plateau itself rather than any individual row.
+Three observations follow.
+
+\paragraph{1. The plateau is the result.}
+Every configuration lands in $[0.7769, 0.7934]$,
+a range of $0.0165$ that is comparable to the per-scene standard deviation of the PGA metric.
+Whatever the modularity-driven head is doing,
+it is not converging to a regime that depends on the modifications under test:
+the spatial bandwidth $\sigma$ can be learnable, clamped, fixed, or removed entirely;
+the spectral term can be present or absent;
+the adjacency can be geometric or feature-based;
+the type loss can be ReLU-hinge or entropy-based.
+None of these changes the band by more than $0.02$.
+The plateau height itself is $0.09$ below the no-depth baseline,
+which means the modifications collectively cost embedding quality rather than improving it.
+
+\paragraph{2. The bandwidth experiments isolate the root cause.}
+Experiments~4--7 vary the spatial-bandwidth $\sigma$ across four parameterisations:
+learnable-unconstrained,
+learnable-clamped,
+learnable-clamped at higher spectral weight,
+and fixed at per-scene median pairwise distance.
+The first parameterisation drives $\sigma$ to extremely large values (the learned $\sigma$ diverges to approximately $341$ under the unconstrained configuration),
+which collapses the spatial kernel $P_{ij}$ in Equation~\eqref{eq:sadmon_spatial} to a near-uniform $1.0$,
+which collapses the skeleton-aware null in Equation~\eqref{eq:sadmon_null} to the type-affinity matrix alone,
+which makes the modularity matrix $\mathbf{B}_{\text{pose}} = \mathbf{A} - \tilde{\mathbf{R}}$ nearly equal to the adjacency itself,
+which gives the spectral loss nothing to do.
+Clamping $\sigma$ to $[0.05, 0.5]$ prevents the divergence
+and the learned value pins at the upper bound,
+which is the optimiser saying ``the loss prefers a weaker null model even with the clamp''.
+Increasing $\lambda_{\text{spectral}}$ to $1.0$ amplifies this weakened signal and degrades performance further ($-0.0026$);
+the fixed median-distance $\sigma$ moves to the opposite extreme (null too tight, $\mathbf{B} \approx 0$ on the kNN edges) and degrades performance most of all ($-0.0149$).
+The bandwidth has no useful operating point on the keypoint $k$NN graph.
+
+\paragraph{3. v2 isolates the second-order failure mode and confirms it.}
+The v2 configurations were introduced after the v1 bandwidth diagnosis to test two structural hypotheses:
+that the spatial-adjacency and spatial-null collinearity could be broken by computing adjacency from features (Fix~1),
+and that the ReLU-hinge type loss could be smoothed via an entropy formulation (Fix~2).
+Both fixes were necessary to test;
+neither produces a configuration that beats v1's best.
+Feature adjacency at $\lambda_{\text{spectral}} = 1.0$ underperforms because the adjacency now drifts during training and the modularity signal chases a moving target (v2a, $0.7849$).
+Dropping the spectral weight to $0.1$ recovers (v2b, $0.7925$) but still does not improve on v1's best ($0.7918$).
+Entropy type loss alone is neutral (v2c, $0.7934$).
+Combining both fixes is no better than entropy alone (v2d, $0.7910$).
+The diagnosis is therefore complete:
+modularity is the wrong objective on a spatial-proximity $k$NN graph,
+and no null-model or adjacency modification rescues it.
+
+\paragraph{Methodological pivot.}
+The collective evidence of Sections~\ref{sec_res_learned_heads} and~\ref{sec_res_sadmon}
+is that no modification of the grouping head on top of the standard GAT embedding produces a configuration that beats $k$-means on the same embedding.
+This rules out the head as the binding constraint
+and is the empirical justification for the PG-GAT investigation of Section~\ref{sec_res_pggat_ablations},
+which keeps the head fixed at $k$-means and modifies the embedding instead.

@@ -1,0 +1,131 @@
+\section{PG-GAT --- Bayesian Architecture and Loss Sweeps}
+\label{sec_res_pggat_sweep}
+
+The isolation ablation of Section~\ref{sec_res_pggat_ablations} measures the marginal contribution of each PG-GAT modification at the baseline architecture sizing.
+The contribution of the modifications, however, depends on the architecture that they operate inside:
+a network with too few layers cannot exploit the additional gradient signal that the modifications inject,
+and a network that is too wide may overfit the small synthetic training set.
+This section reports the two Bayesian sweeps that defend the architecture and loss hyperparameters of the PG-GAT centrepiece:
+the architecture sweep that selects the layer-stack sizing,
+and the loss sweep that confirms the inherited contrastive-loss hyperparameters are near-optimal.
+Both sweeps use the Bayesian optimisation and Hyperband early-termination protocol of Section~\ref{sec_meth_evaluation_sweeps}
+and report synthetic-validation PGA as the selection metric.
+
+\subsection{Architecture sweep}
+\label{sec_res_pggat_arch_sweep}
+
+\paragraph{Setup.}
+The architecture sweep searches over six axes:
+number of layers (depth),
+number of attention heads,
+hidden dimension,
+output (embedding) dimension,
+joint-type embedding dimension,
+and dropout rate.
+The search space for each axis is reported in Table~\ref{tab:arch_sweep_space}.
+The lower bound of each axis is set to the smallest value used by prior GNN-on-pose work~\cite{jin2020hgg, braso2021centergroup};
+the upper bound is set to the largest value that fits in GPU memory at batch size $4$ on the experimental hardware.
+The sweep is configured for $32$ runs with Hyperband early termination at the fifth validation iteration (epoch $25$),
+which retires under-performing configurations early
+while preserving late-converging configurations.
+The Bayesian search is implemented by the Weights \& Biases sweep agent~\cite{wandb}
+and is logged under sweep identifier \texttt{wg95w0k0} in the \texttt{multiperson-pose-grouping} project.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{ll}
+\toprule
+Axis & Search space \\
+\midrule
+\texttt{num\_layers}          & $\{2, 3, 4, 5\}$ \\
+\texttt{num\_heads}           & $\{2, 4, 8\}$ \\
+\texttt{hidden\_dim}          & $\{32, 64, 128, 256\}$ \\
+\texttt{output\_dim}          & $\{16, 32, 64, 128, 256\}$ \\
+\texttt{joint\_embedding\_dim}& $\{16, 32, 64\}$ \\
+\texttt{dropout}              & $\{0.0, 0.1, 0.2, 0.3\}$ \\
+\bottomrule
+\end{tabular}
+\caption{Architecture-sweep search space.
+Each axis spans the smallest value used by prior pose-GNN work
+up to the memory ceiling at batch size $4$.}
+\label{tab:arch_sweep_space}
+\end{table}
+
+\paragraph{Result.}
+The winning configuration is reported in Table~\ref{tab:arch_sweep_winner}.
+The selected architecture has three layers (one more than the baseline's two), four heads (matching the baseline), hidden dimension $64$ (matching the baseline), output dimension $256$ (doubled from the baseline's $128$), joint-embedding dimension $64$ (doubled from the baseline's $32$), and dropout $0.1$ (matching the baseline).
+Synthetic-validation PGA of the winning configuration is $0.9634$,
+an improvement of $+0.0738$ over the all-three-modifications ablation row of Table~\ref{tab:pggat_ablation_headline}.
+Most of the lift comes from the increased output dimension and the third layer,
+which is consistent with the W\&B sweep's parameter-importance analysis:
+\texttt{hidden\_dim} is the dominant axis (importance $0.639$, correlation $-0.80$),
+and \texttt{output\_dim} is the only positively correlated axis ($+0.50$).
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{ll}
+\toprule
+Axis & Selected value \\
+\midrule
+\texttt{num\_layers}           & 3 \\
+\texttt{num\_heads}            & 4 \\
+\texttt{hidden\_dim}           & 64 \\
+\texttt{output\_dim}           & 256 \\
+\texttt{joint\_embedding\_dim} & 64 \\
+\texttt{dropout}               & 0.1 \\
+\midrule
+Synth val PGA                  & 0.9634 \\
+Source run                     & \texttt{08d0ffde} \\
+W\&B alias                     & \texttt{champion-arch} \\
+\bottomrule
+\end{tabular}
+\caption{Architecture-sweep winner.
+This configuration is the architecture used by every PG-GAT result downstream of this section,
+including the COCO fine-tune sweep of Section~\ref{sec_res_coco_ft} and the headline number of Section~\ref{sec_results_headline}.}
+\label{tab:arch_sweep_winner}
+\end{table}
+
+\subsection{Loss sweep}
+\label{sec_res_pggat_loss_sweep}
+
+\paragraph{Setup.}
+The loss sweep searches over four axes:
+contrastive margin $\gamma$ (Equation~\eqref{eq:contrastive_loss}),
+the number of repulsion heads $H_{\text{rep}}$ (Section~\ref{sec_meth_pggat_repulsion}),
+learning rate,
+and weight decay.
+The architecture is pinned to the \texttt{champion-arch} winner of Table~\ref{tab:arch_sweep_winner},
+so any improvement from this sweep is attributable to the loss hyperparameters rather than to architectural sizing.
+The search space is centred on the inherited defaults from Section~\ref{sec_meth_baseline_training} ($\gamma = 0.5$, $H_{\text{rep}} = 1$, lr $= 10^{-3}$, weight decay $= 10^{-4}$)
+and extends approximately one order of magnitude in each direction along each numerical axis.
+The sweep runs $24$ configurations with the same Hyperband protocol as the architecture sweep.
+
+\paragraph{Result.}
+The winning configuration (W\&B source run \texttt{mkmtc8om}, alias \texttt{champion-loss}) achieves synthetic-validation PGA $0.9617$,
+which is $-0.0017$ below the \texttt{champion-arch} number.
+The difference is within the per-image standard deviation of the metric,
+so the loss-sweep winner is not statistically distinguishable from the architecture-sweep winner.
+This result confirms that the inherited loss hyperparameters are already near-optimal,
+which is the methodologically important finding from this sweep:
+the defensibility argument for $\gamma = 0.5$, $H_{\text{rep}} = 1$, lr $= 10^{-3}$, weight decay $= 10^{-4}$ is now
+\emph{the value was chosen because no 24-run Bayesian alternative exceeded it},
+not \emph{the value was chosen by hand and never re-examined}.
+The loss-sweep winner is not promoted to the headline checkpoint;
+the architecture-sweep winner is retained as the source of the architecture used downstream.
+
+\subsection{Interpretation}
+\label{sec_res_pggat_sweep_discussion}
+
+The two sweeps reported in this section serve different purposes.
+The architecture sweep is a search for improvement
+and produces a configuration whose synthetic-validation PGA is $+0.0738$ above the all-three-modifications ablation row of Table~\ref{tab:pggat_ablation_headline}.
+The loss sweep is a defensibility exercise
+and produces a configuration whose synthetic-validation PGA is statistically indistinguishable from the inherited defaults.
+Both outcomes are useful:
+the architecture sweep locks in the layer stack that the rest of the chapter inherits,
+and the loss sweep retires the question ``would a different contrastive margin or learning rate change the result.''
+The combined contribution of the two sweeps is that every architecture and loss hyperparameter of the PG-GAT headline is now sweep-defended,
+and the answer to the question ``why this value'' for each of the ten hyperparameters in Tables~\ref{tab:arch_sweep_space} and the loss-sweep search space is
+\emph{a Bayesian sweep over its operating range selected it}.

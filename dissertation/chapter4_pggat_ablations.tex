@@ -1,4 +1,84 @@
-\section{PG-GAT Ablations}
+\section{PG-GAT --- Isolation Ablations}
 \label{sec_res_pggat_ablations}
 
-Four-row ablation: type-pair-only, pos-enc-only, repulsion-only, full. Each modification contributes independently; the full variant is the sum. Headline synthetic number: 0.910 synth kNN / 0.882 COCO kNN on the synthetic-only training regime. Table with explicit $\Delta$ against the standard-GAT-no-depth baseline.
+This section reports the four-row isolation ablation for the PG-GAT modifications of Section~\ref{sec_meth_pggat}.
+Each of the three modifications is enabled in isolation in turn,
+and the full configuration that enables all three jointly is reported in the bottom row.
+Every configuration uses the no-depth baseline architecture of Table~\ref{tab:baseline_arch}
+with only the relevant attention-mechanism modification switched on.
+The purpose of this ablation is to measure the marginal contribution of each modification at matched training compute,
+not to defend the absolute scale of the headline number ---
+that defence is reported separately in the architecture sweep of Section~\ref{sec_res_pggat_sweep}.
+
+\subsection{Setup}
+\label{sec_res_pggat_ablations_setup}
+
+All four configurations share the synthetic-only training regime of Section~\ref{sec_meth_baseline_training}
+and the no-depth feature vector of Equation~\eqref{eq:node_feature_no_depth}.
+The baseline-architecture layer-stack of Table~\ref{tab:baseline_arch} is retained throughout (two GATv2 layers, four heads, hidden dimension 64, output dimension 128, dropout 0.1)
+so that the ablation rows differ from the baseline only by the attention-mechanism flags
+and not by depth, width, or training schedule.
+The three modifications are independently controlled by the boolean flags described in Section~\ref{sec_meth_pggat_training}:
+\texttt{use\_type\_pair\_attention} (Modification~1),
+\texttt{use\_position\_encoding} (Modification~2),
+and \texttt{use\_repulsion\_heads} (Modification~3).
+The repulsion-heads variant reserves a single head out of four for the same-type sub-layer ($H_{\text{rep}} = 1$, $H_{\text{std}} = 3$).
+Each configuration is trained for 50 epochs;
+no COCO fine-tuning is applied here so that the ablation measurement is the synthetic-only embedding quality.
+The COCO fine-tune effect is reported separately in Section~\ref{sec_res_coco_ft}.
+
+\subsection{Headline numbers}
+\label{sec_res_pggat_ablations_numbers}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccccl}
+\toprule
+Configuration & Type-pair & Pos-enc & Repulsion & Synth val PGA & W\&B run \\
+\midrule
+Standard GAT (baseline, depth off; COCO $0.8841$) & --- & --- & --- & 0.8783 & \texttt{jkd1ln4a} \\
+\midrule
+PG-GAT, type-pair only             & on  & off & off & 0.8825 & \texttt{8peqkcyh} \\
+PG-GAT, pos-enc only               & off & on  & off & 0.8825 & \texttt{ffl2tde3} \\
+PG-GAT, repulsion only             & off & off & on  & 0.8834 & \texttt{gfqkbqnw} \\
+\textbf{PG-GAT, all three (full; COCO $0.8868$)}  & \textbf{on} & \textbf{on} & \textbf{on} & \textbf{0.8896} & \texttt{r5ekg0zl} \\
+\bottomrule
+\end{tabular}
+\caption{PG-GAT isolation ablation under matched architecture and matched training compute.
+The marginal contribution of each modification in isolation is approximately $+0.004$ to $+0.005$ synth val PGA over the baseline,
+and the full combination is $+0.011$ over the baseline ---
+larger than any single modification and larger than the sum of any two of them measured separately,
+which is the expected behaviour for modifications that target different failure modes of the underlying attention mechanism.}
+\label{tab:pggat_ablation_headline}
+\end{table}
+
+\subsection{Interpretation}
+\label{sec_res_pggat_ablations_discussion}
+
+The ablation establishes two facts that the rest of the chapter relies on.
+
+\paragraph{1. Each modification is non-trivially additive.}
+The three single-modification rows land within $0.0009$ of each other ($0.8825, 0.8825, 0.8834$),
+which is well inside seed-noise.
+The full configuration lifts $+0.0062$ above the strongest single-modification result and $+0.0113$ above the baseline.
+The full lift is therefore not the sum of the individual lifts but is comparable to it,
+which is what the design intuition of Section~\ref{sec_meth_pggat_intuition} predicts:
+the three modifications act on distinct edge structures (type-pair categories, geometric distances, same-type subset)
+and their respective gradient signals do not destructively interfere when combined.
+
+\paragraph{2. The single-modification rows are noisy.}
+Reading any single isolation row against the baseline as evidence of a $+0.004$ lift would be honest but underpowered ---
+the per-image PGA standard deviation on the synthetic test set is comparable in scale.
+The full-configuration row is the load-bearing measurement;
+the single-modification rows are reported as evidence that no single modification is doing all the work
+and as the methodological justification for keeping all three in the architecture rather than discarding one.
+
+\paragraph{3. The absolute numbers are baseline-architecture numbers, not headline numbers.}
+This ablation uses the two-layer baseline architecture so that the comparison against the baseline is matched.
+The architecture sweep of Section~\ref{sec_res_pggat_sweep} subsequently selects a three-layer, output-dimension-256 configuration that the ablation rows would inherit,
+which is why the headline result ($0.9715$ COCO kNN, Section~\ref{sec_res_coco_ft})
+is far above the $0.8896$ ablation-row maximum reported here.
+The lift from $0.8896$ to the headline is the combined effect of the architecture sweep
+and the subsequent COCO fine-tune sweep,
+both of which build on the all-three-modifications configuration whose marginal value over the baseline is what this ablation defends.

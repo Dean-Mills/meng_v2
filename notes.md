@@ -21,3 +21,10 @@ do half on what happened, why the heads didn't work etc
 then research questions
 
 conclusion - link back to original hypothesis
+
+---------------------------_
+
+table to track what experiments are done (their results and the research question to experiment mapping)
+
+number nesting a bit deep
+

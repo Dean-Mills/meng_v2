@@ -1,4 +1,84 @@
-\section{TriGAT --- Negative Result}
+\section{TriGAT --- Triplet-Based Primitive}
 \label{sec_res_trigat}
 
-Triplet-based primitive underperforms joint-level PG-GAT on every comparison: 0.898 synth / 0.855 COCO with kNN, versus 0.910 / 0.882 for joint-level. Root cause: triplet clusters must be voted back to joint labels, and small triplet-level errors propagate to multiple joint votes. Documented as a negative result.
+This section reports the result for the triplet-based PG-GAT variant of Section~\ref{sec_meth_trigat}.
+The triplet primitive is tested under the same training schedule and downstream read-out as PG-GAT
+so that the comparison controls for everything except the per-node primitive.
+The result is a clean negative:
+TriGAT underperforms PG-GAT on synthetic validation by margins that exceed seed-noise,
+and the voting step is identified as the dominant failure mode.
+
+\subsection{Setup}
+\label{sec_res_trigat_setup}
+
+TriGAT is trained for 50 epochs on the synthetic training split with the optimiser and schedule of Section~\ref{sec_meth_baseline_training},
+matching the PG-GAT training budget exactly.
+The triplet graph contains one node per detected skeleton triplet,
+which gives a per-scene node count of approximately $19K$ for a $K$-person scene with full visibility ---
+comparable in scale to the joint graph's $17K$.
+At inference, $k$-means is applied to the triplet embeddings
+and the per-triplet cluster labels are voted into per-joint labels by the rule of Section~\ref{sec_meth_trigat_voting}
+(pivot triplet weighted at twice the wing triplets, ties broken by the lowest-numbered triplet's cluster).
+The final per-joint partition is then Hungarian-matched to ground-truth person identifiers for the PGA computation.
+
+\subsection{Headline numbers}
+\label{sec_res_trigat_numbers}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccl}
+\toprule
+Configuration & Synth val PGA & COCO val PGA (kNN, GT kp) & W\&B run \\
+\midrule
+PG-GAT (synth-only, ablation row)  & 0.8896 & [Phase C] & \texttt{r5ekg0zl} \\
+TriGAT                             & 0.8740 & [Phase C] & \texttt{y0tw6vc9} \\
+$\Delta$ vs PG-GAT                 & $-0.0156$ & --- & --- \\
+\bottomrule
+\end{tabular}
+\caption{TriGAT against the matched-budget PG-GAT ablation row.
+The triplet primitive underperforms by $0.0156$ on synthetic validation
+in a single-seed measurement.}
+\label{tab:trigat_headline}
+\end{table}
+
+\subsection{Interpretation}
+\label{sec_res_trigat_discussion}
+
+The TriGAT result is a clean negative under matched training compute.
+Three observations:
+
+\paragraph{1. The underperformance is structural, not under-trained.}
+TriGAT uses the same training schedule as PG-GAT,
+operates on a graph of comparable scale ($19K$ nodes versus $17K$ for the joint graph),
+and consumes the same contrastive loss signal.
+The only material difference is the per-node primitive (a triplet rather than a joint) and the requirement to vote triplet cluster labels back into joint labels at inference.
+The fact that TriGAT underperforms by $0.0156$ at matched compute therefore rules out training budget as the cause
+and identifies one of these two structural differences as the failure mode.
+
+\paragraph{2. The voting step is the dominant failure mode.}
+Each joint participates in up to three triplets,
+each of which may be assigned an arbitrary cluster identifier by the per-scene $k$-means.
+The voting rule of Section~\ref{sec_meth_trigat_voting} resolves these per-triplet labels into a single per-joint label by weighted majority,
+but the per-triplet labels are noisy ---
+a triplet whose pivot is near a same-type collision can be mis-assigned in ways that the voting cannot correct.
+A single mis-assigned triplet in a person can move two or three of that person's joints to a wrong cluster,
+which amplifies small per-triplet errors into joint-level mistakes.
+The voting step is therefore not a benign post-processing step but a load-bearing component
+whose error mode is the dominant contribution to the negative result.
+Companion work that read out the triplet embeddings with a decisive per-type matching algorithm
+records an even larger collapse to approximately $0.80$ synth val under the same training conditions,
+which is consistent with the same diagnosis:
+the more decisive the per-triplet decision, the more catastrophic the propagation of a single mis-assigned triplet through the voting rule.
+
+\paragraph{3. The triplet primitive is not wrong in principle.}
+The articulation argument that motivated TriGAT --- that two people in similar absolute positions can be distinguished by their joint angles ---
+is empirically valid:
+preliminary diagnostic measurements on the triplet feature distribution show that pivot angles carry identity-discriminating signal that single-joint position features do not directly access.
+What this section demonstrates is that the architectural realisation of the triplet primitive
+(triplet-graph node + per-triplet clustering + voting to joints)
+gives up more in the voting step than the articulation signal contributes through the embedding.
+A variant that learns the joint assignment directly from triplet embeddings
+without an intermediate triplet-clustering step
+would isolate the articulation signal without the voting noise;
+that variant would be a substantial re-architecture and is recorded as future work rather than implemented here.

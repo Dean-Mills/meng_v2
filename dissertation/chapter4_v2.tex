@@ -1,4 +1,82 @@
-\section{Visual-Feature Augmentation (PG-GAT v2) --- Negative Result}
+\section{PG-GAT v2 --- Visual Feature Augmentation}
 \label{sec_res_v2}
 
-Added MobileNetV2 features sampled at each keypoint location as additional node input. Result: 0.968 COCO kNN / 0.964 E2E --- a 0.8-point E2E improvement at the cost of 2.2M extra parameters. Total pipeline (30.8M) is larger than HigherHRNet (28.6M) while still scoring lower (0.964 vs 0.985). Reported as a negative result; the Paper 3 idea was dropped on this basis.
+This section reports the result for the visual-feature-augmented PG-GAT variant of Section~\ref{sec_meth_v2}.
+The hypothesis under test is that pre-trained ImageNet features sampled at each keypoint location
+add identity signal that the positional input of Section~\ref{sec_meth_problem_graph} cannot provide.
+The result is a documented negative:
+visual features lift COCO grouping by less than one point while adding $2.2 \times 10^{6}$ MobileNet parameters to the pipeline,
+and the resulting model size exceeds HigherHRNet's while still scoring below it.
+
+\subsection{Setup}
+\label{sec_res_v2_setup}
+
+Two training schedules are reported:
+the 20-epoch initial schedule at learning rate $10^{-3}$ with cosine decay to $10^{-5}$,
+and the 50-epoch extended schedule that resumes from the 20-epoch checkpoint at a halved initial learning rate $5 \times 10^{-4}$ and continues for 30 additional epochs.
+Both train on the cached COCO MobileNetV2 features of Section~\ref{sec_meth_v2_features}
+(54{,}564 training samples, 2{,}258 validation samples)
+with the contrastive loss of Equation~\eqref{eq:contrastive_loss} only.
+The MobileNetV2 backbone is held frozen throughout;
+the visual-feature projection block of Equation~\eqref{eq:v2_projection} is trained jointly with the GAT.
+Validation runs every two epochs on the cached COCO validation features.
+
+\subsection{Headline numbers}
+\label{sec_res_v2_numbers}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{lccl}
+\toprule
+Configuration & COCO val PGA (kNN, GT kp) & Param count & W\&B run \\
+\midrule
+PG-GAT v1 (\texttt{meng-headline}, no visual features) & 0.9715 & 170{,}560        & \texttt{b5noyg7t} \\
+PG-GAT v2, 20-epoch                                    & 0.9731 & 197{,}280 + 2.2M MobileNet  & \texttt{vg43ee4u} \\
+PG-GAT v2, 50-epoch extended                           & 0.9749 & 197{,}280 + 2.2M MobileNet  & \texttt{o8978au7} \\
+\midrule
+HigherHRNet AE (reference upper bound)                 & --- & 28{,}645{,}331 & --- \\
+\bottomrule
+\end{tabular}
+\caption{PG-GAT v2 against the no-visual-features PG-GAT headline and the HigherHRNet AE reference.
+The v2 lift over the headline is $+0.0034$ COCO val PGA (50-epoch extended);
+the MobileNetV2 backbone that produces the visual features contributes a further $2.2 \times 10^{6}$ parameters
+to the total pipeline size.}
+\label{tab:v2_headline}
+\end{table}
+
+\subsection{Interpretation}
+\label{sec_res_v2_discussion}
+
+Three observations.
+
+\paragraph{1. The visual signal is real but small.}
+The 20-epoch v2 number ($0.9731$) is $+0.0016$ above the no-visual-features headline ($0.9715$),
+and the 50-epoch extended run lifts to $0.9749$ for an additional $+0.0018$ over the 20-epoch result and a total lift of $+0.0034$ over the headline.
+Both differences are above the per-image standard deviation of the metric,
+which means the visual signal is contributing a measurable lift in absolute terms.
+The 50-epoch extended run rules out the possibility that the v2 architecture is undertrained at 20 epochs;
+the additional 30 epochs add $+0.0018$ COCO val PGA,
+which is statistically detectable but practically negligible.
+
+\paragraph{2. The lift is bought at substantial parameter cost.}
+The PG-GAT v2 network itself adds approximately $27{,}000$ parameters over the baseline PG-GAT
+(the projection block of Equation~\eqref{eq:v2_projection} plus the adjusted first GAT layer).
+The MobileNet backbone that supplies the visual features adds a further $2.2 \times 10^{6}$ parameters,
+all of which must be present at inference time to compute the visual features for new images.
+The total deployable pipeline therefore consists of approximately $30.8 \times 10^{6}$ parameters
+(HigherHRNet detector $28.6 \times 10^{6}$ + MobileNet backbone $2.2 \times 10^{6}$ + PG-GAT v2 network $0.2 \times 10^{6}$),
+which exceeds HigherHRNet's all-in size of $28.6 \times 10^{6}$ while producing a COCO PGA below HigherHRNet's $0.9847$.
+The size accounting is the subject of Section~\ref{sec_res_model_size};
+the empirical bottom-line is that the trade is unfavourable.
+
+\paragraph{3. The result is reported as a negative finding.}
+The hypothesis under test was that visual features would push the modular PG-GAT pipeline past the HigherHRNet AE reference of $0.9847$.
+The result is $0.9749$ at the 50-epoch extended run,
+which is $0.0098$ below the AE reference and only $0.0034$ above the no-visual-features PG-GAT.
+The visual signal exists but is insufficient to close the gap to AE,
+and the price in parameter count exceeds the price the HigherHRNet AE alternative pays in total pipeline size.
+On this evidence, visual-feature augmentation is not pursued as a follow-on research direction;
+the result is reported here in full so that future work that revisits visual augmentation
+(for example with a larger backbone, or end-to-end joint training of backbone and grouping network)
+has a clear baseline to beat.
