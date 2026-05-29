@@ -1,4 +1,139 @@
-\section{Integration with a Realistic Detector}
+\section{Integration: Detection, K estimation, and the End-to-End Pipeline}
 \label{sec_meth_integration}
 
-How PG-GAT plugs into a HigherHRNet detection pipeline without joint training. Keypoint detection confidence filtering, the K-estimation head (brief treatment --- the full version belongs to the PEng follow-up), end-to-end PGA computation.
+The methodology developed in the previous sections describes how to build a pose-grouping embedding network
+under the assumption that the keypoint detector and the number of people $K$ are both provided by an oracle.
+This section closes that loop:
+it describes the keypoint-detector that produces the input to PG-GAT at evaluation time,
+the K-estimation head that removes the oracle dependency,
+and the end-to-end protocol that drives the headline detector-independent number reported in Chapter~\ref{chap_4}.
+The integration is modular by construction:
+PG-GAT operates on already-detected keypoints,
+so any keypoint detector can be substituted upstream without retraining the embedding network.
+
+\subsection{Keypoint detection backbone}
+\label{sec_meth_integration_detection}
+
+The detector used in every end-to-end evaluation of Chapter~\ref{chap_4}
+is HigherHRNet-W32 at the $512$-pixel input resolution~\cite{cheng2020higherhrnet,sun2019hrnet}.
+This is the smallest publicly available HigherHRNet variant
+and is integrated via the \texttt{simple-HigherHRNet} wrapper around the original COCO-trained weights.
+The choice of HigherHRNet rather than a more recent detector (DEKR~\cite{geng2021dekr}, ED-Pose~\cite{yang2023edpose}, or others)
+is methodologically deliberate.
+HigherHRNet's associative-embedding (AE) grouping mechanism~\cite{newell2017associative}
+is the canonical comparison point for any bottom-up pose-grouping method.
+AE learns a single scalar ``tag'' embedding alongside the keypoint heatmap at every pixel,
+trained with a loss that pulls same-person tags together and pushes different-person tags apart,
+and groups detections by clustering on tag similarity.
+The AE tag head is trained end-to-end with the detector on the COCO~\cite{lin2014coco} training distribution,
+and any modular grouping method that operates on detached keypoints must justify its existence relative to AE's joint-training advantage.
+
+The detector is held frozen across every evaluation:
+no fine-tuning, no head replacement, no retraining.
+HigherHRNet emits per-joint-type heatmaps,
+its internal non-maximum suppression extracts keypoint candidates,
+and the candidate set passed into PG-GAT is the same set that HigherHRNet's own AE grouping consumes.
+A Hungarian assignment between detected keypoints and ground-truth keypoints
+(with a 10-pixel matching threshold)
+attaches a ground-truth person identifier to each matched detection,
+so that the per-detection PGA of Equation~\eqref{eq:pga} can be computed for both AE and PG-GAT against the same denominator.
+
+\subsection{Pose Grouping Accuracy on detected keypoints}
+\label{sec_meth_integration_e2e_metric}
+
+The end-to-end protocol computes Equation~\eqref{eq:pga} on the matched-detection subset.
+Detections that fail the 10-pixel matching threshold are excluded from both numerator and denominator,
+so the metric measures only grouping quality, not detection recall.
+Two grouping methods are compared against the matched detections:
+HigherHRNet's native AE grouping (the reference upper bound at $0.985$),
+and the PG-GAT embedding from Section~\ref{sec_meth_pggat} followed by $k$-means with $K$ either provided by an oracle or predicted by the K head of Section~\ref{sec_meth_kestimation}.
+The same detections are passed through both grouping methods,
+so the gap between them isolates grouping quality net of detection effects.
+
+\subsection{K estimation}
+\label{sec_meth_kestimation}
+
+The autonomous pipeline must estimate $K$ from the input alone.
+Three approaches were investigated;
+the third is the one used in the headline evaluation.
+
+\paragraph{Eigengap.}
+A classical spectral approach computes the Laplacian of the keypoint-affinity graph
+and counts the eigenvalues below a gap threshold.
+The implementation builds the affinity via an RBF kernel on the embeddings
+and selects $K$ at the largest consecutive eigenvalue gap.
+The contrastive embeddings produce a dominant first gap (``one cluster vs many''),
+which means the eigengap heuristic systematically underpredicts at $K = 2$ regardless of the true value.
+This approach is reported as a baseline only.
+
+\paragraph{Joint training.}
+A small MLP head is trained jointly with PG-GAT on synthetic data
+to predict $K$ from a concatenation of mean-pooled embeddings, max-pooled embeddings, and the keypoint count divided by 17 (the number of COCO joint types).
+The MLP minimises L1 loss against the ground-truth $K$,
+and its gradient flows back into the embedding network.
+This configuration produces perfect synthetic K estimation
+but corrupts the embeddings:
+the mean-pooled feature is forced to encode count rather than identity,
+and the contrastive separation collapses.
+The joint-training configuration is reported as a documented failure mode
+that informs the frozen-backbone design below.
+
+\paragraph{Frozen-backbone training.}
+The final K head decouples the two objectives.
+A trained PG-GAT checkpoint is loaded and frozen;
+a fresh K-head MLP is trained on the resulting embeddings for 50 epochs with L1 loss.
+The K head receives no contrastive gradient
+and the embedding network receives no K-prediction gradient,
+so the embeddings retain the separation structure learned in the original PG-GAT training.
+The frozen-backbone K head is approximately $17{,}000$ parameters,
+trains to convergence in under a minute on the synthetic training split,
+and produces the K-estimation accuracy reported in Chapter~\ref{chap_4}.
+For the COCO setting the same architecture is trained on COCO embeddings rather than synthetic
+to address the keypoint-visibility distribution shift between the two domains.
+
+\subsection{The autonomous pipeline}
+\label{sec_meth_integration_autonomous}
+
+The complete autonomous pipeline composes the components above
+into a system that consumes raw COCO images and emits per-person keypoint assignments
+without any ground-truth dependency:
+HigherHRNet detects keypoints,
+PG-GAT embeds them,
+the frozen-backbone K head predicts the person count,
+and $k$-means with the predicted $k$ produces the partition.
+PGA against ground-truth person identifiers is computed by Equation~\eqref{eq:pga} on the matched detections.
+
+The autonomous pipeline is reported as a separate row in Chapter~\ref{chap_4}'s headline table
+rather than substituted in for the oracle-K rows,
+so that the headline detector-independence gap of $0.0208$
+isolates grouping quality from K-estimation error.
+The autonomous row is the operational version of the same system;
+the oracle row is the diagnostic that measures the embedding by itself.
+This separation matches the convention of every published bottom-up pose-grouping paper used as comparison.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{figures/demo_example_1.png}
+    % TODO(figure): replace with a block diagram of the autonomous pipeline:
+    %   raw image
+    %     -> HigherHRNet-W32-512 (frozen)  ->  detected keypoints (with types)
+    %     -> Hungarian match to GT (10px threshold)  ->  matched detections
+    %     -> PG-GAT embedding (frozen)  ->  per-keypoint 256-d vector
+    %     -> K-head MLP (frozen)  ->  predicted person count K_hat
+    %     -> k-means with k=K_hat  ->  per-keypoint cluster labels
+    %     -> Hungarian match cluster->person  ->  final assignment
+    %     -> PGA computation (Eq. eq:pga)
+    % Highlight which components are learned vs frozen vs deterministic.
+    \caption{The autonomous end-to-end pipeline.
+    HigherHRNet detects keypoints and assigns each a joint type;
+    a Hungarian match attaches a ground-truth person identifier to each detection (used only for evaluation).
+    The frozen PG-GAT network embeds the detections,
+    the frozen K-head MLP predicts the number of people from the embeddings,
+    and $k$-means with $k = \hat{K}$ produces the partition.
+    Every learned component is shown in red,
+    every frozen-but-pretrained component in blue,
+    and every deterministic transform (Hungarian, $k$-means) in grey.
+    The pipeline emits per-person keypoint assignments without any ground-truth dependency;
+    Chapter~\ref{chap_4} reports the resulting PGA against ground-truth person identifiers on the matched detections.}
+    \label{fig:autonomous_pipeline}
+\end{figure}

@@ -1,4 +1,137 @@
-\section{Evaluation Protocol and Metrics}
+\section{Evaluation Protocol and Hyperparameter Defence}
 \label{sec_meth_evaluation}
 
-PGA definition with Hungarian matching. Synthetic evaluation (100-image virtual test set, perfect GT). COCO evaluation zero-shot and after COCO fine-tuning. End-to-end evaluation using HigherHRNet detections. What kNN-PGA measures, what COP-KM-PGA adds, and which numbers are the native MEng headlines (kNN) versus what is mentioned with a pointer to the PEng paper (type-constrained clustering).
+This section fixes the evaluation protocol that every result in Chapter~\ref{chap_4} uses
+and records the Bayesian sweep methodology that is responsible for every hyperparameter cited in the chapter.
+The protocol is uniform across the synthetic, COCO oracle-keypoint, and COCO end-to-end settings;
+only the data distribution and the upstream keypoint source change between them.
+The sweep methodology underwrites the defensibility of every cited number:
+no PG-GAT hyperparameter is reported without a sweep that searched its operating range,
+and no comparison row in Chapter~\ref{chap_4} cites a number that was not also reproducible from a logged run identifier.
+
+\subsection{Datasets and splits}
+\label{sec_meth_evaluation_splits}
+
+Three evaluation settings are reported,
+all using the Pose Grouping Accuracy of Equation~\eqref{eq:pga} as the metric.
+
+\paragraph{Synthetic validation.}
+The 100-scene synthetic validation split of Section~\ref{sec_meth_data_synth}.
+Used as the model-selection signal during training:
+the checkpoint with the highest synthetic-validation PGA is retained and is the one used in every downstream evaluation row.
+This is also the metric on which the Bayesian sweeps below are scored.
+
+\paragraph{Synthetic test.}
+The 100-scene held-out synthetic test split.
+Reported alongside the validation number to verify that the validation-selected checkpoint does not overfit to validation.
+
+\paragraph{COCO val with ground-truth keypoints.}
+COCO~\cite{lin2014coco} \texttt{val2017} person-keypoint annotations are filtered to images containing at least one person with at least three labelled keypoints,
+which retains $2{,}258$ images of the $5{,}000$ in \texttt{val2017}.
+The retained set includes both single-person and multi-person images.
+Single-person scenes contribute trivial grouping decisions and inflate the absolute PGA;
+a secondary diagnostic with \texttt{min\_people}~$\geq 2$ (1195 multi-person images) is also reported in Chapter~\ref{chap_4} for transparency,
+with the caveat that the comparable HigherHRNet AE numbers in the literature are reported on the full filtered set.
+The headline COCO row uses the full filtered set;
+the multi-person subset is reported as a stricter diagnostic in the same table.
+
+\paragraph{COCO val end-to-end.}
+The same image set as above,
+but the keypoint input is produced by HigherHRNet-W32-512 as described in Section~\ref{sec_meth_integration_detection}
+rather than read from the ground-truth annotation file.
+This is the only evaluation row that exercises the modular detector-independent claim of the present work.
+The reference upper bound is HigherHRNet's own AE-grouping output on the same detections,
+which is the strongest published bottom-up grouping number on this distribution.
+
+\subsection{Run identification and the W\&B logging layer}
+\label{sec_meth_evaluation_wandb}
+
+Weights \& Biases~\cite{wandb} is an experiment-tracking service that records the configuration, metrics, source code, and output artifacts of every training run to a central web dashboard
+and exposes them by a permanent run identifier.
+It serves here as the queryable provenance layer that connects every cited number in Chapter~\ref{chap_4}
+to the exact configuration and checkpoint that produced it.
+Every run cited in Chapter~\ref{chap_4} is logged to the W\&B project \texttt{multiperson-pose-grouping}
+and is identified by an 8-character run identifier that doubles as the on-disk output-directory GUID.
+The same identifier appears in the on-disk \texttt{outputs/<name>/<run\_id>/} hierarchy,
+in the W\&B dashboard,
+and in the evidence table referenced from Chapter~\ref{chap_4} for reproducibility.
+
+Three properties of the logging layer matter for the defensibility argument.
+First,
+every checkpoint that improves the validation metric is uploaded as a W\&B artifact
+under an auto-rotating \texttt{latest} alias,
+with a global \texttt{best} alias maintained per artifact by a post-hoc selection script (\texttt{promote\_best.py}).
+Promoted aliases such as \texttt{champion-arch}, \texttt{champion-loss}, \texttt{champion-hyperbolic}, and the headline alias \texttt{meng-headline}
+are unique-per-project and identify the canonical version of each result.
+Second,
+the run's full configuration is serialised at \texttt{init} time
+and is recoverable from the dashboard six months later
+without having to consult the local file system.
+This is the mechanism by which any later question of the form ``did you try $X$''
+is answered with the run identifier of the relevant configuration
+rather than with a verbal reconstruction.
+Third,
+all runs that ground a number in Chapter~\ref{chap_4} carry the tag \texttt{dissertation-final}
+in addition to a run-type tag (\texttt{ablation}, \texttt{sweep}, or \texttt{finetune}),
+which permits a single dashboard filter to enumerate every cited run.
+
+\subsection{Bayesian sweep methodology}
+\label{sec_meth_evaluation_sweeps}
+
+Each PG-GAT hyperparameter is defended by a sweep that searched its operating range.
+Four sweeps were conducted and are referenced from Section~\ref{sec_meth_pggat_training} and Section~\ref{sec_meth_hyperbolic_hypotheses}:
+an architecture sweep,
+a loss/regularisation sweep,
+a hyperbolic-dimension sweep,
+and a fine-tune-recipe sweep.
+The methodology is uniform across all four.
+
+\paragraph{Search strategy.}
+Bayesian optimisation as implemented by the W\&B sweep agent,
+with Hyperband early termination~\cite{li2018hyperband} configured to retire under-performing configurations
+after a small number of validation iterations rather than running every configuration to completion.
+Bayesian search produces a more sample-efficient exploration of the parameter space than random or grid search at the budgets used here ($12$--$32$ runs per sweep),
+and Hyperband retires weak configurations early enough to keep total sweep wall-clock within an overnight job on the experimental hardware.
+
+\paragraph{Selection metric.}
+Synthetic-validation PGA of Equation~\eqref{eq:pga} for the architecture, loss, and hyperbolic sweeps,
+and synthetic-validation PGA after COCO fine-tuning for the fine-tune sweep.
+The selection metric is the same metric that the trainer uses to decide whether to save a new best checkpoint,
+so the sweep agent's notion of ``best'' and the headline's notion of ``best'' coincide.
+The COCO and end-to-end numbers that appear in the headline row are produced by a separate evaluation script run on the sweep-winner checkpoint after the sweep finishes;
+selecting on COCO val directly would conflate the architecture choice with the COCO fine-tune effect,
+which is exactly the confound that the four-sweep structure is designed to eliminate.
+
+\paragraph{Search-space sizing.}
+The search-space bounds for each axis are recorded in the sweep YAML configuration
+and are reported alongside the sweep result in Chapter~\ref{chap_4}.
+Bounds are set to span the smallest value used by prior GNN-on-pose work
+up to the largest value that fits in the memory budget at batch size 4.
+Any choice outside these bounds is therefore methodologically excluded by the sweep design,
+not silently dropped.
+
+\paragraph{Post-sweep evaluation.}
+Each sweep terminates with the winning configuration promoted to a \texttt{champion-<sweep>} alias
+and an additional evaluation pass that computes COCO oracle-keypoint PGA and COCO end-to-end PGA on the champion checkpoint.
+These two numbers populate the corresponding rows of the Chapter~\ref{chap_4} headline table.
+The chain of provenance is:
+sweep agent run identifier $\rightarrow$ artifact version $\rightarrow$ \texttt{champion} alias $\rightarrow$ Chapter~\ref{chap_4} number,
+all visible in the W\&B dashboard and the local file system.
+
+\subsection{The headline provenance}
+\label{sec_meth_evaluation_provenance}
+
+The headline PG-GAT result is the output of a fine-tune sweep over a PG-GAT model
+whose architecture is itself the winner of an architecture sweep.
+The provenance is therefore two sweeps deep:
+the architecture sweep selects the network depth, head count, hidden dimension, output dimension, joint-type embedding dimension, and dropout;
+the fine-tune sweep then runs over the COCO fine-tune epochs, learning rate, and weight decay
+with the architecture pinned to the architecture-sweep winner.
+The loss sweep is reported alongside as evidence that the contrastive margin and repulsion-head count are at the right operating point,
+and the hyperbolic-dimension sweep is reported alongside as the corresponding evidence for the hyperbolic variant.
+The W\&B alias \texttt{meng-headline} identifies the artifact version of the fine-tune-sweep winner
+and the run identifier \texttt{b5noyg7t} identifies the source run.
+Every number in the headline row of Section~\ref{sec_results_headline} traces to this provenance chain,
+which is the strongest defensibility claim of the present work:
+no hyperparameter was hand-picked,
+and the headline result is reproducible from a logged identifier.

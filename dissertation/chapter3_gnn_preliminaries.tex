@@ -8,7 +8,7 @@ A graph neural network (GNN) embeds each node while conditioning on the structur
 This section introduces the message-passing framework that unifies modern GNN variants,
 derives the graph convolutional network (GCN) as the canonical spectral instance,
 and develops the graph attention network (GAT),
-culminating in the GATv2 correction that is used as the attention primitive in every experiment in this dissertation.
+culminating in the GATv2 correction that is used as the attention primitive in every experiment in this chapter.
 
 \subsection{The Message-Passing Framework}
 \label{sec_meth_mp}
@@ -135,6 +135,6 @@ With the nonlinearity now placed inside the query--key interaction,
 the attention score does not decompose into independent per-node terms,
 and the ranking of neighbours is allowed to depend on the query node.
 GATv2 is strictly more expressive than GAT at the same parameter count~\cite{brody2022gatv2},
-and every architecture evaluated in this dissertation uses GATv2 as its attention primitive.
+and every architecture evaluated in this chapter uses GATv2 as its attention primitive.
 The remaining GCN and GAT references in Chapters~\ref{chap_4} and~\ref{chap_5}
 refer to baselines and background, not to the working network.

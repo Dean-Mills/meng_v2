@@ -1,4 +1,78 @@
 \section{TriGAT --- Triplet-Based Primitive}
 \label{sec_meth_trigat}
 
-A variant where the graph nodes are skeleton triplets (A--B--C chains, 19 per person) rather than individual joints. Pivot-angle features are rotation-invariant articulation descriptors. Triplets are embedded, clustered, and joint labels are voted from triplet-cluster assignments. Included to test whether a higher-order primitive improves the embedding.
+This section describes a variant of PG-GAT in which the per-node primitive is replaced from a single joint to a skeleton triplet of three connected joints.
+The motivation is articulation:
+two people standing in similar absolute positions remain distinguishable by their joint angles
+(shoulder--elbow--wrist, hip--knee--ankle, head--torso),
+and the pivot-angle of a triplet is rotation-invariant articulation information that single-joint embeddings do not directly capture.
+This intuition was converted into the experimental hypothesis
+that embedding triplets rather than joints would surface articulation as a first-class signal
+and thereby produce a more discriminative embedding for the hard case of spatially overlapping people.
+The result reported in Chapter~\ref{chap_4} contradicts this hypothesis;
+this section describes the methodology in enough detail that the negative result is interpretable.
+
+\subsection{Triplet enumeration and features}
+\label{sec_meth_trigat_features}
+
+The COCO skeleton graph admits exactly $19$ canonical triplets,
+indexed by joint-type triples $(t_A, t_B, t_C)$ where $(t_A, t_B)$ and $(t_B, t_C)$ are both COCO skeleton edges.
+The pivot is the middle joint $B$.
+For each scene, every detected person contributes at most $19$ triplets;
+triplets with a missing or invisible joint are skipped,
+which leaves the per-person triplet count between roughly $12$ and $19$ depending on visibility.
+
+A triplet node carries a continuous feature vector
+\begin{equation}
+    \mathbf{f}_{ABC} = \bigl[\,\mathbf{p}_B,\;\Delta_{AB},\;\Delta_{CB},\;\cos\theta,\;\sin\theta,\;\|\Delta_{AB}\|,\;\|\Delta_{CB}\|\,\bigr] \in \mathbb{R}^{10},
+    \label{eq:trigat_features}
+\end{equation}
+where $\mathbf{p}_B \in [0,1]^{2}$ is the pivot position,
+$\Delta_{AB} = \mathbf{p}_A - \mathbf{p}_B$ and $\Delta_{CB} = \mathbf{p}_C - \mathbf{p}_B$ are the two outgoing bones,
+and $\theta$ is the pivot angle $\angle(A, B, C)$ measured by the cosine and sine of its values
+(which avoids the wrap-around discontinuity of representing the angle directly).
+A learnable $19$-way triplet-type embedding $\mathbf{e}^{\text{tri}}_{(t_A, t_B, t_C)} \in \mathbb{R}^{16}$ is concatenated with $\mathbf{f}_{ABC}$ to form the layer-zero node feature.
+The triplet-type embedding plays the same role for triplets that the joint-type embedding of Section~\ref{sec_meth_problem_graph} plays for joints.
+
+\subsection{Triplet graph and embedding network}
+\label{sec_meth_trigat_arch}
+
+The triplet graph $\mathcal{G}^{\text{tri}} = (\mathcal{V}^{\text{tri}}, \mathcal{E}^{\text{tri}})$
+has one node per detected triplet,
+so $|\mathcal{V}^{\text{tri}}|$ is roughly $19K$ for a $K$-person scene with full visibility
+(comparable in scale to the joint graph's $17K$).
+Edges are formed by $k$-nearest neighbours in pivot-position space with $k = 8$,
+matching the convention of the joint graph.
+The embedding network on top of this graph is a GATv2 stack with the same depth, width, and head count as the PG-GAT default,
+and the same contrastive loss of Equation~\eqref{eq:contrastive_loss} is applied at the triplet level
+with the supervisory label set to the pivot joint's person identity.
+The per-triplet output is a $128$-dimensional embedding on the unit hypersphere.
+
+\subsection{Voting from triplet clusters to joint labels}
+\label{sec_meth_trigat_voting}
+
+At inference, $k$-means with $k = K$ is applied to the triplet embeddings,
+which yields a per-triplet cluster label.
+Each joint participates in up to three triplets,
+each of which has been assigned an arbitrary cluster identifier by $k$-means,
+and a deterministic voting rule converts triplet-cluster labels into joint labels.
+The vote weights the pivot triplet at twice the weight of the wing triplets
+on the basis that the pivot articulation is the most distinguishing feature of any triplet.
+Ties are broken by the lowest-numbered triplet's cluster.
+A Hungarian matching of cluster identifiers to ground-truth person identifiers follows
+to compute the final PGA score per Equation~\eqref{eq:pga}.
+
+The voting step is the methodological soft spot of the TriGAT design,
+and the Chapter~\ref{chap_4} results identify it as the dominant failure mode:
+a single mis-assigned triplet in a person can move two or three of that person's joints to a wrong cluster,
+amplifying small triplet-level errors into joint-level mistakes.
+The discussion in Section~\ref{sec_disc_trigat} treats the voting step in detail.
+
+\subsection{Training schedule}
+\label{sec_meth_trigat_training}
+
+TriGAT is trained for 50 epochs on the synthetic training split with the optimiser settings of Section~\ref{sec_meth_baseline_training}.
+The training budget matches PG-GAT exactly so that the comparison reported in Chapter~\ref{chap_4} controls for compute.
+At inference, $k$-means with $k = K$ is applied to the triplet embeddings
+and the resulting partition is converted to joint labels by the voting rule of Section~\ref{sec_meth_trigat_voting}.
+Constrained-clustering read-outs of the same embeddings exist in companion work and are not reported here per the scoping rule of Section~\ref{sec_meth_problem_subproblems}.

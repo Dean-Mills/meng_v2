@@ -6,7 +6,18 @@
 \chapter{Methodology}
 \label{chap_3}
 
-This chapter presents the mathematical preliminaries that every method in this dissertation builds on, the problem formulation and data pipeline, and the methodology for each approach investigated --- from the standard GAT baseline, through the series of learned grouping heads that were tried and failed, through SA-DMoN, and finally to PG-GAT. Two variants (hyperbolic PG-GAT, TriGAT) and the integration with a realistic detector are described last.
+This chapter develops the methodology for every result reported in the rest of the work.
+It opens with two preliminary sections that fix the mathematical vocabulary the chapter relies on:
+graph neural networks (Section~\ref{sec_meth_gnn}) up to the GATv2 attention primitive used throughout,
+and clustering and learned grouping heads (Section~\ref{sec_meth_clustering}) covering $k$-means, DEC, slot attention, graph partitioning, and DMoN.
+The problem formulation, dataset pipeline, and baseline (Sections~\ref{sec_meth_problem}--\ref{sec_meth_baseline}) then state the task and the comparison point that every method clears or falls short of.
+The next four sections trace the investigation in the order it actually unfolded:
+three learned grouping heads (Section~\ref{sec_meth_learned_heads}) and the SA-DMoN modularity family (Section~\ref{sec_meth_sadmon}) both fail to outperform $k$-means on the baseline embedding,
+which motivates the shift to modifying the embedding network itself
+and the centrepiece PG-GAT design of Section~\ref{sec_meth_pggat}.
+Three independent variants of PG-GAT --- a visual-feature augmentation (Section~\ref{sec_meth_v2}), a hyperbolic-geometry variant (Section~\ref{sec_meth_hyperbolic}), and a triplet-based variant (Section~\ref{sec_meth_trigat}) --- stress-test the design from different angles.
+The chapter closes with the integration of PG-GAT into a realistic end-to-end pipeline (Section~\ref{sec_meth_integration})
+and the evaluation protocol and hyperparameter-defence methodology (Section~\ref{sec_meth_evaluation}) that every Chapter~\ref{chap_4} number is reproducible from.
 
 \input{chapter3_gnn_preliminaries}
 \input{chapter3_clustering_preliminaries}
@@ -16,6 +27,7 @@ This chapter presents the mathematical preliminaries that every method in this d
 \input{chapter3_learned_heads}
 \input{chapter3_sa_dmon}
 \input{chapter3_pg_gat}
+\input{chapter3_v2}
 \input{chapter3_hyperbolic}
 \input{chapter3_trigat}
 \input{chapter3_integration}

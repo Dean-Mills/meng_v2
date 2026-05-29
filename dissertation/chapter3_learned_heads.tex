@@ -1,17 +1,126 @@
 \section{Learned Grouping Heads}
 \label{sec_meth_learned_heads}
 
-\subsection{DEC applied to pose grouping}
+Three learned grouping heads are constructed on top of the baseline GAT embedding network of Section~\ref{sec_meth_baseline}.
+Each is a different attempt to push the grouping decision into a learnable component
+rather than reading off the structure of the embedding space with $k$-means.
+The mathematical preliminaries for each head are given in Section~\ref{sec_meth_clustering};
+this section describes how each was adapted to the pose-grouping problem,
+the loss it minimises during joint training with the GAT,
+and the read-out used at inference.
+None of the three improves on plain $k$-means in the headline evaluations of Chapter~\ref{chap_4},
+and the resulting evidence motivates the shift of attention to the embedding network itself in Section~\ref{sec_meth_pggat}.
+
+\subsection{Deep embedded clustering on pose embeddings}
 \label{sec_meth_dec_pose}
 
-How DEC was instantiated on top of the GAT embeddings: initialisation strategy, cluster-count handling, training objective combined with contrastive loss.
+The DEC head~\cite{xie2016dec} treats grouping as a fully unsupervised problem on top of the GAT embeddings.
+At training time the head maintains $K$ cluster centres $\boldsymbol{\mu}_1, \dots, \boldsymbol{\mu}_K \in \mathbb{R}^{d}$
+in the same embedding space as the GAT output.
+At each forward pass over a scene with $K$ ground-truth people,
+the centres are initialised by $k$-means++~\cite{arthur2007kmeanspp} on the current GAT embeddings of that scene;
+this per-scene initialisation is the methodological adaptation that makes DEC applicable to a setting where every image has a different $K$
+rather than a fixed cluster count over a single dataset.
 
-\subsection{Slot attention applied to pose grouping}
+Given embeddings $\{\mathbf{z}_i\}$ and centres $\{\boldsymbol{\mu}_k\}$,
+the soft assignment under a Student's $t$-distribution with one degree of freedom~\cite{vandermaaten2008tsne} is
+\begin{equation}
+    q_{ik}
+    = \frac{\bigl(1 + \|\mathbf{z}_i - \boldsymbol{\mu}_k\|_2^2\bigr)^{-1}}
+           {\sum_{k'} \bigl(1 + \|\mathbf{z}_i - \boldsymbol{\mu}_{k'}\|_2^2\bigr)^{-1}},
+    \label{eq:dec_q}
+\end{equation}
+and the sharpened target distribution is
+\begin{equation}
+    p_{ik}
+    = \frac{q_{ik}^2 / f_k}{\sum_{k'} q_{ik'}^2 / f_{k'}},
+    \quad f_k = \sum_i q_{ik}.
+    \label{eq:dec_p}
+\end{equation}
+The loss is the Kullback--Leibler divergence between target and prediction,
+$\mathcal{L}_{\text{DEC}} = \sum_{i,k} p_{ik} \log (p_{ik} / q_{ik})$,
+combined additively with the contrastive loss of Equation~\eqref{eq:contrastive_loss}.
+The target $\mathbf{p}$ is computed with \texttt{torch.no\_grad} and treated as a fixed target
+so the gradient flows only through $\mathbf{q}$:
+the head learns to make its soft assignments more confident over time,
+and the underlying GAT receives gradient signal through the dependence of $\mathbf{q}$ on the embeddings.
+
+DEC is the only head in this section that does not consume ground-truth person labels in its own loss.
+The contrastive loss still uses the labels, so the GAT receives supervised signal;
+the DEC head itself is unsupervised
+and the methodological prediction from this asymmetry --- the head can only sharpen assignments that are already roughly correct, it has no signal to fix wrong ones ---
+is corroborated by the result in Section~\ref{sec_results_learned_heads}.
+
+\subsection{Slot attention on pose embeddings}
 \label{sec_meth_slot_pose}
 
-Slot attention head on top of the GAT embeddings, with slots as person identities. Number of slots, initialisation, iteration count, and the binding-to-assignment readout.
+The slot attention head~\cite{locatello2020slotattention} is supervised by the ground-truth person labels via Hungarian-matched cross entropy.
+$K$ slot vectors $\mathbf{s}_1, \dots, \mathbf{s}_K \in \mathbb{R}^{d}$ are initialised independently for each scene
+by sampling from a learned Gaussian distribution $\mathcal{N}(\boldsymbol{\mu}, \boldsymbol{\sigma}^2 \mathbf{I})$
+whose parameters are trained jointly with the GAT.
+The slots then iteratively refine themselves
+via a competitive attention mechanism over the GAT embeddings.
+At each iteration $t$,
+queries are obtained by layer-normalising the slots,
+keys and values are obtained by layer-normalising the embeddings,
+and an attention matrix is computed by softmax \emph{across slots} (rather than the standard softmax across keys),
+which enforces competition between slots for each joint.
+The matrix is then row-normalised and used to weight the values into per-slot updates,
+which a GRU cell~\cite{cho2014gru} mixes into the previous slot state,
+followed by a residual feed-forward block.
+After $T = 7$ iterations the final slots produce logits $\ell_{ik} = \mathbf{z}_i^\top \mathbf{W}_{\text{key}} \mathbf{s}_k$
+for each joint--slot pair.
 
-\subsection{Graph partitioning applied to pose grouping}
+The training loss is Hungarian-matched cross entropy:
+the optimal cluster-to-person bijection $\pi^\star$ is computed by Hungarian assignment on the per-slot mean prediction probability against each ground-truth person,
+and the cross-entropy loss is computed against the permuted ground-truth labels $\pi^\star \circ \mathbf{y}^\star$.
+At inference the slots are run identically and the argmax of the logits gives the partition.
+Iteration count and learning-rate schedule are fixed by the values that stabilised the isolation tests recorded earlier in this chapter:
+seven iterations rather than the standard three,
+and a cosine schedule decaying from $10^{-3}$ to $10^{-5}$
+to avoid the overshoot that a constant learning rate produced at three iterations.
+
+\subsection{Graph partitioning on pose embeddings}
 \label{sec_meth_partition_pose}
 
-Graph partitioning head on top of the GAT embeddings. Edge-weight construction, normalised-cut objective, and how the soft partition is read out into hard assignments.
+The graph partitioning head reframes grouping as binary edge classification on the keypoint graph,
+rather than as an explicit partition into $K$ clusters.
+A pair MLP $\phi_{\text{pair}} : \mathbb{R}^{2d} \to \mathbb{R}$ predicts,
+for every pair of joints $(i, j)$ in the graph,
+the logit of the event ``$i$ and $j$ belong to the same person''.
+The input to the MLP is the concatenation of the embedding difference and the embedding element-wise product:
+\begin{equation}
+    \phi_{\text{pair}}\!\bigl([\,\mathbf{z}_i - \mathbf{z}_j \,\big\|\, \mathbf{z}_i \odot \mathbf{z}_j\,]\bigr)
+    \in \mathbb{R}.
+    \label{eq:partition_pair}
+\end{equation}
+This is the standard pair-feature construction from face-clustering GNN literature~\cite{yang2020gcnve}:
+the difference encodes direction in embedding space and the product encodes co-activation magnitude.
+
+The loss is binary cross entropy over all $\binom{N}{2}$ pairs.
+Positive pairs (same person) are far less numerous than negative pairs;
+for the synthetic scenes with five people and seventeen joints,
+the ratio is approximately $680$ positives to $2890$ negatives.
+The positive class is up-weighted by $\texttt{pos\_weight} = \min(10, n_{\text{neg}} / n_{\text{pos}})$
+to prevent the loss being dominated by negative pairs.
+At inference the predicted affinities are thresholded at $0.5$
+and connected components on the resulting binary affinity graph are recovered by union--find.
+
+Graph partitioning is the only head of the three for which $K$ is not required at inference:
+the number of connected components is read directly from the predicted affinities,
+which makes the head structurally appealing for the autonomous-pipeline use case of Section~\ref{sec_meth_integration}.
+The Chapter~\ref{chap_4} results explain why this structural advantage does not translate into a competitive transfer result.
+
+\subsection{Joint training schedule}
+\label{sec_meth_learned_heads_training}
+
+All three heads are trained jointly with the GAT for 50 epochs on the synthetic training split
+using the optimiser settings of Section~\ref{sec_meth_baseline_training}.
+The total loss is the sum of the contrastive loss of Equation~\eqref{eq:contrastive_loss}
+and the head-specific loss with a head weight set to $1.0$;
+this configuration was retained from the initial isolation tests for each head
+on the basis that none of the heads benefited from a sweep over the head weight in early experiments,
+and any deeper sweep would have run against the resource budget allocated to the eventually successful PG-GAT investigation.
+Validation, checkpointing, and the PGA read-out follow the conventions of Section~\ref{sec_meth_baseline_training};
+the head's own forward pass is used at inference for DEC and slot attention,
+while the partition head's connected components are read directly as the final assignment.

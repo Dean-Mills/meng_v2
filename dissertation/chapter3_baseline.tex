@@ -1,4 +1,115 @@
-\section{Baseline: Standard GAT + Contrastive + kNN}
+\section{Baseline: Standard GAT with Contrastive Loss}
 \label{sec_meth_baseline}
 
-The baseline architecture: stacked GATv2 layers on a fully-connected graph over detected keypoints, contrastive loss pulling same-person keypoints together and pushing different-person keypoints apart, kNN clustering at test time. The depth-input variant and the no-depth variant. This is the starting point of the narrative.
+The baseline against which every subsequent method is compared is a standard graph attention network
+trained with a contrastive loss on the synthetic dataset
+and read out with $k$-means clustering on the L2-normalised embeddings.
+This baseline establishes the bar that any modification of the embedding network must clear,
+and it fixes the training schedule, optimiser, and clustering protocol that all subsequent methods inherit.
+
+\subsection{Architecture}
+\label{sec_meth_baseline_arch}
+
+The network consumes the graph $\mathcal{G}$ constructed in Section~\ref{sec_meth_problem_graph}
+and produces a per-node embedding $\mathbf{z}_i \in \mathbb{R}^{d}$ with $d = 128$.
+The layer-zero GAT input $\mathbf{h}_i^{(0)}$ is the concatenation defined in Equation~\eqref{eq:layer0_input}:
+the raw preprocessed feature $\mathbf{x}_i \in \mathbb{R}^{3}$ of Equation~\eqref{eq:node_feature_no_depth}
+together with a learnable joint-type embedding of dimension $32$,
+giving a layer-zero representation of dimension $d_0 = 35$ in the no-depth configuration that the baseline uses by default
+($d_0 = 36$ in the depth-on diagnostic variant of Equation~\eqref{eq:node_feature_with_depth}).
+
+Two GATv2~\cite{brody2022gatv2} layers do message passing over $\mathcal{G}$,
+each layer using four attention heads with hidden dimension 64.
+The choice of GATv2 over the original GAT~\cite{velickovic2018gat}
+is methodologically deliberate:
+the original GAT computes its attention coefficients with a static linear transformation
+that is monotonic in the query node's representation,
+which bounds the expressive power of the attention mechanism;
+GATv2 swaps the order of the linear projection and the LeakyReLU
+to recover a fully dynamic attention function,
+and prior work~\cite{brody2022gatv2} shows that this matters whenever the same query must attend differently to neighbours of different types.
+The pose-grouping task is exactly such a setting,
+because a single keypoint must attend differently to a same-type neighbour
+than to a skeleton-adjacent neighbour of a different type.
+GATv2 is therefore the attention primitive used throughout;
+the relevant message-passing definitions are recalled in Section~\ref{sec_meth_gat}.
+
+A linear projection maps the post-message-passing representation to the embedding dimension,
+and an L2 normalisation step places every embedding on the unit hypersphere $\mathbb{S}^{d-1}$.
+The hypersphere geometry is the working assumption of the contrastive loss below;
+it also gives the downstream $k$-means a bounded space to operate in.
+The complete architecture is summarised in Table~\ref{tab:baseline_arch}.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{ll}
+\toprule
+Component & Setting \\
+\midrule
+Attention primitive            & GATv2~\cite{brody2022gatv2} \\
+Number of GAT layers           & 2 \\
+Number of attention heads      & 4 \\
+Hidden dimension               & 64 \\
+Output (embedding) dimension   & 128 \\
+Joint-type embedding dimension & 32 \\
+Layer normalisation            & yes \\
+Output normalisation           & L2 (unit hypersphere) \\
+Dropout                        & 0.1 \\
+\bottomrule
+\end{tabular}
+\caption{Baseline GAT architecture used as the comparison point for every method in this chapter.
+The same hyperparameters are inherited by every method below that does not explicitly sweep over them;
+the architecture sweep that searches over these axes for the PG-GAT centrepiece is described in Section~\ref{sec_meth_pggat_training}.}
+\label{tab:baseline_arch}
+\end{table}
+
+\subsection{Contrastive loss}
+\label{sec_meth_baseline_loss}
+
+The embedding network is trained with a margin-based contrastive loss~\cite{chopra2005contrastive} on cosine similarity.
+For a graph of $N$ keypoints with ground-truth person labels $\mathbf{y}^\star \in \{1, \dots, K\}^{N}$,
+let $\cos(\mathbf{z}_i, \mathbf{z}_j) = \mathbf{z}_i^\top \mathbf{z}_j$
+be the cosine similarity between two L2-normalised embeddings.
+Pairs are partitioned into a positive set $\mathcal{P}^{+} = \{(i,j) : \mathbf{y}^\star_i = \mathbf{y}^\star_j, i \neq j\}$
+and a negative set $\mathcal{P}^{-} = \{(i,j) : \mathbf{y}^\star_i \neq \mathbf{y}^\star_j\}$.
+The loss penalises positive pairs whose similarity is below a margin $\gamma$ and negative pairs whose similarity is above the symmetric margin $-\gamma$:
+\begin{equation}
+    \mathcal{L}_{\text{contrastive}}
+    = \frac{1}{|\mathcal{P}^{+}|}\sum_{(i,j) \in \mathcal{P}^{+}} \max\!\bigl(0,\; \gamma - \cos(\mathbf{z}_i, \mathbf{z}_j)\bigr)
+    \;+\;
+    \frac{1}{|\mathcal{P}^{-}|}\sum_{(i,j) \in \mathcal{P}^{-}} \max\!\bigl(0,\; \cos(\mathbf{z}_i, \mathbf{z}_j) + \gamma\bigr).
+    \label{eq:contrastive_loss}
+\end{equation}
+The margin $\gamma$ is fixed at $0.5$ across all experiments,
+a value that the PG-GAT loss sweep of Section~\ref{sec_meth_pggat_training} subsequently confirms as near-optimal across a 24-run Bayesian search.
+Equation~\eqref{eq:contrastive_loss} is differentiable in the embeddings,
+and the gradient pulls positive pairs together until their similarity exceeds $\gamma$
+and pushes negative pairs apart until their similarity drops below $-\gamma$,
+saturating outside the active band so that easy pairs do not dominate the gradient signal.
+The symbol $\gamma$ for the margin is reserved here to avoid collision with the symbol $m$ used in Section~\ref{sec_meth_dmon_prelim} for the total edge count of a graph.
+
+\subsection{Training schedule and grouping read-out}
+\label{sec_meth_baseline_training}
+
+The baseline is trained for 50 epochs on the 400-scene synthetic training split with batch size 4,
+using the AdamW~\cite{loshchilov2019adamw} optimiser at learning rate $10^{-3}$,
+a cosine-annealing schedule~\cite{loshchilov2017cosineannealing} decaying to $10^{-5}$,
+and weight decay $10^{-4}$.
+Gradient norms are clipped to a maximum of $1.0$ to suppress occasional outlier batches dominated by a single high-density scene.
+Validation runs every five epochs against the 100-scene synthetic validation split using the PGA metric of Equation~\eqref{eq:pga}.
+The checkpoint with the best validation PGA is retained as the final model.
+
+At inference, the trained embedding network is run once per image to produce $\{\mathbf{z}_i\}_{i=1}^{N}$,
+and the partition is obtained by $k$-means with $k = K$ on the L2-normalised embeddings using the scikit-learn~\cite{scikitlearn} implementation
+with ten random initialisations and a fixed seed.
+PGA is then computed by Equation~\eqref{eq:pga} after Hungarian matching of the resulting cluster identifiers to the ground-truth person identifiers.
+
+Two baseline configurations are reported in Chapter~\ref{chap_4}:
+the depth-on variant, which uses the four-dimensional node feature of Equation~\eqref{eq:node_feature_with_depth} and is included as a diagnostic of the synthetic-easy regime described in Section~\ref{sec_meth_data_depth};
+and the no-depth variant, which uses Equation~\eqref{eq:node_feature_no_depth} and is the baseline against which every later method is compared.
+All methods from Section~\ref{sec_meth_learned_heads} onward inherit the no-depth configuration, the 50-epoch schedule, and the optimiser settings of this section unless explicitly overridden.
+The architecture hyperparameters of Table~\ref{tab:baseline_arch} are themselves the hand-picked baseline values that the learned-heads and SA-DMoN sections inherit;
+PG-GAT later replaces them with a Bayesian-sweep-selected configuration that grows the network to three layers and an output dimension of 256 (Section~\ref{sec_meth_pggat_training}).
+The baseline two-layer configuration is therefore the bar that any modification of the embedding network or the grouping head must clear at matched compute,
+not the architecture that PG-GAT ultimately uses.

@@ -1,4 +1,139 @@
 \section{Problem Formulation}
 \label{sec_meth_problem}
 
-Formalises the task. Input: set of $N$ keypoints with types $t_i$ and 2D positions $\mathbf{p}_i$. Output: a partition into $K$ groups (one per person) with the type constraint. Evaluation metric: Pose Grouping Accuracy (PGA), defined as the Hungarian-matched joint assignment accuracy between predicted and GT groups.
+This section formalises the multi-person pose grouping problem and fixes the notation used throughout the chapter.
+The setting is \emph{bottom-up} multi-person pose estimation,
+in which all keypoints in an image are detected first and then grouped into per-person skeletons,
+in contrast to \emph{top-down} approaches that first detect a bounding box per person and then run a single-person pose estimator inside each box.
+The bottom-up family is preferred for crowded scenes where person-detector boxes overlap and split keypoints across boxes,
+and the grouping stage is the component developed here.
+Concretely,
+an off-the-shelf single-image keypoint detector~\cite{cheng2020higherhrnet} produces a set of two-dimensional keypoint detections,
+each tagged with one of the seventeen COCO joint types~\cite{lin2014coco},
+and the grouping stage must partition this set into per-person skeletons without seeing the source image.
+The decoupling of detection from grouping is the central architectural choice that distinguishes this approach from end-to-end methods such as DEKR~\cite{geng2021dekr} or ED-Pose~\cite{yang2023edpose};
+its consequences are addressed in Section~\ref{sec_meth_integration}.
+
+\subsection{Inputs and outputs}
+\label{sec_meth_problem_io}
+
+Let an image contain $K$ people.
+The detector emits $N$ keypoint detections collected into a set
+$\mathcal{X} = \{(\mathbf{p}_i, t_i, v_i)\}_{i=1}^{N}$,
+where $\mathbf{p}_i \in [0,1]^2$ is the normalised image-plane position of detection $i$,
+$t_i \in \mathcal{T} = \{1, \dots, T\}$ is the joint type with $T = 17$ for COCO,
+and $v_i \in \{0,1\}$ is a visibility flag indicating whether the detector emitted a confident keypoint at that location.
+The grouping task is to produce a labelling $\hat{\mathbf{y}} \in \{1, \dots, K\}^{N}$
+that assigns each detection to one of the $K$ person identities,
+such that $\hat{\mathbf{y}}_i = \hat{\mathbf{y}}_j$ if and only if detections $i$ and $j$ belong to the same person.
+
+During training, ground-truth labels $\mathbf{y}^\star$ are available;
+at inference, $K$ itself may also be unknown and must be estimated (Section~\ref{sec_meth_kestimation}).
+The headline evaluations assume $K$ is provided by an oracle,
+which isolates the embedding-quality contribution from the K-estimation error mode;
+the autonomous pipeline that estimates $K$ at inference is described in Section~\ref{sec_meth_integration} and evaluated separately.
+
+\subsection{The skeleton graph}
+\label{sec_meth_problem_graph}
+
+The grouping problem is cast as node classification on a graph
+$\mathcal{G} = (\mathcal{V}, \mathcal{E})$
+constructed from the keypoint detections.
+Each node $i \in \mathcal{V}$ corresponds to one detection in $\mathcal{X}$,
+so $|\mathcal{V}| = N$.
+Each detection contributes a continuous feature vector $\mathbf{x}_i$ whose exact composition depends on whether the depth channel is retained;
+Section~\ref{sec_meth_data_pipeline} fixes both variants.
+The layer-zero input to the embedding network is the concatenation of $\mathbf{x}_i$ with a learnable embedding of the joint type,
+\begin{equation}
+    \mathbf{h}_i^{(0)} = \bigl[\,\mathbf{x}_i \,\big\|\, \mathrm{emb}_{\mathcal{T}}(t_i)\,\bigr] \in \mathbb{R}^{d_0},
+    \label{eq:layer0_input}
+\end{equation}
+where $\mathrm{emb}_{\mathcal{T}} : \{1, \dots, T\} \to \mathbb{R}^{32}$ is a learnable lookup table over the seventeen COCO joint types.
+Keeping the type embedding separate from the spatial features allows the network to learn that a nose differs from a left knee independently of where each one appears in the image.
+Edges are formed by a $k$-nearest-neighbour rule in image-plane distance with $k=8$,
+chosen to give every node a connected neighbourhood without densifying the graph to the point that attention has no discriminative work to do.
+The $k$NN-rule edge set is symmetric and contains no self-loops.
+
+This graph construction has two properties that the methodology below depends on.
+First, the graph encodes \emph{spatial} proximity, not identity:
+two nearby left-shoulder detections from different people produce a strong edge,
+even though they must end up in different communities.
+The embedding stage must therefore separate them.
+Second, the joint type $t_i$ is observed at every node,
+so the architecture can use type-aware structural priors without breaking the unsupervised-at-inference contract.
+The PG-GAT modifications of Section~\ref{sec_meth_pggat} are exactly the mechanisms that exploit this observed-type information.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{figures/demo_example_1.png}
+    % TODO(figure): replace with a diagram of the 17-joint COCO skeleton
+    %               (nodes labelled with the canonical joint names, edges
+    %               showing the kinematic chain). Optionally overlay a
+    %               sample $k$NN graph with $k=8$ on a two-person scene to
+    %               illustrate how same-type cross-person edges arise.
+    \caption{The COCO 17-joint skeleton (left)
+    and a representative $k$NN graph with $k = 8$ on a two-person scene (right).
+    Nodes are joint detections;
+    skeleton edges (left) encode anatomical adjacency,
+    while $k$NN edges (right) encode image-plane spatial proximity.
+    A same-type cross-person edge --- for example between two left shoulders ---
+    is the failure case that the embedding stage of Section~\ref{sec_meth_baseline} must resolve.}
+    \label{fig:skeleton_graph}
+\end{figure}
+
+\subsection{The three sub-problems}
+\label{sec_meth_problem_subproblems}
+
+Pose grouping decomposes into three sub-problems that this chapter addresses in turn.
+
+\paragraph{Embedding.}
+Produce per-node representations $\mathbf{z}_i \in \mathbb{R}^{d}$ such that the Euclidean structure of the embedding space reflects person identity:
+joints from the same person are close,
+joints from different people are far.
+A contrastive loss with ground-truth person labels is used at training time
+to push and pull pairs of embeddings according to whether they share a person identity.
+The embedding network is the dominant axis of variation in the experiments that follow;
+every PG-GAT, SA-DMoN, hyperbolic, and TriGAT variant in this chapter is a modification of the embedding network alone.
+
+\paragraph{Grouping.}
+Given the embeddings $\{\mathbf{z}_i\}$ and the number of people $K$,
+recover the partition $\hat{\mathbf{y}}$.
+A single grouping method is reported as the headline read-out:
+$k$-means with $k = K$ on the L2-normalised embeddings,
+denoted $k$NN throughout.
+This restriction is deliberate.
+Pose grouping is framed here as an unconstrained clustering problem
+in which the embedding does the discriminative work
+and the grouping head reads off the answer.
+Type-constrained, structured-assignment, and other learned grouping methods are treated as cross-paper context
+and reported only briefly where direct comparison is useful;
+their detailed investigation belongs to a companion paper outside the present scope.
+
+\paragraph{K estimation.}
+Predict $K$ from the embeddings alone, so that the full pipeline can run without an oracle.
+A small MLP head trained on the embeddings is described in Section~\ref{sec_meth_kestimation}.
+Joint training of the K head with the embedding network is shown in Chapter~\ref{chap_4} to corrupt the embedding;
+the head is therefore trained on a frozen embedding network.
+
+\subsection{Evaluation metric}
+\label{sec_meth_problem_pga}
+
+The primary metric is Pose Grouping Accuracy (PGA),
+the per-joint accuracy of the grouping after Hungarian matching of predicted cluster identifiers to ground-truth person identifiers.
+The Hungarian algorithm~\cite{kuhn1955hungarian} solves the optimal-assignment problem in polynomial time:
+given a non-negative cost matrix between two equally-sized sets,
+it returns the bijection that minimises the total cost.
+PGA uses it to find the relabelling of predicted clusters that maximises agreement with the ground truth,
+which is necessary because $k$-means produces arbitrary cluster identifiers that carry no semantic ordering.
+Concretely, given a predicted labelling $\hat{\mathbf{y}}$ and ground truth $\mathbf{y}^\star$,
+the optimal cluster-to-person bijection $\pi^\star : \{1,\dots,K\} \to \{1,\dots,K\}$ is computed by Hungarian assignment~\cite{kuhn1955hungarian} on the overlap matrix,
+and PGA is the fraction of joints whose remapped prediction matches the ground truth:
+\begin{equation}
+    \mathrm{PGA}(\hat{\mathbf{y}}, \mathbf{y}^\star)
+    = \frac{1}{N} \sum_{i=1}^{N} \mathbb{1}\!\left[\pi^\star(\hat{\mathbf{y}}_i) = \mathbf{y}^\star_i\right].
+    \label{eq:pga}
+\end{equation}
+Hungarian matching is necessary because the absolute cluster identifiers produced by $k$-means (and by any other clustering method) are arbitrary.
+The same metric is used on synthetic and COCO data;
+the only thing that changes between settings is the data distribution.
+A detailed account of the metric, the dataset compositions used for each evaluation row, and the W\&B sweep protocol that defends every hyperparameter choice is given in Section~\ref{sec_meth_evaluation}.

@@ -114,7 +114,7 @@ otherwise standard heatmap-based estimator,
 and as a complete reformulation of the multi-person task as
 end-to-end set prediction with no separate grouping stage.
 The two lines of work have different consequences for whether a
-modular grouping module of the kind developed in this dissertation can
+modular grouping module of the kind developed here can
 be attached downstream.
 
 TokenPose~\cite{li2021tokenpose} demonstrated that a pure-transformer
@@ -183,7 +183,7 @@ family~\cite{jiang2023rtmpose}.
 RTMO~\cite{lu2024rtmo} unifies detection and regression in a single
 stage, and RTMW~\cite{jiang2024rtmw} extends the family to whole-body
 pose at real-time rates.
-These methods are relevant to this dissertation only insofar as they
+These methods are relevant here only insofar as they
 produce per-keypoint coordinates;
 the grouping module proposed in
 Chapter~\ref{chap_3} operates on detected coordinates and is agnostic
@@ -207,7 +207,7 @@ and by the compositional-token approach of
 PCT~\cite{geng2023pct},
 which represents poses as discrete codebook tokens to improve
 occlusion robustness.
-The foundation-model trajectory matters for this dissertation as
+The foundation-model trajectory matters here as
 context rather than as comparison:
 a sufficiently large pretrained backbone reduces the per-keypoint
 localisation error to near saturation,
@@ -234,7 +234,7 @@ explicitly,
 with a crowd-index metric and approximately 20K images selected for
 inter-person occlusion;
 it is the appropriate benchmark for stress-testing grouping methods,
-although it is not used in this dissertation.
+although it is not used in the experiments that follow.
 The OCHuman benchmark, introduced alongside
 Pose2Seg~\cite{zhang2019pose2seg},
 isolates occluded humans and is similarly relevant to grouping
@@ -274,7 +274,7 @@ LightTrack~\cite{ning2020lighttrack} provides a top-down tracking
 framework with a learned re-identification head.
 The PoseTrack benchmark~\cite{andriluka2018posetrack} is the standard
 evaluation set for this video-pose formulation.
-Pose tracking is out of scope for this dissertation,
+Pose tracking is out of scope for the present work,
 which is restricted to per-image grouping.
 The grouping decisions are nonetheless the bottleneck within each
 tracked frame:

@@ -1,4 +1,109 @@
 \section{Hyperbolic PG-GAT}
 \label{sec_meth_hyperbolic}
 
-A variant that embeds the output into a Lorentz-model hyperbolic space. Euclidean internal attention, Lorentz output projection, logmap for clustering. Motivation: skeletons are trees, and trees embed more faithfully in hyperbolic space with fewer dimensions. The variant tests whether this translates into a quality or efficiency advantage for pose grouping.
+This section describes a variant of PG-GAT
+in which the embedding space is replaced from Euclidean $\mathbb{R}^{d}$ to a Lorentz-model hyperbolic manifold of curvature $-1$,
+denoted $\mathbb{H}^{d}$.
+The motivation is the geometry of skeletons:
+a human skeleton is a kinematic tree rooted at the pelvis,
+and a multi-person scene is a forest of such trees.
+Hyperbolic space embeds trees with exponentially less distortion than Euclidean space~\cite{sarkar2011treeembed, sala2018learningmrep},
+because the volume of a hyperbolic ball grows exponentially with radius while the volume of a Euclidean ball grows only polynomially.
+If PG-GAT is implicitly spending attention capacity learning hierarchical structure in $\mathbb{R}^{d}$,
+substituting $\mathbb{H}^{d}$ should encode that hierarchy for free.
+
+\subsection{Architecture}
+\label{sec_meth_hyperbolic_arch}
+
+The internal message-passing layers of PG-GAT remain Euclidean
+and use exactly the modifications of Section~\ref{sec_meth_pggat}.
+Only the final embedding is projected onto the Lorentz hyperboloid
+\begin{equation}
+    \mathbb{H}^{d} = \bigl\{\mathbf{x} \in \mathbb{R}^{d+1} : \langle \mathbf{x}, \mathbf{x}\rangle_{\mathcal{L}} = -1,\; x_0 > 0\bigr\},
+    \label{eq:hyperbolic_manifold}
+\end{equation}
+where $\langle \mathbf{x}, \mathbf{y}\rangle_{\mathcal{L}} = -x_0 y_0 + \sum_{k=1}^{d} x_k y_k$ is the Minkowski inner product.
+This choice is methodologically deliberate.
+The hybrid Euclidean-internal / hyperbolic-output design tests whether a hyperbolic output metric improves pose grouping
+without committing to a full hyperbolic attention rewrite,
+which would require M\"obius operations and Fr\'echet-mean aggregation throughout the layer stack and would constitute a much larger change.
+The Lorentz model is preferred to the Poincar\'e ball because it is more numerically stable at the embedding magnitudes that arise in practice~\cite{nickel2018lorentz};
+the implementation uses the \texttt{geoopt} library~\cite{kochurov2020geoopt}.
+
+A learnable tangent-scale parameter $\tau \in \mathbb{R}_{>0}$
+multiplies the tangent vector before the exponential map at the origin,
+so that
+\begin{equation}
+    \mathbf{x}^{\mathbb{H}}_i = \mathrm{expmap}_{0}\!\bigl(\tau \cdot \mathbf{v}_i\bigr),
+    \label{eq:hyperbolic_expmap}
+\end{equation}
+where $\mathbf{v}_i \in \mathbb{R}^{d}$ is the post-layer output of the Euclidean PG-GAT stack
+and $\mathrm{expmap}_{0}$ is the standard Lorentz exponential map at the origin.
+The scalar $\tau$ is initialised at $1/\sqrt{d}$,
+which is the empirically derived value
+that places initial pairwise geodesic distances in the range $[0.6, 1.0]$ at the dimensions tested
+and thereby avoids the exploding-distance failure mode that occurs when the post-layer norm is left at its default of approximately $\sqrt{d}$.
+Without the scale, the initial pairwise distances would be on the order of $20$ and the standard contrastive margin $\gamma = 0.5$ would be vacuously satisfied.
+
+\subsection{Hyperbolic contrastive loss}
+\label{sec_meth_hyperbolic_loss}
+
+The Euclidean contrastive loss of Equation~\eqref{eq:contrastive_loss} operates on cosine similarity on the unit hypersphere.
+The hyperbolic variant replaces this with a margin-based loss on the Lorentz geodesic distance
+\begin{equation}
+    d_{\mathbb{H}}(\mathbf{x}, \mathbf{y}) = \mathrm{arccosh}\bigl(-\langle \mathbf{x}, \mathbf{y}\rangle_{\mathcal{L}}\bigr),
+    \label{eq:hyperbolic_distance}
+\end{equation}
+which is non-negative and zero only at coincident points.
+With the same positive and negative pair sets $\mathcal{P}^{+}, \mathcal{P}^{-}$ as Section~\ref{sec_meth_baseline_loss},
+the loss is
+\begin{equation}
+    \mathcal{L}_{\mathbb{H}}
+    = \frac{1}{|\mathcal{P}^{+}|}\sum_{(i,j)\in\mathcal{P}^{+}} d_{\mathbb{H}}(\mathbf{x}^{\mathbb{H}}_i, \mathbf{x}^{\mathbb{H}}_j)^{2}
+    + \frac{1}{|\mathcal{P}^{-}|}\sum_{(i,j)\in\mathcal{P}^{-}} \max\!\bigl(0,\; \gamma_{\mathbb{H}} - d_{\mathbb{H}}(\mathbf{x}^{\mathbb{H}}_i, \mathbf{x}^{\mathbb{H}}_j)\bigr)^{2}.
+    \label{eq:hyperbolic_contrastive}
+\end{equation}
+Positive pairs are pulled to zero geodesic distance;
+negative pairs are pushed beyond a margin $\gamma_{\mathbb{H}}$.
+The margin is set to $\gamma_{\mathbb{H}} = 2.0$,
+calibrated to be roughly twice the initial average pairwise distance under the tangent-scale initialisation above.
+The Euclidean cosine margin $\gamma = 0.5$ of Equation~\eqref{eq:contrastive_loss} would be meaningless on this metric.
+
+A numerical safeguard is necessary because the broadcast tensor operations used to construct the pairwise distance matrix
+can produce values slightly below $1$ at the diagonal due to floating-point error,
+and $\mathrm{arccosh}$ is undefined there.
+The implementation calls \texttt{.contiguous()} after every \texttt{.expand()} on the embeddings
+and applies \texttt{torch.nan\_to\_num} on the distance matrix as a residual clamp.
+
+\subsection{Grouping read-out}
+\label{sec_meth_hyperbolic_readout}
+
+The downstream $k$-means read-out of Section~\ref{sec_meth_baseline_training} expects Euclidean inputs.
+The Lorentz embeddings are therefore mapped back to the tangent space at the origin via the logarithmic map
+$\mathrm{logmap}_{0} : \mathbb{H}^{d} \to T_{\mathbf{0}}\mathbb{H}^{d} \cong \mathbb{R}^{d+1}$,
+the leading time coordinate is dropped,
+and the resulting $d$-dimensional vector is L2-normalised.
+The tangent space at a point on a curved manifold is the flat Euclidean space that best approximates the manifold locally at that point ---
+intuitively, the plane that ``just touches'' the curved surface at the origin without crossing it ---
+so distances measured in the tangent space approximate the true geodesic distances on the manifold for embeddings whose magnitude is kept small by the $\tau$ rescaling.
+This approximation is the design compromise that makes the hybrid architecture feasible
+and that gives up some faithfulness to the manifold geometry in exchange for compatibility with the Euclidean read-out.
+
+\subsection{Two pre-registered hypotheses and the dimension axis}
+\label{sec_meth_hyperbolic_hypotheses}
+
+The hyperbolic variant is evaluated against two hypotheses fixed before any runs were executed:
+H1, that hyperbolic embedding matches or beats Euclidean at the same output dimension;
+and H2, that hyperbolic embedding matches Euclidean at a substantially smaller output dimension.
+H1 isolates a possible quality advantage,
+H2 isolates a possible efficiency advantage,
+and the two together span the space of useful outcomes.
+
+Two single-run ablations are recorded in Chapter~\ref{chap_4} to test each hypothesis,
+both at output dimension $128$ for H1 and at output dimension $32$ for H2
+(a four-fold reduction relative to the PG-GAT default).
+A subsequent 8-run Bayesian sweep over hyperbolic output dimension, number of layers, and hidden dimension
+provides the broader defensibility evidence reported alongside the single-run ablations.
+A separate Option~B configuration fine-tunes the dim-$32$ hyperbolic model on COCO
+to test whether the efficiency advantage at synthetic dimension survives transfer.
+Every hyperbolic experiment in Chapter~\ref{chap_4} uses the architecture, training schedule, and optimiser settings of Section~\ref{sec_meth_baseline_training} and Section~\ref{sec_meth_pggat_training} unless explicitly stated.
