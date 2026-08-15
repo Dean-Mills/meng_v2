@@ -19,55 +19,87 @@
 \end{center}
 
 \begin{tabular}{p{3cm}p{11cm}}
-  \dtthestudyleaderdesignationeng:  & <to be completed> \\
-  \dtthecostudyleaderdesignationeng:  & <to be completed> \hspace{1cm} \textcolor{red}{[optional line]} \\
+  \dtthestudyleaderdesignationeng:  & Prof H. Grobler \\
   Department:                        & \eeceeng      \\
   University:                        & \upeng        \\
   Degree:                            & \dtthedegreedesignationeng \\
-  Keywords:                          & Keyword, keyword, keyword,
-                                       keyword, keyword, keyword,
-                                       keyword, keyword, keyword,
-                                       keyword, keyword, keyword
+  Keywords:                          & Autonomous person-count estimation,
+                                       Bayesian hyperparameter sweep,
+                                       bottom-up pose estimation, COCO,
+                                       contrastive learning, detector independence,
+                                       GATv2, graph attention network,
+                                       hyperbolic embedding, multi-person pose grouping,
+                                       skeleton-aware embedding, synthetic-to-real transfer.
 \end{tabular}
 
 \vspace*{0.5cm}
-{
-\textit{This is the EECE dissertation/thesis template for Latex, version 2025-11-24.}
-Summary paragraph one summary paragraph one summary paragraph one
-summary paragraph one summary paragraph one summary paragraph one
-summary paragraph one summary paragraph one summary paragraph one
-summary paragraph one summary paragraph one summary paragraph one
-summary paragraph one summary paragraph one summary paragraph one
-summary paragraph one summary paragraph one summary paragraph one
-summary paragraph one summary paragraph one summary paragraph one
-summary paragraph one summary paragraph one summary paragraph one
-summary paragraph one summary paragraph one summary paragraph one
-summary paragraph one summary paragraph one summary paragraph one
-summary paragraph one summary paragraph one summary paragraph one
-summary paragraph one summary paragraph one summary paragraph one.
 
-Summary paragraph two summary paragraph two summary paragraph two
-summary paragraph two summary paragraph two summary paragraph two
-summary paragraph two summary paragraph two summary paragraph two
-summary paragraph two summary paragraph two summary paragraph two
-summary paragraph two summary paragraph two summary paragraph two
-summary paragraph two summary paragraph two summary paragraph two
-summary paragraph two summary paragraph two summary paragraph two
-summary paragraph two.
+Bottom-up multi-person human pose estimation can be separated into two stages:
+detecting keypoints in an image and assigning those keypoints to individual people.
+Most established grouping approaches are trained jointly with a particular detector,
+which makes the grouping mechanism dependent on that detector's internal representation.
+This work investigates an alternative in which grouping is treated as a separate module.
+A graph neural network - PG-GAT (Pose Grouping Graph Attention Network) -
+is developed to operate directly on detected keypoint coordinates
+and produce per-keypoint embeddings from which person identities are recovered using $k$-means.
+The resulting grouping network does not require access to the detector's feature maps
+and can therefore be applied to keypoints produced by different detector architectures.
 
-Summary paragraph three summary paragraph three summary paragraph
-three summary paragraph three summary paragraph three summary
-paragraph three summary paragraph three summary paragraph three
-summary paragraph three summary paragraph three summary paragraph
-three summary paragraph three summary paragraph three summary
-paragraph three.
-}
+PG-GAT extends GATv2 with three modifications derived from the human skeleton structure:
+a type-pair attention bias that distinguishes different categories of keypoint edges,
+skeleton-relative position encoding that exposes geometric relationships to the attention mechanism,
+and same-type repulsion heads that provide dedicated capacity
+for separating corresponding joints belonging to different people.
+In isolation the individual modifications give margins within seed noise,
+while their combination performs best under matched architecture and training conditions.
+The final architecture is selected through a 32-run Bayesian sweep over six architectural parameters,
+and a separate 24-run loss sweep confirms that the inherited contrastive-loss settings are already near-optimal.
+Training consists of synthetic pre-training on 400 procedurally generated scenes followed by COCO fine-tuning,
+with the fine-tuning configuration selected through a further 12-run Bayesian sweep.
 
-\newpage
+The resulting model reaches $0.9715$ pose grouping accuracy (PGA) on COCO validation
+using ground-truth keypoints
+and $0.9591$ end-to-end PGA using HigherHRNet-W32-512 detections.
+HigherHRNet's native associative-embedding grouping reaches $0.9847$ on the same matched detections,
+giving a measured detector-independence cost of $0.0256$ PGA.
+The same frozen PG-GAT and person-count estimator
+are then applied zero-shot to YOLO11x-pose and RTMO-L detections.
+The autonomous pipeline trails their native grouping by $0.0210$ and $0.0220$ PGA respectively,
+showing that the cost remains approximately $0.02$ across three different detector families.
+A small K-estimation head trained on the frozen PG-GAT embeddings
+achieves $76.1\%$ exact and $91.9\%$ off-by-one person-count accuracy on COCO validation detections.
+Using its predicted $K$ raises end-to-end PGA from $0.9591$ with ground-truth $K$ to $0.9644$.
+Further experiments show that this behaviour is associated with detection incompleteness:
+the predicted count adapts to the people represented by the detected keypoints,
+whereas the annotation-level count can require $k$-means to form clusters
+for people who are poorly represented or absent from the detection set.
 
+The investigation also establishes several negative results
+that help identify where additional model complexity is useful.
+Three learned grouping heads (deep embedded clustering, slot attention, and graph partitioning)
+and ten SA-DMoN variants
+fail to improve on simple $k$-means once synthetic-to-real transfer is considered.
+In contrast, changes to the embedding network produce substantially larger gains,
+supporting the conclusion that embedding quality is the main performance lever
+in the grouping problem studied here.
+A hyperbolic PG-GAT matches a four-fold larger Euclidean embedding under synthetic-only training
+but does not retain this advantage after COCO fine-tuning.
+TriGAT - which replaces joints with skeleton triplets - underperforms the joint-based representation,
+with its triplet-to-joint voting stage identified as the main limitation.
+Finally, augmenting PG-GAT with MobileNetV2 appearance features
+does not improve on the position-and-type model
+despite adding approximately $2.2 \times 10^{6}$ parameters.
 
+Overall, the results show that detector-independent pose grouping is practical
+with a measured accuracy trade-off of approximately $0.02$ PGA
+against detector-native grouping across the three detector families tested.
+They also show that the remaining ground-truth person-count dependency can be removed
+without reducing operational grouping accuracy under the evaluated detector conditions.
+Across the wider set of experiments,
+the consistent finding is that improvements to the per-keypoint embedding
+have a substantially greater effect on grouping quality
+than increasing the complexity of the grouping algorithm itself.
 
 \newpage
 
 %% End of File.
-

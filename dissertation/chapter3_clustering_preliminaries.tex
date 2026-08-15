@@ -1,202 +1,275 @@
 \section{Preliminaries --- Clustering and Learned Grouping}
 \label{sec_meth_clustering}
 
-Pose grouping reduces, once an embedding is fixed, to a clustering problem on a finite set of points in an embedding space.
-This section introduces the clustering primitives that the rest of the chapter builds on:
-$k$-means as the canonical baseline and the read-out used throughout this chapter,
-constrained $k$-means as the family that admits structural side-information,
-deep embedded clustering as the unsupervised representation-and-cluster joint learner,
-slot attention as the supervised iterative competitor,
-graph partitioning as the affinity-based community detector,
-and Newman modularity and its differentiable relaxation DMoN as the modularity-driven alternative.
-Each primitive is defined formally below so that subsequent sections can apply them to pose embeddings without re-deriving their mechanics.
+Once an embedding has been produced,
+pose grouping becomes a clustering problem over a finite set of points in the embedding space.
+This section introduces the main clustering methods used throughout the remainder of the chapter.
 
-\subsection{$k$-means and constrained $k$-means}
+The first is $k$-means,
+which provides the main clustering baseline and is also used as the read-out for the final PG-GAT model.
+Deep embedded clustering is then introduced
+as an approach that jointly learns a representation and its cluster assignments.
+Slot attention provides an iterative alternative
+in which features compete for assignment to a set of learned slots.
+Graph partitioning instead treats grouping as an affinity problem between pairs of nodes.
+Finally, Newman modularity and its differentiable DMoN formulation
+provide an approach based directly on the community structure of the graph.
+
+Each of these methods is defined formally in the following subsections -
+this allows the later methodology to apply them directly to the pose embeddings
+without repeating their underlying formulation.
+
+\subsection{$k$-means}
 \label{sec_meth_kmeans}
 
 Given a set of points $\mathcal{Z} = \{\mathbf{z}_1, \dots, \mathbf{z}_N\} \subset \mathbb{R}^{d}$
-and a target cluster count $k$,
-$k$-means~\cite{macqueen1967kmeans} seeks centres $\boldsymbol{\mu}_1, \dots, \boldsymbol{\mu}_k \in \mathbb{R}^{d}$
-and an assignment function $c : \{1, \dots, N\} \to \{1, \dots, k\}$ that minimise the sum of squared within-cluster distances,
+and a target number of clusters $k$,
+$k$-means~\cite{macqueen1967kmeans} aims to find cluster centres
+$\boldsymbol{\mu}_1, \dots, \boldsymbol{\mu}_k \in \mathbb{R}^{d}$
+and an assignment function $c : \{1, \dots, N\} \to \{1, \dots, k\}$
+that minimise the total squared distance between each point and its assigned centre:
 \begin{equation}
     \mathcal{L}_{k\text{-means}}(\{\boldsymbol{\mu}_j\}, c)
-    = \sum_{i=1}^{N} \|\mathbf{z}_i - \boldsymbol{\mu}_{c(i)}\|_2^{2}.
+    = \sum_{i=1}^{N}
+    \|\mathbf{z}_i - \boldsymbol{\mu}_{c(i)}\|_2^{2}.
     \label{eq:kmeans_objective}
 \end{equation}
-The standard solver is Lloyd's algorithm~\cite{lloyd1982kmeans}:
-alternate between an assignment step that maps each $\mathbf{z}_i$ to the nearest current centre
-and an update step that sets each centre to the mean of the points currently assigned to it.
-The algorithm converges to a local minimum of Equation~\eqref{eq:kmeans_objective} in a finite number of iterations
-but is sensitive to the initial choice of centres;
-the $k$-means++ scheme of~\cite{arthur2007kmeanspp} chooses initial centres with probability proportional to their squared distance from the nearest already-chosen centre,
-which gives a $\mathcal{O}(\log k)$-approximation in expectation and stabilises the downstream solution.
+A standard way of solving this objective is Lloyd's algorithm~\cite{lloyd1982kmeans} -
+it alternates between two steps:
+each point is first assigned to its nearest current cluster centre,
+and each centre is then updated to the mean of the points assigned to it.
+These steps are repeated until the assignments stop changing or the objective no longer improves.
+The algorithm converges to a local minimum of Equation~\eqref{eq:kmeans_objective},
+but the final solution can depend on how the initial centres are selected.
+The $k$-means++ method~\cite{arthur2007kmeanspp} improves this initialisation
+by selecting new centres with probability proportional to their squared distance
+from the nearest centre already chosen -
+this provides a $\mathcal{O}(\log k)$ approximation guarantee in expectation
+and generally gives a more stable starting point.
 
-$k$-means is used throughout as both an evaluation read-out and a comparison point.
-After every embedding method (baseline GAT, PG-GAT, hyperbolic PG-GAT, TriGAT)
-the per-image partition is recovered by running $k$-means with $k = K$ on the L2-normalised embeddings,
-where $K$ is either provided by an oracle or estimated from the embeddings as described in Section~\ref{sec_meth_kestimation}.
-The L2 normalisation places every embedding on the unit hypersphere,
-which makes the squared-distance objective of Equation~\eqref{eq:kmeans_objective}
-equivalent up to an additive constant to a cosine-similarity objective
-and aligns the clustering metric with the contrastive loss used at training time.
+In this work,
+$k$-means is used both as the main clustering read-out and as a comparison point for the learned grouping methods -
+after an embedding has been produced by the baseline GAT, PG-GAT, hyperbolic PG-GAT, or TriGAT,
+the person assignments for each image are recovered using $k$-means with $k = K$.
+The value of $K$ is either provided by an oracle
+or estimated from the embeddings using the procedure described in Section~\ref{sec_meth_kestimation}.
 
-Constrained $k$-means~\cite{wagstaff2001copkmeans} extends Lloyd's algorithm with pairwise constraints:
-a \emph{must-link} constraint on $(\mathbf{z}_i, \mathbf{z}_j)$ requires that both points share a cluster,
-and a \emph{cannot-link} constraint requires that they do not.
-The assignment step is replaced by a greedy procedure that respects the constraints if a feasible assignment exists.
-For pose grouping the natural constraint is a cannot-link between every pair of detections of the same joint type:
-two left elbows in the same image cannot belong to the same person.
-Constrained $k$-means and the related structured-assignment methods are introduced here for terminology
-and are treated in detail in separate companion work referenced where direct comparison is useful;
-the headline evaluations in this chapter use unconstrained $k$-means as the read-out.
+Before clustering, the embeddings are L2-normalised so that they lie on the unit hypersphere -
+under this normalisation, squared Euclidean distance is directly related to cosine similarity.
+The clustering objective in Equation~\eqref{eq:kmeans_objective} is therefore consistent
+with the cosine-based contrastive objective used to train the embedding network.
 
 \subsection{Deep embedded clustering (DEC)}
 \label{sec_meth_dec_prelim}
 
-DEC~\cite{xie2016dec} couples representation learning and clustering into a single differentiable objective.
-For a fixed cluster count $k$,
-DEC maintains a set of cluster centres $\{\boldsymbol{\mu}_j\}_{j=1}^{k} \subset \mathbb{R}^{d}$ as learnable parameters in the same space as the input embeddings.
-Each embedding $\mathbf{z}_i$ is assigned to clusters by a Student's $t$-distribution soft assignment with one degree of freedom~\cite{vandermaaten2008tsne},
+Deep Embedded Clustering (DEC)~\cite{xie2016dec} combines representation learning and clustering
+within a single differentiable objective.
+For a fixed number of clusters $k$,
+DEC maintains a set of cluster centres $\{\boldsymbol{\mu}_j\}_{j=1}^{k} \subset \mathbb{R}^{d}$
+as learnable parameters in the same space as the input embeddings.
+Each embedding $\mathbf{z}_i$ is assigned to these clusters
+using a Student's $t$-distribution with one degree of freedom~\cite{vandermaaten2008tsne}:
 \begin{equation}
     q_{ij}
     = \frac{\bigl(1 + \|\mathbf{z}_i - \boldsymbol{\mu}_j\|_2^{2}\bigr)^{-1}}
            {\sum_{j'} \bigl(1 + \|\mathbf{z}_i - \boldsymbol{\mu}_{j'}\|_2^{2}\bigr)^{-1}},
     \label{eq:dec_q_prelim}
 \end{equation}
-where $q_{ij}$ is the probability that $\mathbf{z}_i$ belongs to cluster $j$.
-A sharpened target distribution $p_{ij}$ is constructed from $q_{ij}$ by raising the probabilities to a power and renormalising,
+where $q_{ij}$ represents the soft assignment of embedding $\mathbf{z}_i$ to cluster $j$.
+From these assignments,
+DEC constructs a sharpened target distribution $p_{ij}$
+by squaring the assignment probabilities and renormalising them:
 \begin{equation}
     p_{ij}
-    = \frac{q_{ij}^{2} / f_j}{\sum_{j'} q_{ij'}^{2} / f_{j'}},
-    \quad f_j = \sum_{i} q_{ij},
+    = \frac{q_{ij}^{2} / f_j}
+           {\sum_{j'} q_{ij'}^{2} / f_{j'}},
+    \quad
+    f_j = \sum_{i} q_{ij},
     \label{eq:dec_p_prelim}
 \end{equation}
-which down-weights clusters with high mass and up-weights confident assignments.
-The training objective is the Kullback--Leibler divergence between the target and the soft assignment,
-$\mathcal{L}_{\text{DEC}} = \sum_{i,j} p_{ij} \log(p_{ij} / q_{ij})$,
-and the gradient is propagated through $q_{ij}$ into both the cluster centres and any upstream embedding network.
-DEC was originally proposed as a fully unsupervised method:
-no ground-truth label is consumed by the loss,
-and the only training signal is the self-distillation of the soft assignment against its own sharpened target.
-Section~\ref{sec_meth_dec_pose} adapts this primitive to pose embeddings
-and discusses why the unsupervised regime is structurally inadequate for the multi-person pose grouping setting.
+where $f_j$ represents the soft frequency of cluster $j$ -
+this sharpening increases the influence of confident assignments
+while the frequency term reduces the effect of clusters that already contain a large amount of probability mass.
+
+Training minimises the Kullback--Leibler divergence
+between the sharpened target distribution and the current soft assignments:
+\begin{equation}
+    \mathcal{L}_{\text{DEC}}
+    = \sum_{i,j}
+    p_{ij}\log\left(\frac{p_{ij}}{q_{ij}}\right).
+\end{equation}
+Because $q_{ij}$ depends on both the embeddings and the cluster centres,
+gradients can be propagated into the centres as well as any upstream embedding network.
+DEC was originally introduced as a fully unsupervised method,
+meaning that no ground-truth cluster labels are used during training -
+instead, the model learns by repeatedly fitting its current soft assignments
+to the sharpened distribution derived from those same assignments.
+
+Section~\ref{sec_meth_dec_pose} applies this formulation to the pose embeddings used in this work
+and considers why this unsupervised self-training behaviour is structurally inadequate
+for multi-person pose grouping.
 
 \subsection{Slot attention}
 \label{sec_meth_slotattn_prelim}
 
-Slot attention~\cite{locatello2020slotattention} is an iterative competitive attention mechanism originally proposed for unsupervised object-centric representation learning.
-Given a set of $N$ input feature vectors $\{\mathbf{z}_i\}_{i=1}^{N} \subset \mathbb{R}^{d}$
+Slot Attention~\cite{locatello2020slotattention} is an iterative competitive attention mechanism
+originally developed for unsupervised object-centric representation learning.
+Given a set of $N$ input features $\{\mathbf{z}_i\}_{i=1}^{N} \subset \mathbb{R}^{d}$
 and a fixed number of slots $K$,
-$K$ slot vectors $\mathbf{s}_1, \dots, \mathbf{s}_K \in \mathbb{R}^{d}$ are initialised by sampling from a learned Gaussian distribution $\mathcal{N}(\boldsymbol{\mu}, \boldsymbol{\sigma}^2 \mathbf{I})$
-whose parameters are trained end-to-end with the rest of the network.
+the method maintains slot vectors $\mathbf{s}_1, \dots, \mathbf{s}_K \in \mathbb{R}^{d}$ -
+these are initialised by sampling from a learned Gaussian distribution
+$\mathcal{N}(\boldsymbol{\mu}, \boldsymbol{\sigma}^2\mathbf{I})$,
+with the distribution parameters learned together with the rest of the network.
+
 At each of $T$ iterations,
-layer-normalised slots produce queries $\mathbf{q}_j = \mathbf{W}_q \mathbf{s}_j$,
-layer-normalised inputs produce keys $\mathbf{k}_i = \mathbf{W}_k \mathbf{z}_i$ and values $\mathbf{v}_i = \mathbf{W}_v \mathbf{z}_i$,
-and the attention matrix is computed by softmax across slots rather than across inputs,
+the layer-normalised slots are projected into queries $\mathbf{q}_j = \mathbf{W}_q\mathbf{s}_j$,
+while the normalised input features are projected into keys $\mathbf{k}_i = \mathbf{W}_k\mathbf{z}_i$
+and values $\mathbf{v}_i = \mathbf{W}_v\mathbf{z}_i$.
+Attention is then calculated using a softmax across the slots:
 \begin{equation}
     A_{ji}
-    = \frac{\exp\bigl(\mathbf{q}_j^{\top} \mathbf{k}_i / \sqrt{d}\bigr)}
-           {\sum_{j'} \exp\bigl(\mathbf{q}_{j'}^{\top} \mathbf{k}_i / \sqrt{d}\bigr)}.
+    = \frac{\exp\bigl(\mathbf{q}_j^{\top}\mathbf{k}_i / \sqrt{d}\bigr)}
+           {\sum_{j'} \exp\bigl(\mathbf{q}_{j'}^{\top}\mathbf{k}_i / \sqrt{d}\bigr)}.
     \label{eq:slotattn_attention}
 \end{equation}
-The cross-slot softmax in the denominator enforces \emph{competition}:
-each input is contested by every slot,
-and a stronger query--key alignment in one slot suppresses the contribution of the input to every other slot.
-The matrix is row-normalised over inputs and used to weight the values into per-slot updates,
-which a gated recurrent unit (GRU)~\cite{cho2014gru} combines with the previous slot state.
-A GRU is a small recurrent cell that learns a per-slot reset and update gate so that informative updates accumulate across iterations and noisy updates are suppressed;
-in the slot-attention setting it acts as a stabiliser that prevents the slots from collapsing onto a single input cluster early in the iteration.
-After $T$ iterations the final slots produce per-input--per-slot logits by inner product,
-and the argmax over slots gives a hard assignment.
+Unlike standard attention,
+where the softmax is commonly applied across the input features,
+Slot Attention normalises across the competing slots -
+each input therefore contributes most strongly to the slot with which it has the greatest query-key agreement,
+while stronger assignment to one slot reduces its contribution to the others.
+This competition is what allows the slots to separate different parts of the input.
 
-The slot-attention head is supervised here via Hungarian-matched cross-entropy (Section~\ref{sec_meth_slot_pose})
-rather than through the unsupervised reconstruction loss of the original paper.
-This is a substantive adaptation:
-the original slot-attention architecture relies on a downstream decoder that reconstructs the input image,
-which is absent here.
-Replacing the reconstruction signal with a supervised assignment signal preserves the competitive attention mechanism
-while connecting the iteration directly to the ground-truth person labels.
+The attention weights are subsequently normalised over the inputs
+and used to combine the value vectors into an update for each slot.
+A gated recurrent unit (GRU)~\cite{cho2014gru} combines this update with the previous slot state -
+the GRU controls how much of the new information is incorporated at each iteration,
+allowing the slot representations to develop gradually rather than being replaced after each attention step.
+After $T$ iterations,
+the final slot representations are compared with the input features to obtain per-input, per-slot scores,
+with the highest scoring slot providing the final hard assignment.
+
+For the pose-grouping experiments in this work,
+the Slot Attention head is trained using Hungarian-matched cross-entropy
+as described in Section~\ref{sec_meth_slot_pose}.
+This differs from the unsupervised reconstruction objective used in the original Slot Attention formulation -
+the original method uses a decoder to reconstruct the input image from the learned slots,
+whereas no such decoder is required for pose grouping.
+The reconstruction objective is therefore replaced with direct supervision from the ground-truth person labels -
+this keeps the competitive attention mechanism
+while adapting its training signal to the grouping task considered here.
 
 \subsection{Graph partitioning by edge classification}
 \label{sec_meth_partition_prelim}
 
-A graph partitioning approach to clustering does not parameterise the partition directly.
-Instead, for every pair of nodes $(i, j)$ a binary classifier predicts the logit of the event ``$i$ and $j$ belong to the same cluster'',
-and the partition is recovered post-hoc from the connected components of the thresholded affinity graph.
-The classical objective is the normalised cut~\cite{shi2000ncut},
-which seeks a partition $(\mathcal{V}_1, \dots, \mathcal{V}_K)$ of the node set that minimises
+Graph partitioning approaches clustering differently from methods that predict cluster assignments directly -
+instead, a classifier predicts whether pairs of nodes belong to the same cluster,
+and the final partition is recovered from the resulting affinity graph.
+A classical formulation of graph partitioning is the normalised cut~\cite{shi2000ncut},
+which seeks a partition $(\mathcal{V}_1, \dots, \mathcal{V}_K)$ that minimises
 \begin{equation}
     \mathrm{NCut}(\mathcal{V}_1, \dots, \mathcal{V}_K)
-    = \sum_{k=1}^{K} \frac{\mathrm{cut}(\mathcal{V}_k, \overline{\mathcal{V}_k})}{\mathrm{vol}(\mathcal{V}_k)},
+    = \sum_{k=1}^{K}
+    \frac{\mathrm{cut}(\mathcal{V}_k, \overline{\mathcal{V}_k})}
+         {\mathrm{vol}(\mathcal{V}_k)},
     \label{eq:ncut}
 \end{equation}
-where $\mathrm{cut}(\mathcal{V}_k, \overline{\mathcal{V}_k})$ is the sum of edge weights crossing the boundary of $\mathcal{V}_k$
-and $\mathrm{vol}(\mathcal{V}_k) = \sum_{i \in \mathcal{V}_k} d_i$ is the volume of the cluster.
-The normalised cut admits a spectral relaxation~\cite{vonluxburg2007spectral}
-whose continuous solution can be read off the second-smallest eigenvalue of the graph Laplacian,
-but solutions in the discrete combinatorial case are NP-hard.
+where $\mathrm{cut}(\mathcal{V}_k, \overline{\mathcal{V}_k})$ is the sum of the edge weights
+crossing the boundary of cluster $\mathcal{V}_k$,
+and $\mathrm{vol}(\mathcal{V}_k) = \sum_{i \in \mathcal{V}_k} d_i$ is its volume.
+The discrete normalised-cut problem is computationally difficult,
+but a spectral relaxation allows an approximate solution to be obtained
+from the eigenvectors of the graph Laplacian~\cite{vonluxburg2007spectral}.
 
-The learned variant adopted here~\cite{yang2020gcnve}
-replaces the spectral relaxation with a learned pairwise affinity score.
-A pair feature is constructed from the input embeddings $\mathbf{z}_i$ and $\mathbf{z}_j$
-as the concatenation of the difference and the element-wise product,
-which encodes both relative direction and co-activation magnitude in embedding space.
-A multi-layer perceptron maps the pair feature to a scalar logit,
-and the network is trained with binary cross-entropy against a ground-truth same/different-person label.
-At inference the affinity logits are thresholded to a binary affinity graph,
-and the partition is read off by union--find connected components.
-Section~\ref{sec_meth_partition_pose} applies this primitive to the pose graph
-and notes the structural property that distinguishes it from slot attention and DEC:
-the cluster count $K$ does not need to be provided to the partition step,
-because it falls out as the number of connected components.
+The learned graph-partitioning method used in this work is based on~\cite{yang2020gcnve} -
+rather than solving the spectral problem directly,
+it learns an affinity score between pairs of nodes.
+For two input embeddings $\mathbf{z}_i$ and $\mathbf{z}_j$,
+a pair feature is constructed using their difference and element-wise product,
+providing information about both the relative position of the two embeddings
+and dimensions in which they respond similarly.
+A multi-layer perceptron then maps the pair representation to a scalar same-cluster logit.
+Training uses binary cross-entropy with the ground-truth same-person or different-person label.
+
+During inference, the predicted affinities are thresholded to form a binary graph.
+Person groups are then recovered as connected components, implemented using a union-find procedure.
+The adaptation to pose grouping is described in Section~\ref{sec_meth_partition_pose}.
+An important difference from DEC and slot attention
+is that the number of clusters $K$ does not have to be supplied to the partitioning step -
+instead, the number of people is determined
+by the number of connected components produced by the predicted affinity graph.
 
 \subsection{Modularity and deep modularity networks (DMoN)}
 \label{sec_meth_dmon_prelim}
 
-The clustering primitives above all consume embeddings.
-A different family operates directly on a graph adjacency:
-given $\mathcal{G} = (\mathcal{V}, \mathcal{E})$ with adjacency $A \in \{0,1\}^{N \times N}$
-and degrees $d_i = \sum_{j} A_{ij}$,
-Newman modularity~\cite{newman2006modularity} measures
-the excess intra-cluster edge mass relative to a chance baseline.
-For a partition encoded by indicator matrix $\mathbf{S} \in \{0,1\}^{N \times K}$ with $S_{ik} = 1$ if node $i$ is in cluster $k$,
-modularity is
+The clustering methods above operate primarily on learned embeddings.
+Modularity-based methods instead make direct use of the structure of the graph.
+Given a graph $\mathcal{G} = (\mathcal{V}, \mathcal{E})$ with adjacency matrix $A \in \{0,1\}^{N \times N}$
+and node degrees $d_i = \sum_j A_{ij}$,
+Newman modularity~\cite{newman2006modularity} measures how much more connectivity exists
+within the proposed communities than would be expected under a random-graph baseline.
+
+For a partition represented by $\mathbf{S} \in \{0,1\}^{N \times K}$,
+where $S_{ik}=1$ when node $i$ belongs to cluster $k$,
+modularity is defined as
 \begin{equation}
     Q(\mathbf{S})
-    = \frac{1}{2m} \mathrm{Tr}\bigl(\mathbf{S}^{\top} \mathbf{B}\, \mathbf{S}\bigr),
+    = \frac{1}{2m}
+      \mathrm{Tr}\bigl(\mathbf{S}^{\top} \mathbf{B}\, \mathbf{S}\bigr),
     \quad
-    \mathbf{B} = \mathbf{A} - \frac{\mathbf{d}\,\mathbf{d}^{\top}}{2m},
+    \mathbf{B}
+    = \mathbf{A}
+      - \frac{\mathbf{d}\,\mathbf{d}^{\top}}{2m},
     \label{eq:newman_modularity}
 \end{equation}
-where $m = \tfrac{1}{2}\sum_{ij} A_{ij}$ is the total edge count
-and $\mathbf{d}\mathbf{d}^{\top}/(2m)$ is the \emph{null model} that gives the expected edge count between $i$ and $j$
-under a random graph that preserves the degree sequence.
-Communities are partitions whose intra-cluster edge mass exceeds the null-model prediction,
-and modularity maximisation seeks the partition that maximises this excess.
-The construction of the null model is the load-bearing modelling choice:
-the degree-based null assumes that nodes' connectivity is well-explained by their degrees,
-which makes modularity a useful objective when the graph is structurally constructed from identity
-(co-authorship networks, protein-protein interaction networks)
-but a misaligned objective when the graph is constructed from spatial proximity
-(such as the $k$NN keypoint graph of Section~\ref{sec_meth_problem_graph}).
+where $m = \tfrac{1}{2}\sum_{ij} A_{ij}$ is the total number of edges.
+The term $\mathbf{d}\mathbf{d}^{\top}/(2m)$ forms the \emph{null model},
+which gives the expected connectivity between two nodes under a random graph that preserves the degree sequence -
+a useful community therefore contains more internal connectivity than would be expected under this baseline.
 
-DMoN~\cite{tsitsulin2023dmon} converts Equation~\eqref{eq:newman_modularity} into a differentiable objective
-by replacing the discrete indicator matrix with a soft assignment $\mathbf{S} \in [0,1]^{N \times K}$
-produced by a GNN encoder followed by a per-node softmax over $K$ clusters,
-and adding two regularisers that prevent degenerate solutions.
-The full DMoN loss is
+The choice of null model is important for the pose-grouping problem -
+a degree-based model is well suited to graphs where connectivity itself carries useful structural information,
+such as co-authorship or protein-protein interaction networks.
+The assumption is misaligned with the $k$NN keypoint graph used in this work (Section~\ref{sec_meth_problem_graph}),
+where edges are created mainly from spatial proximity -
+two nearby keypoints can have a strong graph connection even when they belong to different people.
+
+DMoN~\cite{tsitsulin2023dmon} makes the modularity objective differentiable
+by replacing the discrete indicator matrix with a soft assignment matrix $\mathbf{S} \in [0,1]^{N \times K}$ -
+these assignments are produced by a GNN encoder followed by a per-node softmax over the $K$ clusters.
+Regularisation terms are then added to discourage degenerate partitions.
+The resulting objective is
 \begin{equation}
     \mathcal{L}_{\text{DMoN}}
-    = -\frac{1}{2m} \mathrm{Tr}\bigl(\mathbf{S}^{\top} \mathbf{B}\,\mathbf{S}\bigr)
-      + \lambda_{\text{ortho}}\,\Bigl\|\frac{\mathbf{S}^{\top}\mathbf{S}}{\|\mathbf{S}^{\top}\mathbf{S}\|_F} - \frac{\mathbf{I}}{\sqrt{K}}\Bigr\|_F^{2}
-      + \lambda_{\text{cluster}}\,\|\mathbf{s}_{\text{vol}}\|_1,
+    = -\frac{1}{2m}
+      \mathrm{Tr}\bigl(\mathbf{S}^{\top} \mathbf{B}\,\mathbf{S}\bigr)
+      + \lambda_{\text{ortho}}\,
+      \Bigl\|
+      \frac{\mathbf{S}^{\top}\mathbf{S}}
+           {\|\mathbf{S}^{\top}\mathbf{S}\|_F}
+      - \frac{\mathbf{I}}{\sqrt{K}}
+      \Bigr\|_F
+      + \lambda_{\text{cluster}}\,
+      \Bigl(
+      \frac{\sqrt{K}}{N}\,
+      \|\mathbf{s}_{\text{vol}}\|_2
+      - 1
+      \Bigr),
     \label{eq:dmon_loss_prelim}
 \end{equation}
-where the first term is the negative modularity (to be minimised),
-the orthogonality term encourages a balanced partition with cluster-mass approximately uniform,
-and the collapse-prevention term penalises empty clusters via the cluster-volume vector $\mathbf{s}_{\text{vol}}$.
-$\lambda_{\text{ortho}}$ and $\lambda_{\text{cluster}}$ are the trade-off coefficients.
-DMoN was the natural follow-up after the three supervised learned heads of Section~\ref{sec_meth_dec_prelim}--\ref{sec_meth_partition_prelim} failed to outperform $k$-means,
-because it operates on a fundamentally different signal (graph structure) than the embedding-based heads (embedding geometry).
-Section~\ref{sec_meth_sadmon} describes the eleven SA-DMoN variants that modify the null model of Equation~\eqref{eq:dmon_loss_prelim} to suit the pose grouping setting,
-and Chapter~\ref{chap_4} reports the resulting evidence that no null-model modification recovers a useful gradient signal on the $k$NN keypoint graph.
+where the first term maximises modularity,
+the orthogonality term encourages separation between the learned clusters,
+and the collapse-prevention term discourages empty or degenerate cluster assignments
+through the cluster-volume vector $\mathbf{s}_{\text{vol}} = \mathbf{S}^{\top}\mathbf{1}_N$ -
+the coefficients $\lambda_{\text{ortho}}$ and $\lambda_{\text{cluster}}$
+control the relative contribution of these regularisation terms.
+
+DMoN was investigated
+after the learned grouping heads of Sections~\ref{sec_meth_dec_prelim}--\ref{sec_meth_partition_prelim}
+failed to improve on $k$-means.
+Unlike those methods,
+DMoN uses the graph topology itself as the main clustering signal
+rather than relying only on the geometry of the learned embedding.
+Section~\ref{sec_meth_sadmon} describes the ten SA-DMoN variants
+used to test whether modifying the null model makes this objective better suited to pose grouping -
+the corresponding experiments in Chapter~\ref{chap_4}
+show that none of the tested modifications provides a useful improvement on the $k$NN keypoint graph.

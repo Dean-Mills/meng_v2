@@ -1,26 +1,70 @@
 \section{COCO Fine-Tuning}
 \label{sec_res_coco_ft}
 
-This section reports the COCO fine-tune of the architecture-sweep-selected PG-GAT,
-which produces the headline COCO numbers defended in Chapter~\ref{chap_5}.
-Two configurations are reported:
-the legacy 20-epoch fine-tune recipe inherited from earlier work,
-and the 12-run Bayesian fine-tune sweep that confirms (and slightly improves on) the legacy recipe.
-The fine-tune sweep winner is the source of the W\&B alias \texttt{meng-headline}
-and the artifact version \texttt{pg\_gat\_finetune\_sweep:v20},
-and produces the headline COCO numbers cited throughout the rest of the chapter.
+This section reports the COCO fine-tuning stage applied to the
+architecture-sweep-selected PG-GAT model.
+This stage adapts the synthetically trained embedding network
+to the COCO distribution
+and produces the checkpoint used for the headline COCO evaluations
+reported throughout the remainder of the chapter.
+
+Two fine-tuning configurations are considered.
+The first uses the legacy 20-epoch recipe retained from the earlier
+stages of the investigation
+and provides a reference point for the effect of COCO adaptation.
+The second is selected through a 12-run Bayesian sweep over the
+fine-tuning hyperparameters,
+testing whether the inherited recipe can be improved while keeping
+the PG-GAT architecture fixed.
+
+The winning sweep configuration provides the final checkpoint used for
+the headline evaluation.
+It is recorded in W\&B under the alias \texttt{meng-headline}
+and artifact version \texttt{pg\_gat\_finetune\_sweep:v20}.
+The COCO results associated with this checkpoint are therefore treated
+as the final PG-GAT results in the comparisons that follow.
 
 \subsection{Setup}
 \label{sec_res_coco_ft_setup}
 
-Both configurations start from the \texttt{champion-arch} checkpoint of Section~\ref{sec_res_pggat_sweep}
-(architecture-sweep winner, $0.9634$ synth val) and fine-tune on COCO~\cite{lin2014coco} \texttt{train2017} keypoint annotations.
-The fine-tune training loop uses the same contrastive loss of Equation~\eqref{eq:contrastive_loss} as the synthetic pre-training,
-the same AdamW optimiser, and the same cosine learning-rate schedule;
-only the training-data source changes from the 400-scene synthetic split to the $\sim 56{,}000$-image COCO person-keypoint subset.
-The legacy recipe is the inherited 20-epoch schedule at learning rate $10^{-4}$, cosine-decayed to $10^{-6}$, weight decay $10^{-4}$;
-the sweep variant searches over fine-tune epochs $\in \{10, 15, 20, 30\}$, learning rate $\in [10^{-5}, 5 \times 10^{-4}]$ (log-uniform), and weight decay $\in \{10^{-5}, 10^{-4}, 10^{-3}\}$
-for a total budget of $12$ runs with Hyperband early termination at the third validation iteration (epoch $6$).
+Both fine-tuning configurations start from the
+\texttt{champion-arch} checkpoint selected in
+Section~\ref{sec_res_pggat_sweep},
+which reaches a synthetic-validation PGA of $0.9634$ before adaptation.
+Fine-tuning is performed on the COCO~\cite{lin2014coco}
+\texttt{train2017} person-keypoint annotations,
+replacing the 400-scene synthetic training split
+with the approximately $56{,}000$ COCO images retained by the
+person-keypoint dataset filter.
+The model architecture is unchanged during this stage.
+
+The training objective also remains unchanged.
+Fine-tuning uses the contrastive loss of
+Equation~\eqref{eq:contrastive_loss},
+AdamW,
+and a cosine learning-rate schedule.
+The legacy configuration runs for 20 epochs with an initial learning rate
+of $10^{-4}$,
+decaying to $10^{-6}$,
+and weight decay $10^{-4}$.
+It provides the inherited fine-tuning recipe against which the subsequent
+sweep is compared.
+
+The Bayesian fine-tuning sweep searches three parameters:
+training duration,
+learning rate,
+and weight decay.
+The number of fine-tuning epochs is selected from $\{10,15,20,30\}$,
+the initial learning rate is sampled log-uniformly from
+$[10^{-5},5\times10^{-4}]$,
+and weight decay is selected from $\{10^{-5},10^{-4},10^{-3}\}$.
+The sweep has a total budget of 12 runs
+and uses Hyperband early termination at the third validation evaluation
+(epoch $6$).
+All runs begin from the same \texttt{champion-arch} checkpoint,
+so differences between them reflect the fine-tuning recipe
+rather than changes to the PG-GAT architecture or synthetic
+pre-training stage.
 
 \subsection{Headline numbers}
 \label{sec_res_coco_ft_numbers}
@@ -28,25 +72,39 @@ for a total budget of $12$ runs with Hyperband early termination at the third va
 
 \begin{table}[H]
 \centering
-\footnotesize
-\begin{tabular}{lcccl}
+\tablesize
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.34\linewidth}cccl}
 \toprule
-Configuration & Synth val PGA & COCO val PGA (kNN, GT kp) & COCO E2E PGA (kNN) & W\&B run \\
+Configuration
+& Synth val
+& COCO val
+& COCO E2E
+& W\&B run \\
 \midrule
-PG-GAT (synth-only, \texttt{champion-arch})            & 0.9634 & 0.9010 & [Phase C] & \texttt{08d0ffde} \\
+PG-GAT (synthetic only, \texttt{champion-arch})
+    & 0.9634 & 0.9010 & 0.9005 & \texttt{08d0ffde} \\
 \midrule
-Legacy COCO ft (20 ep, inherited recipe)               & 0.9178 & 0.9565 & [Phase C] & \texttt{ugzbgepn} \\
-Single fine-tune of \texttt{champion-arch} (20 ep)     & --- & 0.9695 & 0.9559 & \texttt{g0h6pu00} \\
-\textbf{Fine-tune sweep winner (\texttt{meng-headline})} & \textbf{0.9634} & \textbf{0.9715} & \textbf{0.9591} & \texttt{b5noyg7t} \\
+Legacy COCO fine-tune (20 ep)
+    & 0.9178 & 0.9565 & 0.9430 & \texttt{ugzbgepn} \\
+Single fine-tune of \texttt{champion-arch} (20 ep)
+    & --- & 0.9695 & 0.9559 & \texttt{g0h6pu00} \\
+\textbf{Fine-tune sweep winner (\texttt{meng-headline})}
+    & \textbf{0.9634} & \textbf{0.9715} & \textbf{0.9591} & \texttt{b5noyg7t} \\
 \midrule
-HigherHRNet AE (reference upper bound)                 & --- & --- & 0.9847 & --- \\
+HigherHRNet AE (reference)
+    & --- & --- & 0.9847 & --- \\
 \bottomrule
 \end{tabular}
-\caption{COCO fine-tune results.
-The fine-tune sweep winner is the headline checkpoint
-and produces the defended COCO numbers cited downstream.
-The HigherHRNet associative-embedding reference is included for context;
-the gap between it and the headline E2E number is the detector-independence gap discussed in Section~\ref{sec_res_e2e}.}
+\caption{Effect of COCO fine-tuning on the architecture-sweep-selected
+PG-GAT. All columns report PGA; COCO val is $k$-means on ground-truth keypoints
+and COCO E2E uses HigherHRNet detections. The synthetic-only \texttt{champion-arch} checkpoint provides
+the pre-adaptation reference. All COCO fine-tuned configurations improve
+substantially on its COCO performance, with the Bayesian sweep winner
+(\texttt{meng-headline}) reaching $0.9715$ PGA using ground-truth
+keypoints and $0.9591$ in the HigherHRNet-based end-to-end evaluation.
+HigherHRNet's native associative-embedding grouping reaches $0.9847$ on
+the same end-to-end protocol and is included as the detector-specific
+reference.}
 \label{tab:coco_ft_headline}
 \end{table}
 
@@ -55,46 +113,140 @@ the gap between it and the headline E2E number is the detector-independence gap 
 
 Four observations follow from Table~\ref{tab:coco_ft_headline}.
 
-\paragraph{1. The fine-tune is the single largest gain of any experiment in this chapter.}
-COCO kNN PGA lifts from the synth-only PG-GAT's $\sim 0.91$ to $0.9715$ at the fine-tune sweep winner,
-a gain of approximately $0.06$ points.
-For comparison,
-the PG-GAT isolation modifications of Section~\ref{sec_res_pggat_ablations} produce $\sim 0.005$ each,
-the architecture sweep of Section~\ref{sec_res_pggat_sweep} produces $\sim 0.07$,
-and every other method in this chapter produces a gain below either of these magnitudes.
-The COCO fine-tune is the largest available lever in the experimental pipeline,
-which is consistent with the diagnosis from Section~\ref{sec_res_baseline} that the synthetic-to-real distribution shift is the dominant axis of error in COCO performance.
+\textbf{1. COCO fine-tuning produces one of the largest gains in the
+experimental pipeline:}
+The synthetic-only \texttt{champion-arch} checkpoint reaches a COCO
+PGA of $0.9010$ when $k$-means is applied to its embeddings.
+After COCO fine-tuning, the sweep-selected checkpoint reaches $0.9715$,
+an absolute improvement of $0.0705$.
+The corresponding end-to-end result increases from $0.9005$ to $0.9591$,
+a gain of $0.0586$.
 
-\paragraph{2. The sweep produces a modest improvement over the legacy recipe.}
-The single fine-tune of \texttt{champion-arch} at the legacy 20-epoch recipe achieves $0.9695$ COCO kNN.
-The 12-run Bayesian sweep around that recipe achieves $0.9715$ COCO kNN,
-an improvement of $+0.0020$.
-This is statistically below the per-image standard deviation of the metric,
-so the sweep should not be cited as a substantive improvement.
-What it does provide is a defensibility argument:
-the inherited learning rate, weight decay, and epoch count are within a search neighbourhood whose winner was selected by Bayesian optimisation over 12 configurations
-rather than being inherited unexamined.
-The sweep winner is promoted to \texttt{meng-headline}
-because the headline benefits from carrying the strongest available checkpoint,
-not because the lift over the single-fine-tune is meaningful.
+This improvement is comparable in magnitude to the gain obtained from
+the architecture sweep,
+and substantially larger than the changes observed in the individual
+PG-GAT isolation experiments.
+The result also agrees with the transfer behaviour observed earlier
+in the chapter.
+The synthetic-only PG-GAT already produces a strong representation
+on its source distribution,
+but a substantial gap remains when that representation is applied
+directly to COCO.
+Fine-tuning on the target distribution removes much of this gap
+while leaving the PG-GAT architecture and contrastive objective unchanged.
+The result therefore identifies domain adaptation as a major component
+of the final COCO performance.
 
-\paragraph{3. The synth val PGA is preserved through fine-tuning.}
-A common failure mode of synthetic-to-real fine-tuning is catastrophic forgetting:
-the network specialises to the target distribution and loses the source-distribution performance.
-The fine-tune sweep winner retains the same $0.9634$ synth val PGA as the architecture-sweep pre-training checkpoint,
-which means the COCO gain comes at no cost to synthetic-distribution accuracy.
-The fine-tune is therefore additive rather than substitutional;
-the legacy variant trained from the older two-layer baseline architecture shows a more pronounced synth--COCO trade-off
-($0.9178$ synth val after COCO ft, against $\sim 0.88$ for the pre-fine-tune baseline of Section~\ref{sec_res_baseline}),
-which is a known artefact of fine-tuning a smaller backbone for longer on a much larger dataset.
-The sweep-winner result is the one defended downstream.
+\textbf{1a. Performance on multi-person scenes:}
+The full COCO evaluation set contains single-person images,
+for which the grouping decision is trivial.
+As discussed in Section~\ref{sec_meth_evaluation_splits},
+these scenes raise the absolute PGA and can obscure performance
+on the cases in which grouping is actually required.
+The headline checkpoint is therefore also evaluated on the $1{,}248$-scene
+subset containing at least two people.
 
-\paragraph{4. The detector-independence gap closes from inventory to re-run.}
-The gap between the headline E2E result ($0.9591$) and the HigherHRNet AE reference ($0.9847$)
-is $0.0256$ in the headline configuration.
-This is the smallest detector-independence gap measured across the experimental work,
-and the autonomous-pipeline result of Section~\ref{sec_res_e2e}
-inherits this checkpoint and reports the operational end-to-end number.
-The fact that AE retains a small but non-zero advantage even at the fine-tune-sweep winner
-is consistent with AE's joint-training advantage (the tag head is trained end-to-end with the detector on the COCO distribution),
-and the gap is the question the discussion of Section~\ref{sec_disc_pggat_why} addresses.
+On this subset, the $k$-means read-out reaches $0.9472$ PGA,
+compared with $0.9715$ on the full filtered evaluation set.
+The difference of $0.0243$ shows the effect of moving to the more
+difficult multi-person evaluation distribution,
+although it should not be interpreted as a direct causal contribution
+of the single-person scenes because the composition and weighting
+of the evaluation set also change.
+The multi-person result provides the stricter measure of grouping
+performance,
+while the full-set value is retained as the headline figure
+to remain comparable with the HigherHRNet AE reference evaluated
+on the full distribution.
+
+\textbf{2. The fine-tune sweep provides a small improvement over the
+single-run recipe:}
+A single 20-epoch fine-tune of \texttt{champion-arch} reaches $0.9695$
+COCO PGA.
+The 12-run Bayesian sweep raises this to $0.9715$,
+an absolute difference of $0.0020$.
+This is a small change relative to the overall variation of PGA
+across images,
+and repeated-seed experiments were not performed to establish whether
+the difference is systematic.
+The $0.0020$ gain is therefore not treated as a substantive
+experimental finding.
+
+The main purpose of the sweep is instead to test the sensitivity
+of the headline result to the fine-tuning recipe.
+The inherited schedule is no longer accepted without comparison -
+epoch count,
+learning rate,
+and weight decay are searched over the neighbourhood defined
+in the previous section.
+Figure~\ref{fig:ft_sweep} shows the resulting landscape.
+The sampled configurations occupy a relatively narrow band,
+with approximately $0.011$ PGA between the highest and lowest
+synthetic-validation outcomes.
+Within the tested range,
+the final performance is therefore not strongly dependent on one
+narrowly chosen fine-tuning configuration.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.72\linewidth]{figures/ft_sweep.pdf}
+    \caption{Fine-tuning sweep outcomes for sweep \texttt{i9vpg4t1}
+    across 12 Bayesian-sampled configurations. Synthetic-validation PGA
+    after COCO fine-tuning is plotted against the initial fine-tuning
+    learning rate, with epoch count indicated by colour. The selected
+    configuration (\texttt{meng-headline}, run \texttt{b5noyg7t}) is
+    outlined in black. The observed spread across the sampled
+    configurations is approximately $0.011$ PGA, indicating relatively
+    low sensitivity to the fine-tuning recipe within the searched
+    neighbourhood.}
+    \label{fig:ft_sweep}
+\end{figure}
+
+The sweep winner is promoted to the \texttt{meng-headline} alias
+because it provides the strongest checkpoint found in the search.
+The small difference from the single 20-epoch fine-tune is retained
+for completeness
+rather than presented as an independent performance gain.
+
+\textbf{3. Synthetic performance is retained after COCO
+fine-tuning:}
+The final checkpoint reaches $0.9634$ PGA when re-evaluated on the
+synthetic validation set,
+matching the value obtained by the \texttt{champion-arch} checkpoint
+before fine-tuning.
+This value was measured by a separate evaluation of the fine-tuned
+checkpoint rather than copied from the pre-training run.
+The corresponding held-out synthetic-test PGA is $0.9580$.
+
+This result is useful because the improvement on COCO does not coincide
+with a measurable reduction in source-domain performance under the
+reported evaluation.
+The embedding therefore adapts to the COCO distribution while retaining
+its performance on the synthetic data on which it was originally trained.
+In this experiment, there is no evidence of catastrophic forgetting
+at the level measured by PGA.
+The final checkpoint can consequently be used for both synthetic and
+COCO evaluations without maintaining separate domain-specific PG-GAT
+models.
+
+\textbf{4. The remaining end-to-end gap to HigherHRNet AE is
+$0.0256$:}
+The fine-tuned PG-GAT reaches an end-to-end PGA of $0.9591$,
+compared with $0.9847$ for HigherHRNet's native associative-embedding
+grouping on the same evaluation protocol.
+The remaining absolute difference is therefore $0.0256$.
+This is the detector-independence gap carried forward into the
+end-to-end analysis of Section~\ref{sec_res_e2e}.
+
+The comparison is demanding because HigherHRNet's AE tags are learned
+jointly with the detector on COCO,
+whereas PG-GAT receives detached keypoint detections and performs
+grouping as a separate module.
+The observed difference is consistent with the possibility that joint
+training provides useful detector-specific information,
+although the present experiment does not isolate joint training
+as the cause of the remaining gap.
+Section~\ref{sec_disc_embedding_pggat} returns to this difference
+when considering the trade-off between detector-specific grouping
+performance and a modular grouping component that can be applied
+independently of the upstream detector.

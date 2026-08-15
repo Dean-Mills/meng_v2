@@ -1,0 +1,424 @@
+{
+ "wg95w0k0": [
+  {
+   "name": "fb6a125e",
+   "state": "finished",
+   "pga": 0.8431568627450978,
+   "config": {
+    "sa_gat__dropout": 0,
+    "sa_gat__num_heads": 2,
+    "sa_gat__hidden_dim": 128,
+    "sa_gat__num_layers": 4,
+    "sa_gat__output_dim": 32,
+    "sa_gat__joint_embedding_dim": 64
+   }
+  },
+  {
+   "name": "3eff9cbc",
+   "state": "finished",
+   "pga": 0.8883725490196076,
+   "config": {
+    "sa_gat__dropout": 0.2,
+    "sa_gat__num_heads": 4,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 4,
+    "sa_gat__output_dim": 128,
+    "sa_gat__joint_embedding_dim": 32
+   }
+  },
+  {
+   "name": "4e89b475",
+   "state": "finished",
+   "pga": 0.8834019607843133,
+   "config": {
+    "sa_gat__dropout": 0,
+    "sa_gat__num_heads": 4,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 3,
+    "sa_gat__output_dim": 32,
+    "sa_gat__joint_embedding_dim": 32
+   }
+  },
+  {
+   "name": "64e3b62d",
+   "state": "finished",
+   "pga": 0.9406764705882348,
+   "config": {
+    "sa_gat__dropout": 0,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 128,
+    "sa_gat__num_layers": 3,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 64
+   }
+  },
+  {
+   "name": "bf4e8cf1",
+   "state": "finished",
+   "pga": 0.916519607843137,
+   "config": {
+    "sa_gat__dropout": 0,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 128,
+    "sa_gat__num_layers": 4,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 64
+   }
+  },
+  {
+   "name": "09684933",
+   "state": "finished",
+   "pga": 0.9213333333333332,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 128,
+    "sa_gat__num_layers": 2,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 64
+   }
+  },
+  {
+   "name": "fdcce2a3",
+   "state": "finished",
+   "pga": 0.8948039215686269,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 128,
+    "sa_gat__num_layers": 3,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 64
+   }
+  },
+  {
+   "name": "f10b9d91",
+   "state": "finished",
+   "pga": 0.9404019607843136,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 3,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 64
+   }
+  },
+  {
+   "name": "954d82ca",
+   "state": "finished",
+   "pga": 0.940705882352941,
+   "config": {
+    "sa_gat__dropout": 0,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 3,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 64
+   }
+  },
+  {
+   "name": "65424223",
+   "state": "finished",
+   "pga": 0.9202647058823524,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 128,
+    "sa_gat__num_layers": 3,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 32
+   }
+  },
+  {
+   "name": "b6a2d251",
+   "state": "finished",
+   "pga": 0.907705882352941,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 128,
+    "sa_gat__num_layers": 2,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 32
+   }
+  },
+  {
+   "name": "4655a9bf",
+   "state": "finished",
+   "pga": 0.9159117647058818,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 4,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 64
+   }
+  },
+  {
+   "name": "b2945bc8",
+   "state": "finished",
+   "pga": 0.9541862745098038,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 2,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 32
+   }
+  },
+  {
+   "name": "08d0ffde",
+   "state": "finished",
+   "pga": 0.9634215686274508,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 4,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 3,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 64
+   }
+  },
+  {
+   "name": "13941eda",
+   "state": "finished",
+   "pga": 0.950990196078431,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 4,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 2,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 64
+   }
+  },
+  {
+   "name": "8f66c520",
+   "state": "finished",
+   "pga": 0.9576568627450978,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 4,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 32
+   }
+  },
+  {
+   "name": "c4f110b3",
+   "state": "finished",
+   "pga": 0.9367745098039209,
+   "config": {
+    "sa_gat__dropout": 0,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 5,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 32
+   }
+  },
+  {
+   "name": "0b3c7d7f",
+   "state": "finished",
+   "pga": 0.946490196078431,
+   "config": {
+    "sa_gat__dropout": 0,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 4,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 32
+   }
+  },
+  {
+   "name": "7a830397",
+   "state": "finished",
+   "pga": 0.9566274509803918,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 4,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 4,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 32
+   }
+  },
+  {
+   "name": "9d6ca473",
+   "state": "finished",
+   "pga": 0.9567941176470586,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 4,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 3,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 16
+   }
+  },
+  {
+   "name": "859d3bdc",
+   "state": "finished",
+   "pga": 0.9615784313725484,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 3,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 32
+   }
+  },
+  {
+   "name": "9cb9c7b1",
+   "state": "finished",
+   "pga": 0.9309705882352938,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 4,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 4,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 64
+   }
+  },
+  {
+   "name": "78f957b6",
+   "state": "finished",
+   "pga": 0.9196960784313718,
+   "config": {
+    "sa_gat__dropout": 0.1,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 5,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 64
+   }
+  },
+  {
+   "name": "780814d3",
+   "state": "finished",
+   "pga": 0.9546666666666664,
+   "config": {
+    "sa_gat__dropout": 0.2,
+    "sa_gat__num_heads": 4,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 4,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 32
+   }
+  },
+  {
+   "name": "9aae01f6",
+   "state": "finished",
+   "pga": 0.9607156862745094,
+   "config": {
+    "sa_gat__dropout": 0.2,
+    "sa_gat__num_heads": 4,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 3,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 32
+   }
+  },
+  {
+   "name": "54013d5c",
+   "state": "finished",
+   "pga": 0.9592745098039208,
+   "config": {
+    "sa_gat__dropout": 0.2,
+    "sa_gat__num_heads": 8,
+    "sa_gat__hidden_dim": 64,
+    "sa_gat__num_layers": 3,
+    "sa_gat__output_dim": 256,
+    "sa_gat__joint_embedding_dim": 32
+   }
+  }
+ ],
+ "i9vpg4t1": [
+  {
+   "name": "b53f05d9",
+   "state": "finished",
+   "pga": 0.9529215686274504,
+   "config": {
+    "training__lr": 1.9381211227238415e-05,
+    "training__epochs": 10,
+    "training__weight_decay": 1e-05
+   }
+  },
+  {
+   "name": "e9cff56b",
+   "state": "finished",
+   "pga": 0.9570882352941174,
+   "config": {
+    "training__lr": 1.4065734463858325e-05,
+    "training__epochs": 30,
+    "training__weight_decay": 1e-05
+   }
+  },
+  {
+   "name": "4dd9b82b",
+   "state": "finished",
+   "pga": 0.958882352941176,
+   "config": {
+    "training__lr": 0.0004165919712839806,
+    "training__epochs": 10,
+    "training__weight_decay": 1e-05
+   }
+  },
+  {
+   "name": "bd796aa6",
+   "state": "finished",
+   "pga": 0.9624117647058822,
+   "config": {
+    "training__lr": 0.0004693809205492715,
+    "training__epochs": 15,
+    "training__weight_decay": 0.0001
+   }
+  },
+  {
+   "name": "3362f752",
+   "state": "finished",
+   "pga": 0.9634215686274504,
+   "config": {
+    "training__lr": 0.00038417518776322576,
+    "training__epochs": 15,
+    "training__weight_decay": 0.0001
+   }
+  },
+  {
+   "name": "37058cf0",
+   "state": "finished",
+   "pga": 0.9627745098039212,
+   "config": {
+    "training__lr": 0.00023700948775297749,
+    "training__epochs": 20,
+    "training__weight_decay": 0.001
+   }
+  },
+  {
+   "name": "b61fd7d3",
+   "state": "finished",
+   "pga": 0.9601764705882349,
+   "config": {
+    "training__lr": 0.00023349801470255407,
+    "training__epochs": 20,
+    "training__weight_decay": 1e-05
+   }
+  },
+  {
+   "name": "e7fcfbd0",
+   "state": "finished",
+   "pga": 0.959882352941176,
+   "config": {
+    "training__lr": 9.475302207463776e-05,
+    "training__epochs": 20,
+    "training__weight_decay": 1e-05
+   }
+  }
+ ]
+}

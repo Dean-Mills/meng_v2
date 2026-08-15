@@ -1,0 +1,449 @@
+\section{The Embedding Is the Lever}
+\label{sec_disc_embedding}
+
+The most consistent finding across the experiments is that pose-grouping
+performance depends more strongly on the quality of the per-keypoint
+embedding than on the algorithm used to partition those embeddings into
+person identities.
+This pattern appears across three separate groups of experiments.
+Replacing $k$-means with learned grouping heads does not produce
+a consistent improvement,
+and the more specialised SA-DMoN objective also fails to improve
+the underlying representation.
+In contrast, changes made directly to the embedding network produce
+gains that are retained, and subsequently strengthened, after transfer
+to COCO.
+
+This section considers these results together
+rather than as independent negative and positive experiments.
+The DEC, slot-attention, and graph-partitioning results show what
+happens when additional modelling capacity is placed after or alongside
+an embedding that still contains ambiguous person assignments.
+The SA-DMoN experiments provide a stronger test of the same idea,
+by introducing structural information through the clustering objective,
+but again fail to move beyond the performance of the simpler baseline.
+PG-GAT changes where that structural information enters the pipeline -
+instead of asking the grouping head to recover person structure
+from the final embeddings,
+it uses joint type,
+relative geometry,
+and same-type relationships during message passing while those
+embeddings are being formed.
+
+Taken together, these experiments suggest that the important
+distinction is not simply between simple and learned grouping methods
+but between introducing structure \emph{after} the representation has
+been formed and using that structure to shape the representation itself.
+The remainder of this section examines the evidence for this
+interpretation
+and relates each PG-GAT modification to the failure modes observed
+in the earlier grouping-head experiments.
+
+\subsection{Why every learned head failed on the same embedding}
+\label{sec_disc_embedding_heads}
+
+Three learned grouping heads, DEC, slot attention, and graph
+partitioning, were attached to the standard GAT backbone of
+Section~\ref{sec_meth_baseline} and trained jointly with the embedding
+under matched optimiser and schedule settings
+(Section~\ref{sec_res_learned_heads}).
+None produces a grouping result that improves on the no-depth $k$-means
+baseline once evaluated on COCO.
+The contrast is clearest for graph partitioning -
+it is the strongest learned head on synthetic validation at $0.9714$,
+but its own COCO read-out falls to $0.7514$.
+Applying $k$-means to the embeddings produced by the same jointly
+trained model recovers the score to $0.8366$,
+which is still below the standard GAT baseline of $0.8841$.
+The three heads fail in different ways,
+and this consistency across different grouping mechanisms is what makes
+the combined result more informative than any individual negative
+experiment.
+
+DEC adds little because its clustering objective has limited ability
+to correct errors already present in the embedding.
+Its KL-divergence objective compares the soft assignment $q$
+with a sharpened target $p$ that is itself constructed from $q$
+(Equation~\eqref{eq:dec_p_prelim}).
+When $k$-means++ initialisation already produces confident assignments,
+the target distribution mainly reinforces those assignments rather than
+introducing independent supervisory information about person identity.
+This behaviour is particularly limiting for the ambiguous cases that
+matter most for pose grouping.
+If two same-type keypoints from different people lie close together
+in embedding space,
+an incorrect initial assignment can be sharpened along with the
+correct ones.
+DEC therefore has no independent structural cue with which to resolve
+the error.
+This is consistent with its COCO result of $0.8798$,
+which remains close to but below the $0.8841$ baseline.
+
+Slot attention behaves differently.
+Its synthetic-validation PGA of $0.9025$ exceeds the standard GAT
+baseline of $0.8783$,
+showing that a learned competitive assignment mechanism can exploit
+the relatively clean synthetic representation.
+The improvement does not survive transfer -
+its own COCO read-out reaches only $0.7986$,
+while $k$-means on the jointly trained embeddings reaches $0.8254$.
+One limitation is that the slot competition does not explicitly encode
+the type-exclusivity constraint available from the pose representation.
+Two detections of the same joint type must belong to different people,
+but the slot mechanism is not constructed to enforce this relationship
+directly.
+On the synthetic distribution the embedding can often resolve the
+ambiguity without that prior -
+the COCO result suggests that this becomes less reliable once the
+representation is exposed to the synthetic-to-real shift.
+The experiment does not isolate type-exclusivity as the sole cause
+of the transfer failure,
+but its absence provides a structural explanation consistent with the
+observed behaviour.
+
+Graph partitioning provides the strongest example of a synthetic gain
+that does not transfer.
+Its $0.9714$ synthetic-validation PGA is well above the $0.8783$
+baseline,
+yet its own COCO grouping falls to $0.7514$.
+The $k$-means read-out on the same jointly trained embeddings recovers
+to $0.8366$,
+indicating that a substantial part of the failure lies in the
+partitioning read-out rather than only in the embedding.
+The edge classifier converts pairwise affinities into binary decisions,
+which are subsequently thresholded and assembled into connected
+components.
+This creates a sensitivity that is absent from centroid-based $k$-means:
+changes in the affinity distribution around the decision threshold
+can alter individual edges,
+and a small number of incorrect edges can change the connectivity
+of an entire component.
+The large synthetic-to-COCO deterioration is therefore consistent with
+a partitioning mechanism that is particularly sensitive to distribution
+shift.
+
+Taken together, the three experiments provide evidence against the
+grouping head being the main limitation of the baseline pipeline.
+DEC adds an unsupervised sharpening objective,
+slot attention introduces a learned competitive assignment mechanism,
+and graph partitioning reformulates grouping as supervised pairwise
+classification.
+Despite these substantially different approaches,
+none produces a COCO result above the $0.8841$ $k$-means baseline.
+In several cases, applying $k$-means to the jointly trained embeddings
+performs better than the head for which those embeddings were trained.
+
+The common result is therefore more important than the individual
+failure mechanisms.
+Increasing the complexity of the grouping stage does not reliably
+recover information that is absent or ambiguous in the representation
+supplied to it.
+This observation motivates moving the structural priors earlier
+in the pipeline,
+so that they influence the construction of the embedding itself
+rather than being introduced only when that embedding is partitioned.
+The SA-DMoN and PG-GAT experiments provide the next two tests
+of this interpretation.
+
+\subsection{Why ten SA-DMoN variants plateaued}
+\label{sec_disc_embedding_sadmon}
+
+The SA-DMoN experiments extend the grouping-head investigation in a
+different direction.
+Rather than learning a direct assignment from the final embeddings,
+SA-DMoN introduces a graph-structural objective based on modularity
+maximisation over the keypoint $k$NN graph.
+The ten configurations reported in Section~\ref{sec_res_sadmon}
+all converge to a narrow synthetic-validation band of approximately
+$0.77$--$0.79$,
+around $0.09$ below the no-depth baseline.
+More informative than the best individual result is the fact that
+substantial changes to the null model,
+adjacency,
+and type loss do not move the model outside this band.
+This suggests that the limitation lies in the compatibility between
+the modularity objective and the graph on which it operates
+rather than in a particular SA-DMoN hyperparameter.
+
+Newman modularity (Equation~\eqref{eq:newman_modularity}) measures
+whether a proposed partition contains more within-community edge mass
+than would be expected under a chosen null model.
+This formulation is well suited to graphs in which observed connectivity
+carries information about the communities of interest,
+and the null model provides a reasonable description of connectivity
+in the absence of those communities.
+The keypoint $k$NN graph is misaligned with this assumption.
+Its edges are constructed explicitly from spatial proximity,
+whereas the desired partition is person identity.
+Two keypoints can therefore be neighbours because they occupy nearby
+image coordinates even when they belong to different people.
+This occurs precisely in the crowded and overlapping poses for which
+grouping is most difficult.
+
+The consequence is a mismatch between the structure emphasised by the
+graph and the structure required by the task.
+A modularity objective operating on this graph is encouraged to preserve
+patterns of local connectivity,
+but those patterns need not correspond to person identity.
+In crowded scenes they may instead connect joints belonging to different
+people.
+The spectral objective is therefore being asked to recover identity
+communities from a graph whose edges were not constructed primarily
+from identity information.
+This provides a structural explanation for why changing the details
+of the modularity formulation has little effect on the final grouping
+accuracy.
+
+The SA-DMoN variants test this explanation from several directions.
+Changing the spatial bandwidth $\sigma$ modifies how strongly proximity
+enters the skeleton-aware null model,
+but no tested parameterisation produces a useful operating point.
+With unconstrained optimisation, $\sigma$ grows to approximately $341$,
+making the spatial kernel nearly uniform and effectively weakening
+the intended spatial correction.
+Constraining $\sigma$ to $[0.05,0.5]$ prevents this divergence,
+but the learned value moves to the upper boundary,
+again indicating that the optimisation prefers a weaker spatial null.
+Fixing $\sigma$ from the per-graph median pairwise distance moves
+in the opposite direction and also reduces performance.
+The behaviour across these variants is more consistent with a poorly
+matched objective than with a single badly chosen bandwidth.
+
+The v2 experiments alter other parts of the formulation but reach the
+same conclusion.
+Feature-based adjacency breaks the direct dependence between the
+message-passing graph and the spatial null
+but makes the adjacency itself change as the representation is learned.
+The modularity objective must then optimise against a graph that is
+moving with the embedding.
+Reducing the spectral weight partially recovers the loss in performance
+but does not exceed the earlier variants.
+Replacing the hinge-style type term with an entropy formulation changes
+the smoothness of the optimisation without changing the information
+available to the objective,
+and similarly produces no meaningful gain.
+Combining the two changes does not improve the result.
+
+The narrow performance range across all ten configurations is therefore
+the main evidence from the SA-DMoN investigation.
+It does not establish that modularity objectives are unsuitable for pose
+grouping in general -
+a graph whose edges encode learned identity affinity rather than
+spatial proximity could behave differently.
+It does show that, for the keypoint $k$NN graph used here,
+increasingly elaborate modifications to the modularity objective do not
+recover the performance of the simpler contrastive-embedding baseline.
+
+Together with the learned-head experiments,
+this result substantially narrows the useful design space.
+The earlier experiments show that DEC,
+slot attention,
+and pairwise graph partitioning do not reliably improve grouping once
+the representation transfers to COCO.
+SA-DMoN then shows that introducing pose structure through a
+modularity-based clustering objective does not resolve the problem either.
+These results motivate moving the structural information into the
+representation-learning stage itself.
+PG-GAT follows this direction by retaining the simple $k$-means read-out
+and instead changing how information is exchanged between keypoints
+while their embeddings are being formed.
+
+\subsection{Why the three PG-GAT modifications are complementary}
+\label{sec_disc_embedding_pggat}
+
+The PG-GAT isolation ablation of
+Section~\ref{sec_res_pggat_ablations} tests each of the three
+skeleton-aware modifications independently before combining them in the
+full model.
+The three individual configurations are tightly grouped on synthetic
+validation at $0.8825$,
+$0.8825$, and $0.8834$,
+compared with $0.8783$ for the standard GAT baseline.
+Enabling all three modifications increases PGA to $0.8896$,
+which is $0.0062$ above the strongest individual configuration
+and $0.0113$ above the baseline.
+The individual differences are small enough that they should not be
+interpreted as a ranking of the three mechanisms.
+The more useful result is that no single modification accounts for the
+performance of the full model.
+Their combination produces a larger improvement than any modification
+in isolation,
+consistent with the three mechanisms providing complementary rather
+than redundant information.
+
+This interpretation follows from the different roles of the three
+modifications.
+The type-pair attention bias introduces learnable additive terms for
+the four edge categories used by PG-GAT:
+same-type,
+skeletal-neighbour,
+same-limb,
+and cross-body.
+In the standard GATv2 formulation,
+attention is derived from the features of the incident nodes and does
+not explicitly distinguish these structural relationships.
+The type-pair term makes the edge category available directly to the
+attention calculation,
+allowing otherwise similar node pairs to receive different attention
+biases according to their relationship in the pose graph.
+
+The skeleton-aware position encoding provides a complementary source of
+information.
+It exposes L2 distance,
+skeleton-hop distance,
+and the same-type indicator directly to the attention mechanism.
+Although absolute position is already present in the node representation,
+a standard GATv2 layer must infer relative geometric relationships
+through the interaction between the two node features.
+Providing these relationships explicitly reduces the burden on the
+attention layer and,
+in the case of skeleton-hop distance,
+introduces information that cannot be recovered from image coordinates
+alone.
+
+The repulsion mechanism addresses a narrower problem.
+One of the four attention heads is restricted to same-type edges,
+concentrating part of the model capacity on comparisons such as
+left-wrist against left-wrist or right-knee against right-knee.
+These are particularly informative for person separation because two
+detections of the same joint type cannot belong to the same person.
+The dedicated head therefore gives the network a separate pathway
+in which the contrastive objective can act on the subset of
+relationships most directly associated with cross-person discrimination.
+
+The isolation results are consistent with these three mechanisms being
+complementary.
+Type-pair attention contributes categorical edge structure,
+position encoding contributes relative geometric and topological
+information,
+and the repulsion head reserves capacity for same-type discrimination.
+Their individual gains are modest,
+but the combined configuration performs better than any of them alone.
+Given that these are single-run measurements and the individual
+differences are close to the observed run-to-run variation,
+the ablation does not establish the precise interaction between their
+gradients.
+It does, however, support retaining all three modifications in the
+architecture that is subsequently taken into the Bayesian sweep.
+
+The architecture sweep then produces a much larger improvement than any
+of the isolation changes.
+Starting from the full two-layer PG-GAT configuration at $0.8896$,
+the sweep over network depth,
+attention-head count,
+hidden dimension,
+output dimension,
+joint-type embedding dimension,
+and dropout selects a three-layer configuration with a $256$-dimensional
+output and reaches $0.9634$ synthetic-validation PGA.
+This is an increase of $0.0738$ over the matched-architecture ablation
+configuration.
+By comparison, the subsequent loss sweep does not find a configuration
+that meaningfully exceeds the inherited contrastive settings -
+its best result of $0.9617$ is slightly below the architecture-sweep
+winner.
+
+The relative scale of these effects gives a more complete interpretation
+of the PG-GAT result.
+The skeleton-aware modifications provide the inductive biases that
+distinguish PG-GAT from the standard GATv2 baseline,
+but their benefit depends strongly on the architecture in which they
+operate.
+The two-layer isolation experiment establishes that the modifications
+provide a useful signal at matched compute,
+while the architecture sweep shows that considerably more of that signal
+can be exploited with an additional layer and a larger embedding space.
+In contrast, varying the contrastive margin,
+number of repulsion heads,
+learning rate,
+and weight decay does not produce a comparable gain.
+
+The main lever is therefore not a more elaborate grouping objective
+or a finely tuned loss
+but the combination of task-specific structure and sufficient
+representation capacity.
+PG-GAT introduces information that the standard GATv2 formulation does
+not expose explicitly,
+and the architecture sweep identifies a network size that makes better
+use of that information.
+The loss sweep, in turn, provides evidence that the improvement is not
+primarily the result of a favourable choice of contrastive
+hyperparameters.
+This distinction is important when interpreting the headline model -
+its performance is not attributable to a single architectural
+modification or tuned loss value
+but to the combination of skeleton-aware message passing and an
+architecture sized to exploit it.
+
+\subsection{Synthesis}
+\label{sec_disc_embedding_synthesis}
+
+Reading Sections~\ref{sec_disc_embedding_heads}--\ref{sec_disc_embedding_pggat}
+together gives a consistent picture of where the main performance
+constraint lies.
+The learned grouping heads fail for different reasons,
+yet none improves on the simple $k$-means baseline after transfer to
+COCO.
+The SA-DMoN experiments reach the same conclusion from a graph-structural
+direction -
+changing the null model,
+adjacency,
+spectral weight,
+and type-loss formulation does not overcome the mismatch between
+modularity and the spatial $k$NN graph.
+In contrast, modifying the embedding network itself produces a measurable
+improvement at matched architecture and a much larger gain once the
+architecture is sized by the Bayesian sweep.
+
+The evidence therefore identifies the embedding network as the stronger
+lever for pose-grouping performance in the setting studied here.
+This does not imply that the grouping algorithm is irrelevant
+or that a different grouping formulation could never improve the result.
+Rather, within the range of grouping methods evaluated in this work,
+additional complexity at the read-out stage contributes less than
+improving the representation that the read-out receives.
+The effectiveness of $k$-means in the final pipeline follows from this
+result -
+once the embedding separates person identities sufficiently well -
+a simple partitioning method is adequate and avoids introducing another
+learned component whose behaviour must transfer across domains.
+
+This provides the experimental answer to \emph{RQ1: the lever}.
+For the pose-grouping formulation and data considered in this work,
+the main opportunity for improvement lies in the construction of the
+per-keypoint embedding rather than in replacing its downstream grouping
+algorithm.
+This finding also motivates the later experiments in the chapter,
+which retain $k$-means and investigate how the representation behaves
+under domain transfer,
+alternative geometries,
+and detector-independent evaluation.
+
+The PG-GAT ablation and architecture sweep provide the corresponding
+answer to \emph{RQ2: inductive biases}.
+Type-pair attention,
+skeleton-aware position encoding,
+and same-type repulsion each produce a small positive change when
+introduced independently at the matched baseline architecture.
+Their combination gives the strongest isolation result,
+indicating that the three sources of pose structure are complementary
+at the resolution of the experiment.
+The architecture sweep then shows that the benefit of these inductive
+biases depends strongly on the capacity of the network that uses them,
+selecting a three-layer,
+$256$-dimensional configuration that substantially outperforms the
+two-layer ablation model.
+
+Taken together, RQ1 and RQ2 establish the design basis for the
+remainder of the discussion.
+The first identifies \emph{where} additional modelling effort is most
+productive -
+the embedding rather than the grouping head.
+The second identifies \emph{how} that embedding can be improved -
+by exposing pose-specific categorical,
+geometric,
+and same-type relationships directly to the attention mechanism
+and providing sufficient representation capacity to use them.
+The subsequent COCO fine-tuning and end-to-end experiments test whether
+these gains remain useful once the model leaves the synthetic
+distribution on which these design decisions were developed.

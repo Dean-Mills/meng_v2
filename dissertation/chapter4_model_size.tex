@@ -1,9 +1,25 @@
 \section{Model Size and the Modularity Contribution}
 \label{sec_res_model_size}
 
-This section accounts for the parameter counts of every component in the pipeline
-and corrects an interpretation of model size that an early reading of the results invited.
-The corrected interpretation is recorded here because it changes the framing of the modularity contribution that the rest of the chapter rests on.
+This section reports the parameter counts of the main components in the
+pose-grouping pipeline
+and clarifies how model size should be interpreted when comparing PG-GAT
+with the detector-based reference methods.
+An earlier reading of the results treated the grouping network's
+parameter count as if it represented the size of the complete system.
+This is not an equivalent comparison,
+since the modular pipeline still requires an upstream keypoint detector
+at inference.
+
+The accounting below therefore separates the parameters belonging to
+the grouping module from those required by the complete pose-estimation
+pipeline.
+This distinction does not change the grouping results reported in the
+preceding sections,
+but it does change how the modularity contribution should be framed -
+PG-GAT is a comparatively small,
+detachable grouping component
+rather than a complete pose-estimation system of the same size.
 
 \subsection{Parameter accounting}
 \label{sec_res_model_size_accounting}
@@ -15,60 +31,140 @@ The corrected interpretation is recorded here because it changes the framing of 
 \toprule
 Component & Parameter count \\
 \midrule
-PG-GAT (\texttt{meng-headline}, no visual features)        & 170{,}560 \\
-PG-GAT v2 network only (visual feature projection + GAT)   & 197{,}280 \\
-MobileNetV2 backbone (frozen, supplies v2 features)        & $2{,}200{,}000$ \\
-K-head (frozen-backbone, MLP)                              & 18{,}625 \\
+PG-GAT (\texttt{meng-headline}, sweep-selected architecture)
+    & 333{,}552 \\
+PG-GAT (legacy two-layer architecture)
+    & 170{,}560 \\
+PG-GAT v2 (legacy architecture + visual projection)
+    & 197{,}280 \\
+MobileNetV2 backbone (frozen, PG-GAT v2 only)
+    & $\sim 2{,}200{,}000$ \\
+K-head (frozen-backbone MLP, \texttt{meng-headline} embedding)
+    & 35{,}009 \\
 \midrule
-HigherHRNet AE tag head only                               & $\sim 561$ \\
-HigherHRNet-W32 (full detector, backbone + heatmap + AE)   & $28{,}645{,}331$ \\
+HigherHRNet AE tag head
+    & $\sim 561$ \\
+HigherHRNet-W32 (complete detector)
+    & 28{,}645{,}331 \\
 \bottomrule
 \end{tabular}
-\caption{Parameter counts across the pipeline.
-The PG-GAT network itself is substantially smaller than the HigherHRNet detector;
-the AE tag head alone is two orders of magnitude smaller than PG-GAT.}
+\caption{Parameter counts of the principal learned components used in
+the evaluation. PG-GAT is a small grouping module relative to the full
+HigherHRNet detector, but it is not smaller than HigherHRNet's native
+grouping mechanism: the AE tag head contains only approximately
+$561$ parameters, making the \texttt{meng-headline} PG-GAT roughly
+$600\times$ larger as a standalone grouping component. Complete-system
+comparisons must also include the upstream detector required by PG-GAT.
+The MobileNetV2 parameters apply only to the PG-GAT v2 visual-feature
+variant and are frozen during its training.}
 \label{tab:model_size_accounting}
 \end{table}
 
 \subsection{Correcting an early framing}
 \label{sec_res_model_size_correction}
 
-An early version of the analysis quoted PG-GAT as ``$168\times$ smaller than HigherHRNet''
-by comparing the PG-GAT parameter count ($170{,}560$) against the full HigherHRNet model ($28{,}645{,}331$).
-This number is technically correct but methodologically misleading.
-The HigherHRNet AE tag head ---
-the component that PG-GAT replaces ---
-is approximately $561$ parameters,
-which is more than two orders of magnitude \emph{smaller} than PG-GAT,
-not larger.
-The $168\times$-smaller comparison was therefore between unrelated components
-(PG-GAT versus a full detector + tag head, rather than PG-GAT versus the tag head alone),
-and citing it as a size advantage misrepresents what is being compared.
+An earlier version of the analysis described PG-GAT as
+``$168\times$ smaller than HigherHRNet'' by comparing the
+$170{,}560$ parameters of the legacy two-layer PG-GAT with the
+$28{,}645{,}331$ parameters of the complete HigherHRNet-W32 model.
+The arithmetic is correct for those two components,
+but the comparison does not measure the parameter cost of the respective
+grouping methods.
+It also predates the architecture sweep -
+the sweep-selected \texttt{meng-headline} PG-GAT contains $333{,}552$
+parameters,
+making it approximately $86\times$ smaller than the full HigherHRNet
+model.
+
+Neither ratio should be interpreted as a grouping-model size advantage.
+PG-GAT replaces HigherHRNet's grouping mechanism rather than its
+detector,
+and the relevant native grouping component is the AE tag head,
+which contains approximately $561$ parameters.
+On that comparison, the relationship is reversed -
+the headline PG-GAT contains roughly $600\times$ as many parameters
+as the AE tag head.
+The earlier ``$168\times$ smaller'' statement therefore compared
+components with different responsibilities,
+a standalone grouping network against an entire detector and its
+grouping output,
+and overstated the model-size case for PG-GAT.
+
+The parameter count is consequently not presented as an advantage of
+the proposed method.
+The contribution instead lies in the separation of grouping from
+detection -
+PG-GAT is a separately trained and replaceable grouping module,
+whereas HigherHRNet's AE mechanism is integrated into the detector
+and trained jointly with it.
+The detector-swap results of Section~\ref{sec_res_e2e_swap}
+evaluate the practical value of that separation directly.
 
 \subsection{What the contribution actually is}
 \label{sec_res_model_size_contribution}
 
-PG-GAT is \emph{larger} than the AE tag head it replaces:
-$170{,}560$ versus $\sim 561$, a ratio of $\sim 304\times$ larger.
-The PG-GAT contribution against AE is therefore not parameter efficiency
-but modularity.
-The AE tag head is structurally tied to the HigherHRNet backbone
-because it is trained end-to-end with the heatmap head on the same intermediate features;
-it cannot be detached and applied to keypoints produced by any other detector
-without re-training the entire HigherHRNet pipeline.
-PG-GAT consumes already-detected keypoint coordinates as its input
-and is therefore detector-agnostic by construction:
-any keypoint detector that outputs the COCO 17-joint format can be substituted upstream of PG-GAT
-without modifying the embedding network.
-The parameter-count comparison is incidental to this property;
-the methodological contribution that the chapter has been measuring is the modularity itself,
-which Section~\ref{sec_res_e2e} reports as a $0.0256$ detector-independence gap against an end-to-end-trained alternative.
+PG-GAT is substantially larger than the grouping output that it
+replaces.
+The sweep-selected model contains $333{,}552$ parameters,
+compared with approximately $561$ parameters in HigherHRNet's AE tag
+head,
+making PG-GAT approximately $595\times$ larger on this component-level
+comparison.
+Parameter efficiency is therefore not an advantage of PG-GAT relative
+to AE.
 
-The honest summary is:
-PG-GAT pays a parameter-count cost of $\sim 170{,}000$ to replace a $561$-parameter AE tag head,
-and gains the ability to plug into any detector without joint training,
-at a $0.0256$ COCO PGA cost against the joint-training alternative.
-The trade is whether modularity is worth $0.0256$ PGA and $170{,}000$ parameters;
-the discussion of Section~\ref{sec_disc_pggat_why} argues that it is,
-for deployment scenarios that require the embedding network to compose with multiple detectors
-or that require the grouping component to be developed independently of the detection pipeline.
+The distinction instead lies in how the grouping mechanism is coupled
+to the detector.
+HigherHRNet's AE tags are predicted from internal detector features
+and are trained jointly with the keypoint heatmaps.
+The grouping representation is therefore tied to the HigherHRNet
+feature pipeline -
+applying the same learned mechanism to an unrelated detector would
+require access to compatible feature maps and additional integration
+or training.
+PG-GAT operates at a different interface.
+Its inputs are already-detected keypoints and their joint types,
+so the embedding network does not depend on the internal representation
+of the detector that produced them.
+
+The parameter-count comparison is therefore secondary to the
+modularity being evaluated.
+In the fully autonomous HigherHRNet experiment of
+Section~\ref{sec_res_e2e},
+PG-GAT reaches $0.9644$ PGA against $0.9847$ for HigherHRNet's native
+AE grouping,
+leaving a gap of $0.0203$.
+More importantly, the same frozen PG-GAT checkpoint and K-estimation
+head can be applied to detections from other architectures without
+retraining.
+The detector-swap experiment of Section~\ref{sec_res_e2e_swap}
+exercises this property directly with YOLO11x-pose and RTMO-L,
+where the autonomous pipeline remains within $0.0210$ and $0.0220$ PGA
+of each detector's native grouping, respectively.
+
+The resulting trade-off is explicit.
+PG-GAT introduces approximately $334{,}000$ parameters to perform
+a task that HigherHRNet implements with a much smaller detector-integrated
+tag head,
+and it does not improve the absolute grouping accuracy of that native
+mechanism.
+In return, grouping becomes a separately trained component that can
+be placed after different keypoint detectors through a common keypoint
+interface.
+Across the three detectors evaluated in this chapter,
+the observed gap to native grouping remains between $0.0203$ and $0.0220$
+PGA without detector-specific retraining.
+
+PG-GAT should therefore not be interpreted as a parameter-efficient
+replacement for associative embedding.
+Its contribution is the separation of detection and grouping,
+with the additional parameter count and the approximately $0.02$ PGA gap
+representing the measured cost of that design choice in the experiments
+reported here.
+Whether this trade-off is useful depends on the deployment setting.
+It is most relevant where the grouping component must be developed
+independently of the detector,
+reused across detector architectures,
+or replaced without retraining the complete pose-estimation pipeline.
+This trade-off is discussed further in
+Section~\ref{sec_disc_embedding_pggat}.

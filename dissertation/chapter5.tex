@@ -1,20 +1,42 @@
 %%
 %%  Department of Electrical, Electronic and Computer Engineering
-%%  MEng Dissertation - Chapter 5: Discussion
+%%  Chapter 5: Discussion
 %%
 
 \chapter{Discussion}
 \label{chap_5}
 
-This chapter interprets the results of Chapter~\ref{chap_4}, answers the research questions from Chapter~\ref{chap_1}, and examines the limitations of the work. The central question of the chapter is \emph{why} the investigated methods succeeded or failed, not merely what the numbers were.
+This chapter interprets the results of Chapter~\ref{chap_4} by
+considering the experimental findings together
+rather than treating each method in isolation.
+Several patterns recur across otherwise different experiments,
+and these patterns provide a clearer account of where the pose-grouping
+problem is constrained
+and which changes produce improvements that survive transfer to real data.
 
-\input{chapter5_learned_heads}
-\input{chapter5_sa_dmon}
-\input{chapter5_pggat_why}
-\input{chapter5_hyperbolic}
-\input{chapter5_trigat}
-\input{chapter5_modularity}
-\input{chapter5_rq_answers}
-\input{chapter5_limitations}
+Three findings structure the discussion.
+First, the experiments with learned grouping heads show that grouping
+performance is determined primarily by the quality of the embedding
+rather than by the complexity of the downstream read-out.
+Second, the synthetic-to-real distribution shift has a larger effect
+on the final COCO result than several architectural changes that appear
+promising under synthetic-only training.
+Third, the end-to-end and detector-swap experiments quantify the
+trade-off introduced by separating grouping from detection.
+This includes the initially unexpected result that the learned estimate
+of the person count can outperform the annotation-level count when
+grouping incomplete detector outputs.
+
+The chapter develops these findings using evidence from the successful
+and negative experiments reported in Chapter~\ref{chap_4}.
+The final section returns to the seven research questions introduced
+in Section~\ref{sec_intro_objective}
+and summarises the answer to each question together with the
+experimental evidence that supports it.
+
+\input{chapter5_embedding}
+\input{chapter5_transfer}
+\input{chapter5_modularity_autonomy}
+\input{chapter5_rq_recap}
 
 %% End of File.

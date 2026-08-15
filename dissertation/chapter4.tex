@@ -6,7 +6,29 @@
 \chapter{Experimental Results}
 \label{chap_4}
 
-This chapter reports experimental results for every method presented in Chapter~\ref{chap_3}, in the order of the investigation. Each section follows the lab-book pattern (setup, table of numbers, interpretation). Failed approaches (learned heads, SA-DMoN, TriGAT, visual-feature augmentation) are reported with their numbers \emph{and} explanations of why they failed. Honest caveats are flagged where the numbers are close calls.
+This chapter presents the experimental results for the methods developed
+in Chapter~\ref{chap_3},
+following the order in which the investigation progressed.
+Each section records the experimental setup,
+reports the corresponding quantitative results,
+and then interprets those results in the context of the pose-grouping problem.
+This structure preserves the experimental progression
+from the initial baseline and learned grouping heads
+through to PG-GAT and its subsequent variants.
+
+Negative results are retained rather than omitted.
+The learned grouping heads,
+SA-DMoN variants,
+visual-feature augmentation,
+and TriGAT are therefore reported together with the measurements
+that led to their rejection and an analysis of their observed failure modes.
+Where differences between methods are small,
+they are treated as such
+rather than presented as conclusive improvements.
+The aim of the chapter is therefore not only to identify the strongest
+configuration
+but also to show the experimental evidence that motivated each change
+in direction and ultimately led to the final PG-GAT design.
 
 \input{chapter4_baseline}
 \input{chapter4_learned_heads}

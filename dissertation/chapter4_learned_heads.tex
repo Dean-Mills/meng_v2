@@ -1,46 +1,99 @@
 \section{Failed Learned Grouping Heads}
 \label{sec_res_learned_heads}
 
-This section reports the results for the three learned grouping heads of Section~\ref{sec_meth_learned_heads}:
-DEC, slot attention, and graph partitioning.
-Each head was trained jointly with the GAT backbone of Section~\ref{sec_meth_baseline}
-under matched optimiser and schedule settings,
-and evaluated against the no-depth baseline of Section~\ref{sec_res_baseline}.
-None of the three improves on plain $k$-means on the same embeddings.
-The collective failure is the first piece of evidence that the binding constraint of the pose-grouping pipeline is the embedding,
-not the grouping head;
-the resulting methodological pivot is the SA-DMoN exploration of Section~\ref{sec_res_sadmon} and the PG-GAT centrepiece of Section~\ref{sec_res_pggat_ablations}.
+This section reports the results for the three learned grouping heads
+introduced in Section~\ref{sec_meth_learned_heads}:
+DEC,
+slot attention,
+and graph partitioning.
+Each head is trained jointly with the standard GAT backbone
+of Section~\ref{sec_meth_baseline},
+using the same no-depth input configuration
+and matched optimisation settings.
+Their performance is compared against the $k$-means read-out
+of the no-depth baseline from Section~\ref{sec_res_baseline}.
+
+None of the three learned heads improves on the corresponding
+$k$-means baseline.
+Although the heads approach the grouping problem in different ways,
+their results point in the same direction -
+replacing the clustering read-out does not address the main source
+of error in the pipeline.
+This provides the first experimental indication that the quality
+of the embedding,
+rather than the choice of grouping head,
+is the more important constraint.
+The investigation therefore shifts first to the graph-structural
+objective explored by SA-DMoN in Section~\ref{sec_res_sadmon},
+and subsequently to modifying the embedding network itself
+through PG-GAT in Section~\ref{sec_res_pggat_ablations}.
 
 \subsection{Setup}
 \label{sec_res_learned_heads_setup}
 
-All three heads share the optimiser, schedule, and node features of the baseline configuration (Section~\ref{sec_meth_baseline_training}),
-operate on the no-depth feature vector of Equation~\eqref{eq:node_feature_no_depth},
-and are trained jointly with the GAT for 50 epochs.
-The head-loss weight is fixed at $1.0$ for each head,
-retained from the initial isolation tests recorded earlier in the investigation;
-early sweeps over the head-loss coefficient produced no configuration that beat the baseline,
-and the resource budget for deeper sweeps was reallocated to the PG-GAT investigation that subsequently produced the headline result.
+All three learned heads use the no-depth node features of
+Equation~\eqref{eq:node_feature_no_depth}
+and are trained jointly with the GAT backbone for 50 epochs.
+Unless stated below,
+the optimiser,
+learning-rate schedule,
+batch size,
+and other training settings are identical to those of the baseline
+in Section~\ref{sec_meth_baseline_training}.
+The head-specific loss is added to the contrastive embedding loss
+with weight $1.0$ in each case.
+Preliminary isolation experiments explored alternative head-loss weights,
+but none produced a configuration that exceeded the baseline.
+Further tuning of this coefficient was therefore not pursued,
+and the remaining experimental budget was directed toward the later
+PG-GAT investigation.
 
-Head-specific hyperparameters that warrant explicit justification:
+The principal head-specific settings are as follows.
 
 \begin{compactitem}
-\item \textbf{DEC.} The Student's $t$ distribution uses one degree of freedom ($\alpha = 1$),
-the value used by the original DEC paper~\cite{xie2016dec} and validated as numerically stable on the embedding scale of Section~\ref{sec_meth_baseline}.
-The target distribution refresh interval is $100$ steps,
-which is the smallest value that empirically prevents the cluster-collapse failure mode observed during isolation tests at single-step refresh~\cite{xie2016dec}.
-Cluster centres are re-initialised per scene with $k$-means++ (Section~\ref{sec_meth_dec_pose}) rather than learned across scenes,
-because each scene has a different $K$.
-\item \textbf{Slot attention.} Seven iterations of the competitive attention mechanism,
-raised from the original-paper default of three on the basis of an isolation-test diagnostic
-in which three iterations produced overshoot and slot oscillation late in training.
-The learning-rate schedule decays cosine from $10^{-3}$ to $10^{-5}$,
-which stabilises the slot updates at the rate at which they actually converge.
-\item \textbf{Graph partitioning.} Edge-classification threshold $0.5$ at inference,
-which is the standard convention for binary cross-entropy outputs.
-Class-imbalance handling uses $\mathtt{pos\_weight} = \min(10, n_{\text{neg}} / n_{\text{pos}})$,
-which up-weights the positive (same-person) class to compensate for the approximate $4 : 1$ negative-to-positive ratio in five-person synthetic scenes
-without letting the weight grow unboundedly in scenes that contain only one or two people.
+
+\item \textbf{DEC.}
+The Student's $t$ distribution uses one degree of freedom
+($\alpha = 1$),
+following the original DEC formulation of Xie et al.~\cite{xie2016dec}.
+This setting was also numerically stable at the embedding scale
+produced by the baseline GAT.
+The target distribution is refreshed every $100$ optimisation steps -
+refreshing it at every step produced cluster collapse during the
+preliminary isolation experiments.
+Because the number of people varies between scenes,
+a single set of cluster centres cannot be shared across the dataset.
+The centres are therefore re-initialised for each scene using
+$k$-means++,
+as described in Section~\ref{sec_meth_dec_pose}.
+
+\item \textbf{Slot attention.}
+The slot-attention head uses seven refinement iterations
+rather than the three iterations used in the original formulation.
+Preliminary tests with three iterations produced unstable slot
+assignments late in training,
+whereas seven iterations combined with a decaying learning rate
+gave more stable convergence.
+The learning rate follows the same cosine schedule from $10^{-3}$
+to $10^{-5}$ used by the surrounding training pipeline.
+These settings were fixed before the comparative experiments
+reported below.
+
+\item \textbf{Graph partitioning.}
+Pairwise affinity probabilities are thresholded at $0.5$ during
+inference before connected components are extracted.
+To account for the imbalance between same-person and different-person
+pairs,
+the binary cross-entropy loss uses
+$\mathtt{pos\_weight} =
+\min(10,n_{\text{neg}}/n_{\text{pos}})$.
+For a fully visible five-person synthetic scene,
+different-person pairs outnumber same-person pairs by approximately $4:1$.
+The adaptive weight therefore prevents the substantially larger
+negative class from dominating the loss,
+while the upper bound of $10$ prevents unusually imbalanced scenes
+from producing excessively large positive-class weights.
+
 \end{compactitem}
 
 \subsection{Per-head results}
@@ -51,71 +104,151 @@ without letting the weight grow unboundedly in scenes that contain only one or t
 \footnotesize
 \begin{tabular}{lccl}
 \toprule
-Head & Synth val PGA & COCO val PGA (kNN, GT kp) & W\&B run \\
+Configuration & Synth val PGA & COCO val PGA ($k$-means, GT kp) & W\&B run \\
 \midrule
-Standard GAT (baseline, depth off) & 0.8783 & 0.8841 & \texttt{jkd1ln4a} \\
+Standard GAT (baseline, depth off)
+    & 0.8783 & 0.8841 & \texttt{jkd1ln4a} \\
 \midrule
-DEC                  & 0.8608 & [Phase C] & \texttt{5q0p9it9} \\
-Slot attention       & 0.9025 & [Phase C] & \texttt{2kq3i8yv} \\
-Graph partitioning   & 0.9714 & [Phase C] & \texttt{s3qr04xm} \\
+GAT + DEC
+    & 0.8608 & 0.8798 & \texttt{5q0p9it9} \\
+GAT + slot attention
+    & 0.9025 & 0.8254 & \texttt{2kq3i8yv} \\
+GAT + graph partitioning
+    & 0.9714 & 0.8366 & \texttt{s3qr04xm} \\
 \bottomrule
 \end{tabular}
-\caption{Synthetic-validation PGA of the three learned heads against the no-depth baseline.
-COCO transfer is reported in the columns marked Phase C and is consistent with the inventory measurements ($0.788$ and $0.752$ for slot and partition respectively;
-DEC was not previously measured on COCO).
-Bold formatting is reserved for results that exceed the baseline at matched compute;
-no learned head meets that bar.}
+\caption{Synthetic-validation and COCO transfer results for the three
+learned grouping-head experiments compared with the no-depth GAT
+baseline. The COCO column evaluates $k$-means on the embeddings
+produced after joint training with each head, rather than the head's
+own grouping output. This separates changes in embedding quality from
+the performance of the learned read-out itself. The corresponding
+native COCO read-outs are lower for slot attention ($0.7986$) and
+graph partitioning ($0.7514$), as discussed in the text. None of the
+learned-head configurations exceeds the baseline COCO PGA of $0.8841$.}
 \label{tab:learned_heads_headline}
 \end{table}
 
 \subsection{Interpretation}
 \label{sec_res_learned_heads_discussion}
 
-Each row of Table~\ref{tab:learned_heads_headline} is symptomatic of a different failure mode,
-and the three together motivate the pivot to embedding-modification methods that follows.
+The three rows of Table~\ref{tab:learned_heads_headline} show different
+behaviours,
+but none produces an improvement that transfers to COCO.
+Together, they motivate the shift away from increasingly complex
+grouping heads and toward modifications of the embedding network.
 
-\paragraph{DEC: unsupervised sharpening cannot fix wrong assignments.}
-DEC scores $0.8608$ synth val, $0.0175$ below the baseline.
-The result is consistent with the structural argument of Section~\ref{sec_meth_dec_pose}:
-DEC consumes no ground-truth person labels in its own loss
-and can only sharpen assignments that are already roughly correct.
-Per-scene $k$-means++ initialisation produces good initial centres on a well-separated embedding,
-and the subsequent KL-divergence training adds nothing because the target distribution is constructed from the current soft assignment and the gradient at convergence is near zero.
-When the initial centres are wrong --- which happens whenever two same-type keypoints from different people fall close in embedding space ---
-the sharpening preserves the error rather than correcting it.
-The same structural limit appears in controlled diagnostics on fabricated Gaussian-blob embeddings at the joint count of the real problem,
-where DEC plateaus at approximately $0.76$ regardless of the number of training steps.
+\textbf{DEC: sharpening provides little additional signal:}
+DEC reaches a synthetic-validation PGA of $0.8608$,
+which is $0.0175$ below the baseline.
+On COCO, $k$-means applied to the jointly trained embeddings
+reaches $0.8798$,
+only $0.0043$ below the baseline value of $0.8841$.
+The relatively small change on COCO suggests that the DEC objective
+has only a limited effect on the representation learned by the
+contrastive GAT.
 
-\paragraph{Slot attention: supervised but cannot encode the type constraint.}
-Slot attention is supervised by Hungarian-matched cross-entropy on the ground-truth person labels
-and scores $0.9025$ synth val,
-$0.0242$ above the baseline.
-This is the strongest of the three learned heads on synthetic data and the only one that beats the no-depth baseline at all on this metric.
-The improvement does not transfer:
-inventory measurements record $0.788$ COCO PGA at the (depth-on) configuration of the original slot-attention experiments,
-which is well below the no-depth baseline of $0.879$.
-The structural reason is that slot attention competes over slot identity but does not enforce the type-exclusivity constraint
-(``two left elbows cannot share a person'')
-that the constrained methods of Section~\ref{sec_meth_kmeans} embed by construction.
-On the synthetic distribution the embedding-quality lift suffices;
-on the COCO distribution the embedding noise is larger and the missing type constraint is what fails.
+This behaviour is consistent with the limitation identified in
+Section~\ref{sec_meth_dec_pose}.
+The DEC loss does not use ground-truth person labels directly.
+Instead, its target distribution is constructed from the current
+soft assignments and encourages already-confident assignments
+to become sharper.
+In this application, per-scene $k$-means++ initialisation
+already provides reasonable centres when the GAT embedding
+is well separated,
+leaving relatively little for the DEC objective to improve.
+Conversely, when the initial partition places keypoints
+from different people together,
+the self-generated target contains no external identity information
+that would explicitly correct that assignment.
+Controlled experiments on Gaussian-blob embeddings at a comparable
+joint count show the same behaviour,
+with DEC plateauing at approximately $0.76$ despite additional
+optimisation steps.
+The result therefore provides no evidence that adding DEC improves
+either the baseline embedding or its COCO transfer.
 
-\paragraph{Graph partitioning: cleanest synthetic result, worst transfer.}
-The graph-partitioning head is the closest of the three to beating the baseline on synthetic ($0.9714$ vs $0.8783$, an improvement of $0.0931$)
-and the worst-transferring of the three on COCO ($0.752$ inventory, $0.127$ below the no-depth baseline).
-The synthetic gain is real:
-binary cross-entropy on $\binom{N}{2}$ pairs provides a dense and unambiguous training signal,
-and connected-components read-out on the thresholded affinity graph never has to commit to a fixed $K$.
-The COCO gap is also real:
-edge-classification accuracy is extremely sensitive to the affinity-construction inputs,
-and a small shift in the embedding distribution (which is exactly what the synthetic-to-COCO transfer is) is enough to push the binary decisions to the wrong side of the threshold.
-The partition head therefore overfits the synthetic edge statistics in a way that the other two heads do not.
+\textbf{Slot attention: a synthetic improvement that does not transfer:}
+Slot attention reaches a synthetic-validation PGA of $0.9025$,
+an improvement of $0.0242$ over the no-depth baseline.
+It is therefore the only learned-head experiment
+in Table~\ref{tab:learned_heads_headline} to improve on the baseline
+synthetic score.
+The improvement does not carry over to COCO.
+The slot head itself reaches a PGA of $0.7986$,
+while applying $k$-means to its jointly trained embeddings recovers
+$0.8254$.
+Both are below the baseline COCO result of $0.8841$.
 
-\paragraph{Cross-cutting finding: the embedding is the lever.}
-The three failure modes are independent --- unsupervised sharpening, missing structural prior, and edge-classification fragility ---
-and yet none of the three produces a configuration that transfers a synthetic gain to a COCO gain over the same embeddings.
-The cross-method evidence is therefore that the grouping head is not the binding constraint on COCO performance:
-$k$-means on the same embeddings (the baseline read-out) consistently matches or beats every learned head once the synthetic-to-real shift is in play.
-This is the methodological pivot point of the chapter.
-Sections~\ref{sec_res_sadmon}--\ref{sec_res_pggat_ablations} test the contrapositive ---
-that modifications of the embedding network itself, with $k$-means held fixed, do produce gains that survive transfer.
+The difference between the synthetic and COCO results indicates that
+the additional supervision has encouraged a representation that is
+useful on the training distribution
+but less robust under transfer.
+One possible contributor is the absence of an explicit joint-type
+exclusivity constraint in the slot mechanism.
+Slots compete for keypoints according to their learned representations,
+but the assignment procedure does not directly encode facts such as
+two detections of the same joint type belonging to different people.
+This constraint becomes particularly useful when spatial or embedding
+evidence is ambiguous.
+The present experiment does not isolate that factor independently -
+however, it is treated as a motivation for the type-aware PG-GAT
+experiments rather than as a demonstrated cause of the transfer failure.
+
+\textbf{Graph partitioning: the largest synthetic gain and the largest
+transfer loss:}
+Graph partitioning produces the strongest synthetic result of the three
+learned-head experiments,
+reaching $0.9714$ PGA compared with $0.8783$ for the baseline,
+an absolute improvement of $0.0931$.
+Its behaviour on COCO is markedly different.
+The partition head's own read-out reaches only $0.7514$,
+$0.1327$ below the baseline,
+while $k$-means applied to the jointly trained embeddings recovers
+to $0.8366$ but still remains $0.0475$ below the baseline.
+
+The strong synthetic result is consistent with the dense supervision
+provided by binary classification over all joint pairs.
+Unlike a direct $K$-way assignment,
+every same-person and different-person pair contributes a training signal,
+and the connected-components read-out does not require the number
+of people to be supplied in advance.
+The large reduction on COCO, however,
+shows that this synthetic advantage does not survive the domain shift.
+The thresholded affinity read-out is particularly sensitive to changes
+around the decision boundary -
+incorrectly accepting even a small number of cross-person edges
+can merge otherwise correct components.
+The fact that $k$-means on the same embeddings improves the COCO score
+from $0.7514$ to $0.8366$ supports the conclusion that the learned
+read-out contributes part of the failure.
+At the same time,
+the recovered score remains below the $0.8841$ baseline -
+showing that joint training with the partition loss has also produced
+an embedding that transfers less effectively.
+
+\textbf{Cross-cutting finding: improving the read-out is not sufficient:}
+Despite their different objectives,
+none of the three learned heads produces a COCO improvement
+over the standard GAT followed by $k$-means.
+DEC changes the baseline only slightly,
+while slot attention and graph partitioning produce substantial
+synthetic improvements that reverse under transfer.
+In the latter two cases,
+returning to $k$-means at evaluation time does not recover the original
+baseline performance,
+indicating that the auxiliary head losses also alter the underlying
+representation.
+
+These experiments do not prove that no learned grouping head could
+improve pose grouping.
+They do show that three substantially different learned alternatives
+fail to improve the baseline under the evaluation protocol used here,
+despite two of them producing clear gains on synthetic data.
+This shifts the experimental focus toward the representation itself.
+Sections~\ref{sec_res_sadmon}--\ref{sec_res_pggat_ablations} therefore
+investigate whether changing the information encoded by the graph
+and its embedding network,
+while retaining the simple $k$-means read-out,
+produces improvements that survive the synthetic-to-COCO transfer.

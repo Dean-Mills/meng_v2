@@ -263,6 +263,16 @@ def evaluate(
         json.dump(save_data, f, indent=2)
     print(f"Results saved to {save_path}")
 
+    out = {
+        "k_exact": k_exact / max(k_total, 1),
+        "k_off_by_one": k_off_by_one / max(k_total, 1),
+        "n_scenes": k_total,
+    }
+    for method in ["knn", "cop_km"]:
+        out[f"{method}_gt_k_pga"] = sum(results_gt[method]) / len(results_gt[method])
+        out[f"{method}_pred_k_pga"] = sum(results_pred[method]) / len(results_pred[method])
+    return out
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -274,14 +284,29 @@ def main():
     parser.add_argument("--max_images", type=int, default=None)
     parser.add_argument("--device", type=str,
                         default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--wandb_run_id", type=str, default=None,
+                        help="Attach eval metrics to this W&B run id. "
+                             "Default: read from checkpoint metadata. "
+                             "Pass 'none' to skip.")
     args = parser.parse_args()
 
-    evaluate(
+    metrics = evaluate(
         args.checkpoint, args.device,
         virtual_dir=args.virtual_dir, split=args.split,
         coco_img_dir=args.coco_img_dir, coco_ann_file=args.coco_ann_file,
         max_images=args.max_images,
     )
+
+    # ── Attach to W&B run summary (optional) ──────────────────────────────
+    run_id = args.wandb_run_id
+    if run_id is None:
+        from wandb_helpers import get_wandb_run_id_from_ckpt
+        run_id = get_wandb_run_id_from_ckpt(args.checkpoint)
+    if run_id and run_id.lower() != "none":
+        from wandb_helpers import attach_eval_metrics
+        dataset = "coco" if args.coco_img_dir is not None else "synth"
+        url = attach_eval_metrics(run_id, f"eval/k_estimation/{dataset}", metrics)
+        if url: print(f"W&B summary updated: {url}")
 
 
 if __name__ == "__main__":

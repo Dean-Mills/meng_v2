@@ -1,26 +1,62 @@
 \section{Baseline: Standard GAT}
 \label{sec_res_baseline}
 
-This section reports the headline numbers for the standard GAT baseline of Section~\ref{sec_meth_baseline} on synthetic and COCO data, with and without the depth channel.
-Two diagnostic measurements drive every downstream methodological decision in this chapter:
-the depth-on synthetic number that is too high to be informative,
-and the depth-removal lift on COCO that motivates the no-depth configuration adopted by every subsequent method.
+This section reports the headline results for the standard GAT baseline
+of Section~\ref{sec_meth_baseline} on both synthetic and COCO data,
+with and without the depth channel.
+These experiments establish the reference point against which the methods
+in the remainder of the chapter are evaluated.
+
+Two results are particularly important for the experiments that follow.
+First, the depth-enabled model achieves near-perfect grouping
+on the synthetic data,
+indicating that exact rendered depth makes the synthetic task
+too easy to provide a useful basis for comparing grouping methods.
+Second, removing depth improves performance on COCO
+despite making the synthetic task more difficult.
+This result exposes the mismatch between the metric depth available
+during synthetic training and the estimated relative depth available
+on real images.
+On this basis, the no-depth configuration is adopted for all subsequent
+experiments unless stated otherwise.
 
 \subsection{Setup}
 \label{sec_res_baseline_setup}
 
-Two training configurations are reported.
-Both use the architecture of Table~\ref{tab:baseline_arch}:
-two GATv2 layers, four attention heads, hidden dimension 64, output dimension 128, joint-type embedding dimension 32, L2-normalised output on the unit hypersphere.
-Training follows the schedule of Section~\ref{sec_meth_baseline_training}:
-50 epochs on the 400-scene synthetic training split, AdamW at learning rate $10^{-3}$ decaying to $10^{-5}$ under cosine annealing, weight decay $10^{-4}$, batch size 4, gradient-norm clipping at $1.0$.
-The only difference between the two configurations is the depth channel.
-The depth-on variant uses the four-dimensional raw feature of Equation~\eqref{eq:node_feature_with_depth};
-the no-depth variant uses the three-dimensional raw feature of Equation~\eqref{eq:node_feature_no_depth}.
-Both are evaluated on the 100-scene synthetic validation split during training (the model-selection signal)
-and on the 2258-image filtered COCO val2017 set after training (the zero-shot transfer measurement).
-The COCO evaluation uses ground-truth keypoint annotations rather than detector output;
-the detector-based end-to-end evaluation is reported separately in Section~\ref{sec_res_e2e}.
+Two baseline configurations are evaluated,
+both using the architecture specified in Table~\ref{tab:baseline_arch}.
+The network consists of two GATv2 layers with four attention heads,
+a hidden dimension of 64,
+an output dimension of 128,
+and a 32-dimensional learnable joint-type embedding.
+The final node embeddings are L2-normalised onto the unit hypersphere
+before clustering.
+
+Both configurations follow the training protocol of
+Section~\ref{sec_meth_baseline_training}.
+Training runs for 50 epochs on the 400-scene synthetic training split,
+using AdamW with an initial learning rate of $10^{-3}$,
+cosine annealing to $10^{-5}$,
+weight decay of $10^{-4}$,
+and a batch size of 4.
+Gradient norms are clipped at $1.0$.
+The only experimental variable between the two runs is whether depth
+is included in the node features.
+The depth-on configuration uses the four-dimensional feature vector
+of Equation~\eqref{eq:node_feature_with_depth},
+whereas the no-depth configuration uses the three-dimensional feature
+vector of Equation~\eqref{eq:node_feature_no_depth}.
+
+Synthetic-validation PGA is measured on the 100-scene validation split
+and provides the checkpoint-selection signal during training.
+The selected checkpoint is then evaluated on the $2{,}307$ scoreable
+COCO \texttt{val2017} scenes
+to measure zero-shot transfer from synthetic to real data.
+This COCO evaluation uses ground-truth keypoint locations,
+which isolates grouping performance from errors introduced
+by an upstream detector.
+Results using detected keypoints are considered separately
+in the end-to-end evaluation of Section~\ref{sec_res_e2e}.
 
 \subsection{Headline numbers}
 \label{sec_res_baseline_numbers}
@@ -30,49 +66,96 @@ the detector-based end-to-end evaluation is reported separately in Section~\ref{
 \footnotesize
 \begin{tabular}{lccl}
 \toprule
-Configuration & Synth val PGA & COCO val PGA (kNN, GT kp) & W\&B run \\
+Configuration & Synth val PGA & COCO val PGA ($k$-means, GT kp) & W\&B run \\
 \midrule
-Standard GAT, depth on  & 0.9990 & [Phase C] & \texttt{su8rmvti} \\
-\textbf{Standard GAT, depth off} & \textbf{0.8783} & \textbf{0.8841} & \texttt{jkd1ln4a} \\
+Standard GAT, depth on
+    & 0.9990 & 0.8366 & \texttt{su8rmvti} \\
+\textbf{Standard GAT, depth off}
+    & \textbf{0.8783} & \textbf{0.8841} & \texttt{jkd1ln4a} \\
 \bottomrule
 \end{tabular}
-\caption{Baseline GAT under both depth configurations.
-The depth-on row is reported as a diagnostic of the synthetic-easy regime;
-the depth-off row is the baseline that every subsequent method in this chapter is compared against.
-Both numbers are reproducible from their W\&B run identifiers in the \texttt{multiperson-pose-grouping} project.}
+\caption{Baseline GAT results with and without the depth channel.
+The depth-on configuration is retained as a diagnostic experiment,
+while the depth-off configuration establishes the baseline used for
+comparison with the subsequent methods in this chapter.
+Both results are traceable to their W\&B run identifiers in the
+\texttt{multiperson-pose-grouping} project.}
 \label{tab:baseline_headline}
 \end{table}
 
 \subsection{Interpretation}
 \label{sec_res_baseline_discussion}
 
+
 Three observations follow from Table~\ref{tab:baseline_headline}.
 
-\paragraph{1. The depth-on synthetic number is uninformative.}
-A synthetic-validation PGA of $0.9990$ means roughly $1$--$2$ of every $100$ joint assignments is wrong.
-At that operating point, the dominant axis of variation is per-image stochasticity in $k$-means initialisation rather than embedding quality.
-Any modification of the embedding network or the grouping head that lifts this number is statistically indistinguishable from noise,
-which makes the depth-on configuration a poor measurement bed for the rest of the chapter.
-The depth-on number is reported here so that the depth-removal decision below is interpretable;
-no subsequent row in this chapter retains it.
+\textbf{1. The depth-on synthetic result leaves almost no useful headroom:}
+The depth-on configuration reaches a synthetic-validation PGA of
+$0.9990$,
+corresponding to an error rate of only $0.1\%$ at the individual
+joint-assignment level.
+At this operating point,
+there is effectively no meaningful room for subsequent methods
+to demonstrate an improvement on the synthetic validation set.
+Small changes in the score would be difficult to distinguish from
+run-to-run or clustering variation
+rather than a substantive improvement in the embedding.
+The depth-enabled synthetic setting is therefore unsuitable
+as the primary measurement regime for comparing the methods developed
+in this chapter.
+The result is retained as a diagnostic,
+but no subsequent method uses depth unless explicitly stated otherwise.
 
-\paragraph{2. The depth-on transfer to COCO is the failure mode.}
-The depth-on configuration trains on metric depth produced by the Blender renderer
-and is evaluated on relative depth produced by MiDaS~\cite{ranftl2020midas} at COCO inference time (Section~\ref{sec_meth_data_coco}).
-The two depth sources differ in scale, sign convention, and noise floor,
-so the network has effectively learned to read a $z$ coordinate at a scale that does not exist in the COCO input.
-The resulting COCO transfer gap exceeds 15 percentage points.
-The methodological response is to remove the depth channel for every subsequent method (Section~\ref{sec_meth_data_depth}),
-which is what the depth-off row of Table~\ref{tab:baseline_headline} measures.
+\textbf{2. Depth substantially weakens synthetic-to-COCO transfer:}
+The limitation becomes clearer when the same checkpoint is evaluated
+on COCO.
+During synthetic training,
+the depth channel contains metric depth produced directly
+by the Blender renderer.
+For COCO,
+the corresponding channel is obtained from the relative monocular depth
+estimated by MiDaS~\cite{ranftl2020midas},
+as described in Section~\ref{sec_meth_data_coco}.
+Although both signals are normalised before entering the network,
+they originate from substantially different measurement processes
+and have different error characteristics.
+The model can therefore exploit a highly reliable synthetic cue
+that does not transfer cleanly to the real-image domain.
 
-\paragraph{3. The no-depth COCO number is the bar.}
-Standard GAT with no depth scores $0.8841$ COCO val PGA (kNN, ground-truth keypoints) on the 2258-image filtered COCO val2017 set.
-This row anchors the rest of the chapter:
-every modification of the embedding network in Sections~\ref{sec_res_learned_heads}--\ref{sec_res_pggat_ablations}
-is compared against this baseline at matched compute,
-and the PG-GAT centrepiece of Section~\ref{sec_res_pggat_ablations} lifts the same metric by a margin defended by the architecture sweep of Section~\ref{sec_res_pggat_sweep}.
-The synth val drop from $0.994$ to $0.879$ in the no-depth configuration is the cost of removing the depth channel on synthetic data;
-the COCO lift from $0.838$ to $0.879$ at the same time is the benefit on real data.
-The cost is paid in a regime that was uninformative anyway,
-and the benefit is paid in the regime that drives the headline number.
-The trade is therefore one-sided in favour of the no-depth configuration.
+This mismatch is reflected in the results.
+PGA falls from $0.9990$ on synthetic validation to $0.8366$ on COCO,
+a difference of $0.1624$,
+or $16.24$ percentage points.
+More importantly,
+removing the depth channel raises COCO PGA from $0.8366$ to $0.8841$,
+an absolute improvement of $0.0475$.
+This result motivates the depth-removal decision of
+Section~\ref{sec_meth_data_depth} -
+all subsequent methods operate without depth,
+so that their performance does not depend on a cue whose quality
+differs substantially between the synthetic and real domains.
+
+\textbf{3. The no-depth result establishes the working baseline:}
+Without depth,
+the standard GAT achieves a COCO validation PGA of $0.8841$
+using $k$-means on ground-truth keypoints over the $2{,}307$-scene
+evaluation set.
+This is the working baseline for the remainder of the chapter.
+Subsequent learned grouping heads and embedding modifications
+are evaluated against this result under the common protocol established
+in Chapter~\ref{chap_3}.
+
+Removing depth does make the synthetic task considerably harder -
+synthetic-validation PGA decreases from $0.9990$ to $0.8783$,
+a drop of $0.1207$.
+At the same time,
+COCO performance increases from $0.8366$ to $0.8841$.
+The two changes are consistent with the intended effect
+of the intervention.
+Exact rendered depth had made the synthetic problem unusually easy
+while providing a representation that transferred poorly
+to the real-image setting.
+Removing it produces a more difficult synthetic grouping problem
+but a stronger real-data baseline.
+The no-depth configuration is therefore used as the comparison point
+for the experiments that follow.

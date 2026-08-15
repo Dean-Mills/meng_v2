@@ -1,143 +1,208 @@
 \section{Dataset Pipeline}
 \label{sec_meth_data}
 
-Every method in this chapter is trained on synthetic data with ground-truth person labels and evaluated on both synthetic and COCO data.
-This section describes the synthetic generator, the COCO adapter, the unified preprocessing pipeline that places both sources behind a common interface,
-and the methodological decision to remove the depth channel before any of the headline experiments were run.
+Every method in this chapter is trained using synthetic data with known person labels
+and is evaluated on both synthetic and COCO data -
+using the two data sources makes it possible
+to measure performance on the distribution used for training,
+while also testing how well the learned grouping behaviour transfers to real images.
+
+This section describes the synthetic data generator,
+the adapter used for COCO,
+and the shared preprocessing pipeline that converts both data sources into the same input format.
+It also explains the decision to remove the depth channel before the main experiments were carried out,
+so that the headline results use the same final input representation.
 
 \subsection{Synthetic generator}
 \label{sec_meth_data_synth}
 
-The synthetic data is rendered with Blender~\cite{blender}.
-A configurable number of mannequin meshes is placed in a 3D scene with procedurally varied camera positions, viewing angles, and lighting.
-Each frame yields a colour image and a per-person keypoint annotation containing seventeen joint locations in the COCO keypoint format,
-each joint stored as $[x, y, z, v]$ where $(x, y)$ are pixel-plane coordinates,
-$z$ is the world-space Euclidean distance from the camera to the joint in metres,
-and $v \in \{0, 1, 2\}$ is the visibility flag.
-The visibility flag is set by a Blender raycast against scene geometry,
-so joints occluded by other people or scene objects are correctly marked as $v = 1$ rather than dropped to $v = 0$.
-Out-of-frame joints use the sentinel position $(-1, -1)$ to distinguish them unambiguously from the legitimate top-left corner coordinate $(0, 0)$.
+The synthetic dataset is generated using Blender~\cite{blender}.
+A configurable number of mannequin meshes is placed into each 3D scene,
+with the camera position, viewing angle, and lighting varied procedurally between scenes.
+Each generated sample contains a colour image
+together with per-person annotations for the seventeen COCO keypoints -
+a joint is stored in the form $[x,y,z,v]$,
+where $(x,y)$ gives its image-plane position,
+$z$ is the Euclidean distance from the camera to the joint in metres,
+and $v \in \{0,1,2\}$ gives its visibility state.
 
-The generated dataset contains $400$ training, $100$ validation, and $100$ test scenes.
-The person count per scene is sampled uniformly from $\{1, 2, 3, 4, 5\}$ so that the K-estimation head sees the full range it must predict at inference;
-this distribution also matches the modal range of multi-person COCO images.
-Filenames follow the convention \texttt{<guid>\_<n>.png}/\texttt{<guid>\_<n>.json}
-to allow filtering by person count without parsing the JSON,
-and \texttt{num\_people} is duplicated into the image metadata for dataset statistics.
+Visibility is determined using a Blender raycast against the scene geometry -
+this allows a joint that is present but occluded by another person or an object
+to be marked as $v=1$,
+rather than treating it as missing with $v=0$.
+Joints that fall outside the image use the sentinel coordinate $(-1,-1)$ -
+this avoids confusing an out-of-frame joint with the valid image coordinate $(0,0)$.
+
+The final synthetic dataset contains $400$ training scenes, $100$ validation scenes, and $100$ test scenes.
+The number of people in each scene is sampled uniformly from $K \in \{1,2,3,4,5\}$ -
+this ensures that the K-estimation model is trained
+across the full range of person counts that it is expected to predict at inference time.
+It also gives the grouping models examples with different levels of crowding
+rather than concentrating the training data around a single person count -
+representative scenes are shown in Figure~\ref{fig:synth_examples}.
+
+Files follow the naming convention \texttt{<guid>\_<n>.png} and \texttt{<guid>\_<n>.json},
+where \texttt{<n>} records the number of people in the scene -
+this allows samples to be filtered by person count without first reading the annotation file.
+The same value is also stored as \texttt{num\_people} in the image metadata
+for use when calculating dataset statistics.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\linewidth]{figures/demo_example_1.png}
-    % TODO(figure): replace with a 2x2 grid of representative synthetic
-    %               scenes at K=2, K=3, K=4, K=5, with the 17 joint
-    %               keypoints overlaid as coloured dots per person and
-    %               the skeleton edges drawn as connecting lines.
-    %               Goal: show the visual diversity of the synthetic
-    %               distribution and the kind of multi-person overlap
-    %               that the grouping stage must resolve.
-    \caption{Representative scenes from the synthetic dataset
-    at person counts $K \in \{2, 3, 4, 5\}$.
-    Each panel shows the rendered Blender frame
-    with the 17 per-person ground-truth keypoints overlaid
-    and colour-coded by person identity.
-    The synthetic generator controls camera pose, lighting,
-    person placement, and visibility,
-    and emits exact metric depth at each joint via raycast,
-    which the depth-removal analysis of Section~\ref{sec_meth_data_depth} subsequently discards.}
+    \includegraphics[width=0.85\linewidth]{figures/synth_examples.pdf}
+    \caption{Representative scenes from the synthetic dataset for
+    person counts $K \in \{2,3,4,5\}$. Each panel shows a rendered
+    Blender image with the seventeen ground-truth keypoints overlaid
+    and colour-coded by person identity. Camera pose, lighting, person
+    placement, and joint visibility are varied by the synthetic
+    generator - exact joint depth is also available from the generated
+    3D scene, although this feature is removed from the final input
+    representation as described in
+    Section~\ref{sec_meth_data_depth}.}
     \label{fig:synth_examples}
 \end{figure}
 
 \subsection{COCO adapter}
 \label{sec_meth_data_coco}
 
-For evaluation on real images, the COCO 2017 person-keypoint annotations~\cite{lin2014coco} are loaded via the pycocotools API
-and filtered to images containing at least one person.
-The native COCO visibility flags ($0 = $ not labelled, $1 = $ occluded, $2 = $ visible) are mapped to the same three-value semantics as the synthetic generator.
-COCO does not provide a depth channel,
-so the adapter estimates one via MiDaS~\cite{ranftl2020midas},
-a pre-trained monocular depth estimator that produces a per-pixel relative depth map from a single RGB image.
-The DPT-Hybrid variant is used because it combines convolutional and transformer backbones and is the strongest publicly available checkpoint at moderate inference cost;
-the model is instantiated once at adapter construction time
-and the depth value at each labelled keypoint pixel is sampled into the $z$ slot of the keypoint vector.
-This produces a $[x, y, z, v]$ representation that is dimensionally identical to the synthetic format
-and that the downstream pipeline cannot distinguish from synthetic data.
+For evaluation on real images,
+the COCO 2017 person-keypoint annotations~\cite{lin2014coco} are loaded using the \texttt{pycocotools} API.
+Images containing at least one annotated person are retained.
+COCO uses three visibility values
+($0 =$ not labelled, $1 =$ labelled but occluded, and $2 =$ visible),
+which are mapped directly to the same visibility convention used by the synthetic dataset.
 
-The decision to estimate depth via MiDaS rather than to drop the depth channel for COCO was made
-to keep the network architecture identical across data sources.
-Section~\ref{sec_meth_data_depth} below describes the subsequent measurement that led to depth being removed for every method in this chapter.
+Unlike the synthetic data, COCO does not provide depth information -
+an initial version of the data pipeline therefore estimates depth using MiDaS~\cite{ranftl2020midas},
+a pre-trained monocular depth model that produces a relative depth map from a single RGB image.
+The DPT-Hybrid variant is used as a compromise between model capacity and inference cost -
+the model is loaded once when the COCO adapter is created,
+and the estimated depth value at each annotated keypoint location
+is sampled from the resulting depth map and stored in the $z$ component of the keypoint vector.
+
+This gives each COCO keypoint the same $[x,y,z,v]$ representation as the synthetic data,
+allowing both sources to pass through the same downstream preprocessing pipeline -
+the important difference is that the synthetic $z$ value is obtained directly from the 3D scene,
+whereas the COCO value is an estimated relative depth.
+
+Depth was initially retained in this way
+to avoid changing the network input between synthetic training and COCO evaluation -
+however, further experiments showed that the depth channel was not suitable for the final setup.
+Section~\ref{sec_meth_data_depth} describes this analysis
+and the resulting decision to remove depth from all methods reported in the main experiments.
 
 \subsection{Unified pipeline}
 \label{sec_meth_data_pipeline}
 
-Both adapters emit the same per-image record:
-the image tensor at $[3, H, W]$,
-a list of per-person keypoint tensors at $[17, 4]$,
+Both dataset adapters return the same per-image structure:
+an image tensor with shape $[3,H,W]$,
+a list of per-person keypoint tensors with shape $[17,4]$,
 an image identifier,
-and the person count.
-A single \texttt{PoseDataset} sits behind both adapters and applies a common transform:
-each image is resized to fit within $\texttt{target\_size} \times \texttt{target\_size}$ preserving aspect ratio,
-symmetrically padded to the exact target dimension,
-and the keypoint coordinates are scaled and shifted to match;
-the $z$ and $v$ columns are passed through unchanged
-and joints with $v = 0$ are not transformed at all.
-A custom collate function in the dataloader stacks the image tensors but keeps the per-image keypoint lists as a list-of-lists,
-because the per-image person count is variable and PyTorch's default collate cannot batch variable-length structures.
+and the number of people in the image.
+A shared \texttt{PoseDataset} is used for both data sources
+so that the same preprocessing steps are applied
+regardless of whether a sample comes from the synthetic generator or COCO.
 
-The preprocessor converts each batch into PyTorch Geometric graphs~\cite{fey2019pyg}, one graph per image.
-Joints with $v = 0$ are excluded entirely from the graph rather than represented as zero-feature nodes,
-so that the message passing has no spurious nodes to aggregate over.
-Each surviving joint becomes a node with raw feature vector
+Each image is resized to fit within $\texttt{target\_size} \times \texttt{target\_size}$
+while preserving its original aspect ratio -
+it is then padded symmetrically to reach the exact target dimensions.
+The corresponding keypoint coordinates are scaled and shifted by the same amounts
+so that they remain aligned with the transformed image -
+the $z$ and $v$ values are left unchanged,
+and joints with $v=0$ are not transformed because they do not represent a valid image location.
+
+A custom collate function is used by the dataloader -
+image tensors can be stacked normally,
+but the keypoint annotations are kept as variable-length per-image lists.
+This is necessary because different images can contain different numbers of people,
+which means the annotation tensors cannot be handled directly
+by PyTorch's standard batching behaviour.
+
+The preprocessor then converts each image in the batch into a PyTorch Geometric graph~\cite{fey2019pyg} -
+joints with $v=0$ are removed before graph construction
+rather than being included as nodes with empty or zero-valued features.
+This prevents missing joints from contributing artificial messages during graph propagation.
+Each remaining joint becomes a node with the raw preprocessed feature vector
 \begin{equation}
     \mathbf{x}_i
-    = [\,x_{\text{norm}},\; y_{\text{norm}},\; z_{\text{norm}},\; v_{\text{norm}}\,]
+    =
+    [\,x_{\text{norm}},\;
+      y_{\text{norm}},\;
+      z_{\text{norm}},\;
+      v_{\text{norm}}\,]
     \in \mathbb{R}^{4},
     \label{eq:node_feature_with_depth}
 \end{equation}
-where the spatial coordinates are normalised to $[0, 1]$ by the image dimensions,
-$z_{\text{norm}}$ is a per-graph min-max normalisation of the depth over valid joints,
-and $v_{\text{norm}}$ maps the three visibility levels to $\{0.0, 0.5, 1.0\}$.
-The per-graph depth normalisation is what makes MiDaS-estimated COCO depth and Blender-rendered synthetic depth dimensionally compatible:
-both sources land in $[0, 1]$ regardless of absolute scale.
-The vector $\mathbf{x}_i$ is the raw \emph{preprocessed} feature used by the rest of the chapter;
-the GAT layer-zero input $\mathbf{h}_i^{(0)}$ of Equation~\eqref{eq:layer0_input} concatenates $\mathbf{x}_i$ with the joint-type embedding.
-Separate tensors per graph hold the joint-type indices (consumed by the type embedding)
-and the ground-truth person labels (consumed by the contrastive loss at training time).
-Edges are built by $k$-nearest neighbours in $(x_{\text{norm}}, y_{\text{norm}}, z_{\text{norm}})$ space with $k = 8$,
-chosen as described in Section~\ref{sec_meth_problem_graph}.
+where $x_{\text{norm}}$ and $y_{\text{norm}}$ are normalised to $[0,1]$ using the image dimensions -
+the depth value $z_{\text{norm}}$ is min-max normalised over the valid joints within each graph,
+while $v_{\text{norm}}$ maps the three visibility values to $\{0.0,0.5,1.0\}$.
+
+The per-graph depth normalisation places both the Blender depth
+and the MiDaS-estimated COCO depth into the same numerical range,
+even though their original scales have different meanings.
+The resulting $\mathbf{x}_i$ is the preprocessed feature vector used throughout the rest of the chapter -
+the actual layer-zero GAT input $\mathbf{h}_i^{(0)}$,
+defined in Equation~\eqref{eq:layer0_input},
+concatenates the learned joint-type embedding with this vector.
+
+Each graph also stores the joint-type indices separately for use by the type embedding,
+together with the ground-truth person labels required by the contrastive loss during training.
+Graph edges are constructed using $k$-nearest neighbours
+in $(x_{\text{norm}},y_{\text{norm}},z_{\text{norm}})$ space -
+as described in Section~\ref{sec_meth_problem_graph},
+$k=8$ is used for output dimensions below $256$,
+while the $256$-dimensional configuration uses $k=16$.
 
 \subsection{Removing the depth channel}
 \label{sec_meth_data_depth}
 
-The depth channel was removed from every method reported in the headline evaluations,
-on the basis of a single diagnostic experiment whose result is reported in Chapter~\ref{chap_4}.
-The methodological motivation is recorded here so that the rest of the chapter can refer back to it.
+The depth channel is removed from the methods used in the main evaluations -
+this decision follows from a diagnostic experiment reported in Chapter~\ref{chap_4},
+and the reasoning is described here
+because it affects the input representation used throughout the rest of the methodology.
 
-With depth, $k$NN clustering on contrastive GAT embeddings reaches a synthetic-test PGA of $0.994$;
-the problem is effectively solved by spatial proximity in three dimensions.
-The metric depth produced by the Blender renderer is exact ground truth,
-so two people standing at different camera distances are separated by the $z$ coordinate alone,
-and the GAT has very little discriminative work to do.
-This artificially inflated all synthetic baselines and left no room for the learned heads or for SA-DMoN to demonstrate added value:
-any small improvement on a near-perfect baseline is statistically indistinguishable from noise.
+When depth is included,
+$k$-means clustering on the contrastive GAT embeddings reaches a synthetic-validation PGA of $0.9990$ -
+at this point the synthetic grouping problem is almost completely solved.
+The Blender renderer provides exact metric depth,
+so people standing at different distances from the camera
+can often be separated using the $z$ coordinate
+with very little additional work required from the GAT -
+this produces an unrealistically strong synthetic baseline
+and leaves little room to determine
+whether the learned grouping heads or SA-DMoN provide a meaningful improvement.
 
-On COCO, the depth signal comes from MiDaS rather than from ground truth.
-MiDaS produces a \emph{relative} depth ordering with no metric scale,
-and the per-image scale varies with the image content.
-The synthetic-to-COCO domain gap is therefore amplified by the $z$ channel:
-a synthetic model trained on metric depth has learned to read $z$ at a scale that does not exist in the MiDaS output.
-Removing depth removes this domain-gap component
-and forces every method in this chapter to operate on the same two-dimensional signal that a real bottom-up pipeline has access to without an external depth estimator.
+The situation is different for COCO -
+since COCO does not contain ground-truth depth,
+the $z$ value is estimated using MiDaS~\cite{ranftl2020midas}.
+MiDaS provides relative rather than metric depth,
+and its scale can vary between images -
+the depth channel therefore introduces an additional difference
+between the synthetic training data and the real COCO data.
+A model trained using exact Blender depth
+may learn relationships that do not transfer cleanly
+to the estimated depth values available on COCO.
 
-The removal is implemented via a \texttt{use\_depth} flag in the preprocessor configuration.
-When the flag is off,
-the raw feature vector of Equation~\eqref{eq:node_feature_with_depth} reduces to
+For this reason, depth is removed from the main experiments -
+this also has the practical advantage
+of making the grouping method depend only on information
+that is already available from a standard 2D keypoint detector,
+without requiring an additional depth-estimation model.
+
+The change is controlled by a \texttt{use\_depth} flag in the preprocessor configuration.
+When depth is disabled,
+the feature vector from Equation~\eqref{eq:node_feature_with_depth} becomes
 \begin{equation}
     \mathbf{x}_i
-    = [\,x_{\text{norm}},\; y_{\text{norm}},\; v_{\text{norm}}\,]
+    =
+    [\,x_{\text{norm}},\;
+      y_{\text{norm}},\;
+      v_{\text{norm}}\,]
     \in \mathbb{R}^{3},
     \label{eq:node_feature_no_depth}
 \end{equation}
-the $k$NN graph is built on $(x_{\text{norm}}, y_{\text{norm}})$ only,
-and the input dimension of the GAT first layer is reduced accordingly via Equation~\eqref{eq:layer0_input}.
-Every result reported in Chapter~\ref{chap_4} from the baseline kNN onward uses this no-depth configuration,
-unless the row is explicitly labelled as a depth-on diagnostic.
+and the $k$NN graph is constructed using only $(x_{\text{norm}},y_{\text{norm}})$ -
+the input dimension of the first GAT layer is reduced accordingly
+through Equation~\eqref{eq:layer0_input}.
+All results in Chapter~\ref{chap_4} from the no-depth baseline onwards use this configuration
+unless a result is explicitly identified as a depth-enabled diagnostic.

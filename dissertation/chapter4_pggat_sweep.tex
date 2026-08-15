@@ -1,35 +1,63 @@
 \section{PG-GAT --- Bayesian Architecture and Loss Sweeps}
 \label{sec_res_pggat_sweep}
 
-The isolation ablation of Section~\ref{sec_res_pggat_ablations} measures the marginal contribution of each PG-GAT modification at the baseline architecture sizing.
-The contribution of the modifications, however, depends on the architecture that they operate inside:
-a network with too few layers cannot exploit the additional gradient signal that the modifications inject,
-and a network that is too wide may overfit the small synthetic training set.
-This section reports the two Bayesian sweeps that defend the architecture and loss hyperparameters of the PG-GAT centrepiece:
-the architecture sweep that selects the layer-stack sizing,
-and the loss sweep that confirms the inherited contrastive-loss hyperparameters are near-optimal.
-Both sweeps use the Bayesian optimisation and Hyperband early-termination protocol of Section~\ref{sec_meth_evaluation_sweeps}
-and report synthetic-validation PGA as the selection metric.
+The isolation ablation of Section~\ref{sec_res_pggat_ablations}
+evaluates the PG-GAT modifications while keeping the architecture fixed
+to the baseline configuration.
+It does not determine whether that architecture provides the most
+suitable capacity for the modified attention mechanism.
+Once all three PG-GAT modifications are enabled,
+the number of layers,
+hidden dimension,
+embedding dimension,
+and other architectural choices may affect how effectively
+the additional structural information is used.
+
+This section reports two Bayesian sweeps used to select the PG-GAT
+configuration carried forward to the remaining experiments.
+The first searches the architecture parameters
+and determines the layer-stack configuration used by the final PG-GAT model.
+The second searches the main contrastive-loss and optimisation
+parameters,
+to test whether the values inherited from the standard GAT baseline
+remain appropriate after the attention mechanism is modified.
+
+Both sweeps follow the Bayesian optimisation and Hyperband
+early-termination procedure described in
+Section~\ref{sec_meth_evaluation_sweeps}.
+Synthetic-validation PGA is used as the selection metric throughout.
+The purpose of these sweeps is therefore distinct from the isolation
+ablation -
+the ablation establishes the behaviour of the three PG-GAT modifications
+at matched baseline capacity,
+while the sweeps determine the architecture and training configuration
+used for the PG-GAT centrepiece.
 
 \subsection{Architecture sweep}
 \label{sec_res_pggat_arch_sweep}
 
-\paragraph{Setup.}
-The architecture sweep searches over six axes:
-number of layers (depth),
+\textbf{Setup:}
+The architecture sweep searches six model-capacity parameters:
+the number of GAT layers,
 number of attention heads,
 hidden dimension,
-output (embedding) dimension,
+output embedding dimension,
 joint-type embedding dimension,
 and dropout rate.
-The search space for each axis is reported in Table~\ref{tab:arch_sweep_space}.
-The lower bound of each axis is set to the smallest value used by prior GNN-on-pose work~\cite{jin2020hgg, braso2021centergroup};
-the upper bound is set to the largest value that fits in GPU memory at batch size $4$ on the experimental hardware.
-The sweep is configured for $32$ runs with Hyperband early termination at the fifth validation iteration (epoch $25$),
-which retires under-performing configurations early
-while preserving late-converging configurations.
-The Bayesian search is implemented by the Weights \& Biases sweep agent~\cite{wandb}
-and is logged under sweep identifier \texttt{wg95w0k0} in the \texttt{multiperson-pose-grouping} project.
+The complete search space is given in Table~\ref{tab:arch_sweep_space}.
+The bounds were chosen to cover the range relevant to prior GNN-based
+pose methods~\cite{jin2020hgg, braso2021centergroup},
+while remaining feasible at batch size $4$ on the experimental hardware.
+
+The sweep is allocated a budget of $32$ runs and uses Hyperband early
+termination at the fifth validation evaluation (epoch $25$).
+Configurations performing poorly at that point can therefore be
+terminated before completing the full training schedule,
+reducing the cost of exploring unproductive regions of the search space.
+Bayesian optimisation is implemented through the Weights \& Biases sweep
+agent~\cite{wandb}.
+The complete sweep is recorded under identifier \texttt{wg95w0k0}
+in the \texttt{multiperson-pose-grouping} project.
 
 \begin{table}[H]
 \centering
@@ -38,29 +66,81 @@ and is logged under sweep identifier \texttt{wg95w0k0} in the \texttt{multiperso
 \toprule
 Axis & Search space \\
 \midrule
-\texttt{num\_layers}          & $\{2, 3, 4, 5\}$ \\
-\texttt{num\_heads}           & $\{2, 4, 8\}$ \\
-\texttt{hidden\_dim}          & $\{32, 64, 128, 256\}$ \\
-\texttt{output\_dim}          & $\{16, 32, 64, 128, 256\}$ \\
-\texttt{joint\_embedding\_dim}& $\{16, 32, 64\}$ \\
-\texttt{dropout}              & $\{0.0, 0.1, 0.2, 0.3\}$ \\
+\texttt{num\_layers}           & $\{2, 3, 4, 5\}$ \\
+\texttt{num\_heads}            & $\{2, 4, 8\}$ \\
+\texttt{hidden\_dim}           & $\{64, 128, 256\}$ \\
+\texttt{output\_dim}           & $\{32, 64, 128, 256\}$ \\
+\texttt{joint\_embedding\_dim} & $\{16, 32, 64\}$ \\
+\texttt{dropout}               & $\{0.0, 0.1, 0.2\}$ \\
 \bottomrule
 \end{tabular}
-\caption{Architecture-sweep search space.
-Each axis spans the smallest value used by prior pose-GNN work
-up to the memory ceiling at batch size $4$.}
+\caption{Search space for the PG-GAT architecture sweep. The ranges
+cover compact configurations through to the largest models that remain
+feasible at batch size $4$ on the experimental hardware.}
 \label{tab:arch_sweep_space}
 \end{table}
 
-\paragraph{Result.}
-The winning configuration is reported in Table~\ref{tab:arch_sweep_winner}.
-The selected architecture has three layers (one more than the baseline's two), four heads (matching the baseline), hidden dimension $64$ (matching the baseline), output dimension $256$ (doubled from the baseline's $128$), joint-embedding dimension $64$ (doubled from the baseline's $32$), and dropout $0.1$ (matching the baseline).
-Synthetic-validation PGA of the winning configuration is $0.9634$,
-an improvement of $+0.0738$ over the all-three-modifications ablation row of Table~\ref{tab:pggat_ablation_headline}.
-Most of the lift comes from the increased output dimension and the third layer,
-which is consistent with the W\&B sweep's parameter-importance analysis:
-\texttt{hidden\_dim} is the dominant axis (importance $0.639$, correlation $-0.80$),
-and \texttt{output\_dim} is the only positively correlated axis ($+0.50$).
+\textbf{Result:}
+The sweep selects the configuration shown in Table~\ref{tab:arch_sweep_winner}.
+Relative to the baseline architecture,
+the selected model increases the number of GAT layers from two to three
+and doubles both the output embedding dimension from $128$ to $256$
+and the joint-type embedding dimension from $32$ to $64$.
+The number of attention heads remains at four,
+the hidden dimension remains at $64$,
+and dropout remains at $0.1$.
+
+The winning run reaches a synthetic-validation PGA of $0.9634$.
+This is $0.0738$ above the $0.8896$ obtained by the full three-modification
+configuration in the baseline-sized isolation ablation of
+Table~\ref{tab:pggat_ablation_headline}.
+The comparison shows that the capacity of the architecture surrounding
+the PG-GAT modifications has a substantial effect on the achievable result.
+The gain should not, however, be attributed to any single
+architectural change because the six parameters were varied jointly
+during the Bayesian search.
+
+The W\&B parameter-importance analysis provides some indication of
+which axes are associated with the sweep outcome.
+Within the sampled runs,
+\texttt{hidden\_dim} receives the largest reported importance ($0.639$)
+and has a correlation of $-0.80$ with synthetic-validation PGA.
+Larger hidden dimensions are therefore associated with poorer results
+in the configurations sampled by this sweep,
+while the winning value of $64$ is the smallest value
+in the searched range.
+\texttt{output\_dim} is the only axis with a substantial positive
+correlation ($+0.50$),
+and the winning configuration uses the maximum searched value of $256$.
+These statistics describe associations within the jointly sampled
+configurations rather than isolated causal effects -
+a controlled one-axis-at-a-time ablation would be required to assign
+the improvement to a particular parameter.
+
+Figure~\ref{fig:arch_sweep} shows the outcome of each run against the
+six swept parameters.
+The same broad pattern is visible in the raw results,
+with higher hidden dimensions tending to occur among the weaker
+configurations and larger output dimensions more frequently appearing
+among the stronger ones.
+Because Bayesian optimisation adapts its sampling according to previous
+observations, the values on each axis are not sampled equally,
+and the plots should not be interpreted as balanced factorial ablations.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{figures/arch_sweep.pdf}
+    \caption{Architecture-sweep outcomes for sweep \texttt{wg95w0k0}.
+    The best synthetic-validation PGA reached by each of the 32
+    Bayesian-sampled runs is plotted against the six architecture
+    parameters, with the winning configuration
+    (\texttt{champion-arch}, run \texttt{08d0ffde}) highlighted in red.
+    Hyperband-terminated runs report the best validation value reached
+    before termination. Because the Bayesian search adapts its sampling
+    during the sweep, the candidate values on each axis do not receive
+    equal coverage.}
+    \label{fig:arch_sweep}
+\end{figure}
 
 \begin{table}[H]
 \centering
@@ -81,51 +161,100 @@ Source run                     & \texttt{08d0ffde} \\
 W\&B alias                     & \texttt{champion-arch} \\
 \bottomrule
 \end{tabular}
-\caption{Architecture-sweep winner.
-This configuration is the architecture used by every PG-GAT result downstream of this section,
-including the COCO fine-tune sweep of Section~\ref{sec_res_coco_ft} and the headline number of Section~\ref{sec_results_headline}.}
+\caption{Winning configuration from the PG-GAT architecture sweep.
+This architecture is retained for the subsequent PG-GAT experiments,
+including the COCO fine-tuning sweep of Section~\ref{sec_res_coco_ft}
+and the final headline evaluation.}
 \label{tab:arch_sweep_winner}
 \end{table}
 
 \subsection{Loss sweep}
 \label{sec_res_pggat_loss_sweep}
 
-\paragraph{Setup.}
-The loss sweep searches over four axes:
-contrastive margin $\gamma$ (Equation~\eqref{eq:contrastive_loss}),
-the number of repulsion heads $H_{\text{rep}}$ (Section~\ref{sec_meth_pggat_repulsion}),
+\textbf{Setup:}
+The loss sweep searches four training parameters:
+the contrastive margin $\gamma$ of Equation~\eqref{eq:contrastive_loss},
+the number of repulsion heads $H_{\text{rep}}$ from
+Section~\ref{sec_meth_pggat_repulsion},
 learning rate,
 and weight decay.
-The architecture is pinned to the \texttt{champion-arch} winner of Table~\ref{tab:arch_sweep_winner},
-so any improvement from this sweep is attributable to the loss hyperparameters rather than to architectural sizing.
-The search space is centred on the inherited defaults from Section~\ref{sec_meth_baseline_training} ($\gamma = 0.5$, $H_{\text{rep}} = 1$, lr $= 10^{-3}$, weight decay $= 10^{-4}$)
-and extends approximately one order of magnitude in each direction along each numerical axis.
-The sweep runs $24$ configurations with the same Hyperband protocol as the architecture sweep.
+The architecture is fixed to the \texttt{champion-arch} configuration
+of Table~\ref{tab:arch_sweep_winner},
+so the search changes the optimisation and loss configuration without
+introducing additional variation in network depth or width.
 
-\paragraph{Result.}
-The winning configuration (W\&B source run \texttt{mkmtc8om}, alias \texttt{champion-loss}) achieves synthetic-validation PGA $0.9617$,
-which is $-0.0017$ below the \texttt{champion-arch} number.
-The difference is within the per-image standard deviation of the metric,
-so the loss-sweep winner is not statistically distinguishable from the architecture-sweep winner.
-This result confirms that the inherited loss hyperparameters are already near-optimal,
-which is the methodologically important finding from this sweep:
-the defensibility argument for $\gamma = 0.5$, $H_{\text{rep}} = 1$, lr $= 10^{-3}$, weight decay $= 10^{-4}$ is now
-\emph{the value was chosen because no 24-run Bayesian alternative exceeded it},
-not \emph{the value was chosen by hand and never re-examined}.
-The loss-sweep winner is not promoted to the headline checkpoint;
-the architecture-sweep winner is retained as the source of the architecture used downstream.
+The search space is centred on the values inherited from the baseline
+training procedure:
+$\gamma=0.5$,
+$H_{\text{rep}}=1$,
+learning rate $10^{-3}$,
+and weight decay $10^{-4}$.
+The numerical ranges extend approximately one order of magnitude
+around these defaults,
+while the repulsion-head search tests alternative allocations
+of the four attention heads.
+A total of 24 configurations are evaluated using the same Bayesian
+optimisation and Hyperband early-termination procedure as the
+architecture sweep.
+
+\textbf{Result:}
+The highest-scoring run produced by the loss sweep
+(\texttt{mkmtc8om}, alias \texttt{champion-loss}) reaches a
+synthetic-validation PGA of $0.9617$.
+This is $0.0017$ below the $0.9634$ obtained by the existing
+\texttt{champion-arch} configuration using the inherited loss
+and optimiser settings.
+The difference is small,
+but no claim of statistical equivalence is made because the
+configurations were not evaluated over repeated training seeds.
+
+The important result is that the 24-run Bayesian search does not find
+an alternative loss and optimisation configuration that improves on
+the inherited settings.
+The values $\gamma=0.5$,
+$H_{\text{rep}}=1$,
+learning rate $10^{-3}$,
+and weight decay $10^{-4}$ are therefore retained.
+Their use in the final PG-GAT model is no longer based only on
+inheritance from the baseline -
+the sweep explicitly searches alternatives around each value
+and finds no configuration with a higher synthetic-validation PGA.
+The loss-sweep winner is consequently not used as the downstream
+checkpoint -
+the \texttt{champion-arch} configuration remains the starting point
+for the subsequent experiments.
 
 \subsection{Interpretation}
 \label{sec_res_pggat_sweep_discussion}
 
-The two sweeps reported in this section serve different purposes.
-The architecture sweep is a search for improvement
-and produces a configuration whose synthetic-validation PGA is $+0.0738$ above the all-three-modifications ablation row of Table~\ref{tab:pggat_ablation_headline}.
-The loss sweep is a defensibility exercise
-and produces a configuration whose synthetic-validation PGA is statistically indistinguishable from the inherited defaults.
-Both outcomes are useful:
-the architecture sweep locks in the layer stack that the rest of the chapter inherits,
-and the loss sweep retires the question ``would a different contrastive margin or learning rate change the result.''
-The combined contribution of the two sweeps is that every architecture and loss hyperparameter of the PG-GAT headline is now sweep-defended,
-and the answer to the question ``why this value'' for each of the ten hyperparameters in Tables~\ref{tab:arch_sweep_space} and the loss-sweep search space is
-\emph{a Bayesian sweep over its operating range selected it}.
+The two sweeps serve different purposes.
+The architecture sweep searches for additional model capacity
+and produces a configuration with synthetic-validation PGA $0.0738$
+above the full PG-GAT configuration evaluated at baseline architecture
+sizing in Table~\ref{tab:pggat_ablation_headline}.
+This establishes the three-layer,
+256-dimensional configuration used in the remaining PG-GAT experiments.
+
+The loss sweep instead tests whether the main training hyperparameters
+inherited from the baseline leave an obvious source of improvement
+unexplored.
+Across the 24 Bayesian-sampled configurations,
+none exceeds the $0.9634$ obtained using the inherited margin,
+repulsion-head count,
+learning rate,
+and weight decay.
+The sweep therefore provides evidence for retaining those values
+rather than replacing them with another sampled configuration.
+
+Taken together, the sweeps provide two different forms of
+hyperparameter justification.
+The six architecture parameters are selected directly by the
+architecture sweep,
+while the four loss and optimisation parameters are retained
+after a separate sweep fails to find an improvement over their
+inherited values.
+The final PG-GAT configuration is therefore not the result
+of an unrestricted set of hand-picked choices -
+each of its principal architecture and training parameters has been
+searched over an explicitly defined operating range,
+with the resulting runs and selected checkpoints recorded in W\&B.

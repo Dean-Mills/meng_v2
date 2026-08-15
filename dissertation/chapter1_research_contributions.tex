@@ -2,11 +2,40 @@
 \label{sec_intro_contributions}
 
 The contributions of this work are:
-
 \begin{enumerate}
-\item \textbf{PG-GAT}, a skeleton-aware graph attention network for pose-keypoint embedding. Three modifications over standard GATv2: type-pair attention modulation, skeleton-aware positional encoding, and a type-repulsion term in the contrastive loss.
-\item \textbf{Empirical evidence that the embedding, not the grouping head, is the decisive lever} for clustering-based pose grouping. Documented across four learned-head approaches (DEC, slot attention, graph partitioning, and ten SA-DMoN variants), none of which outperformed plain kNN on the same embeddings.
-\item \textbf{A COCO fine-tuning protocol} that lifts PG-GAT to 0.957 PGA on COCO val2017 with kNN clustering, and end-to-end to 0.942 when paired with HigherHRNet detection.
-\item \textbf{An alternative-embedding-space study} (hyperbolic PG-GAT in the Lorentz model): hyperbolic at $d=32$ matches Euclidean at $d=128$ pre-fine-tune, but the advantage disappears after COCO fine-tuning --- documented as an efficiency trade, not a quality win.
-\item \textbf{An alternative-primitive study} (TriGAT, triplet nodes): a negative result reported with the failure-mode analysis (voting step propagates errors).
+\item \textbf{PG-GAT}, a novel skeleton-aware graph attention network for detector-independent pose grouping.
+Three modifications are applied over the standard GATv2:
+type-pair attention bias, skeleton-relative position encoding, and same-type repulsion heads;
+which when combined provide a larger gain on the synthetic set than any single modification
+alone (while the individual differences are too small to cleanly separate from noise).
+After the hyperparameter sweeps, the optimised model reaches $0.9715$ COCO val PGA on ground-truth keypoints
+and $0.9591$ end-to-end PGA on HigherHRNet detections,
+against the joint-trained associative-embedding (AE) reference~\cite{newell2017associative, cheng2020higherhrnet}
+of $0.9847$ on the same detections.
+\item \textbf{Evidence that the embedding, not the grouping head, is the binding constraint}
+with regard to the clustering problem.
+Three learned grouping heads (
+deep embedded clustering~\cite{xie2016dec}, slot attention~\cite{locatello2020slotattention},
+graph partitioning~\cite{yang2020gcnve})
+and ten SA-DMoN variants were tested on the same backbone, none outperforming plain $k$-means on the same embeddings.
+\item \textbf{An autonomous deployment pipeline with a detector swap.}
+A frozen-backbone K-estimation head reaches $76.1\%$ accuracy detecting how many people are in a scene
+and $91.9\%$ off-by-one person-count accuracy on COCO val. This head plugged into the now 
+autonomous pipeline scores $0.9644$ end-to-end PGA - which is marginally better ($0.0053$) 
+than the oracle-$K$ configuration on the same checkpoint (for a structural reason developed 
+in Chapter~\ref{chap_5}). The frozen pipeline
+is then applied zero-shot (no retraining) to 
+YOLO11x-pose~\cite{ultralytics2024yolo11} and RTMO-L~\cite{lu2024rtmo} detections,
+and trails each detector's native grouping by $0.0210$ and $0.0220$ PGA,
+so the cost of detector independence is approximately $0.02$ across three detector families.
+\item \textbf{Documented negative results on PG-GAT extensions.}
+Attempted modifications to improve PG-GAT are reported with 
+the reasons for their failures: a hyperbolic (Lorentz-model) embedding matches the performance
+of a four times larger Euclidean embedding only on the synthetic dataset, a triplet-based primitive (named TriGAT) 
+underperforms the joint based primitive given the same training budget, with the triplet to joint voting identified as  
+the method's failure and a visual feature augmentation (MobileNetV2~\cite{sandler2018mobilenetv2}) 
+which does not beat the simple position-and-type-only model while adding $2.2 \times 10^{6}$ additional parameters.
+\item \textbf{A reproducibility chain.}
+Every cited number traces to a logged run identifier in a public experiment-tracking project,
+and every PG-GAT hyperparameter is defended by a Bayesian sweep over its operating range.
 \end{enumerate}

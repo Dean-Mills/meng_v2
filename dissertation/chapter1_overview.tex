@@ -1,4 +1,19 @@
 \section{Overview of Study}
 \label{sec_intro_overview}
 
-Chapter~\ref{chap_2} reviews the literature on bottom-up human pose estimation, graph neural networks, and clustering methods relevant to pose grouping. Chapter~\ref{chap_3} presents the mathematical preliminaries (GNN, GCN, GAT/GATv2, DEC, slot attention, graph partitioning, DMoN) and describes the methodology behind each method investigated, culminating in PG-GAT. Chapter~\ref{chap_4} reports experimental results across the methods. Chapter~\ref{chap_5} discusses what the results reveal about the problem. Chapter~\ref{chap_6} concludes and indicates future work.
+Chapter~\ref{chap_2} is the literature review in six parts:
+the multi-person pose estimation landscape, bottom-up grouping,
+graph neural networks applied to pose problems,
+contrastive learning and the grouping heads tested against it,
+geometric embedding spaces, and a consolidation of the research gap.
+Chapter~\ref{chap_3} develops the methodology:
+the graph-neural-network and clustering preliminaries, the problem formulation, the dataset pipeline,
+the baseline and each investigated method,
+the end-to-end integration, and the evaluation protocol.
+Chapter~\ref{chap_4} reports the experimental results.
+Chapter~\ref{chap_5} is the discussion of the results across three themes:
+the embeddings as the binding constraint, synthetic-to-real transfer,
+and the cost of modularity together with the behaviour of the autonomous pipeline.
+It closes by answering the research questions.
+Chapter~\ref{chap_6} is the conclusion to this document. It provides a final verdict on the
+original hypothesis, consolidates the contributions, and identifies future work.

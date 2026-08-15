@@ -6,18 +6,51 @@
 \chapter{Methodology}
 \label{chap_3}
 
-This chapter develops the methodology for every result reported in the rest of the work.
-It opens with two preliminary sections that fix the mathematical vocabulary the chapter relies on:
-graph neural networks (Section~\ref{sec_meth_gnn}) up to the GATv2 attention primitive used throughout,
-and clustering and learned grouping heads (Section~\ref{sec_meth_clustering}) covering $k$-means, DEC, slot attention, graph partitioning, and DMoN.
-The problem formulation, dataset pipeline, and baseline (Sections~\ref{sec_meth_problem}--\ref{sec_meth_baseline}) then state the task and the comparison point that every method clears or falls short of.
-The next four sections trace the investigation in the order it actually unfolded:
-three learned grouping heads (Section~\ref{sec_meth_learned_heads}) and the SA-DMoN modularity family (Section~\ref{sec_meth_sadmon}) both fail to outperform $k$-means on the baseline embedding,
-which motivates the shift to modifying the embedding network itself
-and the centrepiece PG-GAT design of Section~\ref{sec_meth_pggat}.
-Three independent variants of PG-GAT --- a visual-feature augmentation (Section~\ref{sec_meth_v2}), a hyperbolic-geometry variant (Section~\ref{sec_meth_hyperbolic}), and a triplet-based variant (Section~\ref{sec_meth_trigat}) --- stress-test the design from different angles.
-The chapter closes with the integration of PG-GAT into a realistic end-to-end pipeline (Section~\ref{sec_meth_integration})
-and the evaluation protocol and hyperparameter-defence methodology (Section~\ref{sec_meth_evaluation}) that every Chapter~\ref{chap_4} number is reproducible from.
+% This chapter develops the methodology for every result reported in the rest of the work.
+% It opens with two preliminary sections that fix the mathematical vocabulary the chapter relies on:
+% graph neural networks (Section~\ref{sec_meth_gnn}) up to the GATv2 attention primitive used throughout,
+% and clustering and learned grouping heads (Section~\ref{sec_meth_clustering}) covering $k$-means, DEC, slot attention, graph partitioning, and DMoN.
+% The problem formulation, dataset pipeline, and baseline (Sections~\ref{sec_meth_problem}--\ref{sec_meth_baseline}) then state the task and the comparison point that every method clears or falls short of.
+% The next four sections trace the investigation in the order it actually unfolded:
+% three learned grouping heads (Section~\ref{sec_meth_learned_heads}) and the SA-DMoN modularity family (Section~\ref{sec_meth_sadmon}) both fail to outperform $k$-means on the baseline embedding,
+% which motivates the shift to modifying the embedding network itself
+% and the centrepiece PG-GAT design of Section~\ref{sec_meth_pggat}.
+% Three independent variants of PG-GAT --- a visual-feature augmentation (Section~\ref{sec_meth_v2}), a hyperbolic-geometry variant (Section~\ref{sec_meth_hyperbolic}), and a triplet-based variant (Section~\ref{sec_meth_trigat}) --- stress-test the design from different angles.
+% The chapter closes with the integration of PG-GAT into a realistic end-to-end pipeline (Section~\ref{sec_meth_integration})
+% and the evaluation protocol and hyperparameter-defence methodology (Section~\ref{sec_meth_evaluation}) that every Chapter~\ref{chap_4} number is reproducible from.
+
+
+This chapter describes the methodology used to produce the results reported in the remainder of this work.
+It begins with two background sections that establish the main concepts used throughout the chapter.
+Section~\ref{sec_meth_gnn} introduces graph neural networks
+and develops the required concepts through to the GATv2 attention mechanism used by the proposed method.
+Section~\ref{sec_meth_clustering} then covers the clustering and learned grouping methods considered in the experiments,
+including $k$-means, DEC, slot attention, graph partitioning, and DMoN.
+
+The problem formulation, dataset pipeline, and baseline
+are described in Sections~\ref{sec_meth_problem}--\ref{sec_meth_baseline} -
+together, these sections define the grouping task
+and establish the baseline against which the later methods are evaluated.
+The following sections then present the investigation in the order in which it developed.
+Three learned grouping heads (Section~\ref{sec_meth_learned_heads})
+and the SA-DMoN modularity approaches (Section~\ref{sec_meth_sadmon})
+are first evaluated as alternatives to $k$-means.
+Their inability to improve on the $k$-means baseline motivates a change in direction -
+rather than increasing the complexity of the grouping head,
+the focus moves to improving the embedding network itself.
+This leads to the PG-GAT architecture presented in Section~\ref{sec_meth_pggat}.
+
+Three further variants examine different aspects of the PG-GAT design -
+these include the addition of visual features (Section~\ref{sec_meth_v2}),
+a hyperbolic embedding variant (Section~\ref{sec_meth_hyperbolic}),
+and a triplet-based representation (Section~\ref{sec_meth_trigat}).
+Each tests whether additional information or a different representation can improve on the main PG-GAT approach.
+
+The chapter concludes by describing the integration of PG-GAT
+into a complete pose-estimation pipeline in Section~\ref{sec_meth_integration}.
+Finally, Section~\ref{sec_meth_evaluation} defines the evaluation protocol
+and the approach used for hyperparameter selection and comparison -
+these procedures provide the basis for the experimental results reported in Chapter~\ref{chap_4}.
 
 \input{chapter3_gnn_preliminaries}
 \input{chapter3_clustering_preliminaries}

@@ -1,70 +1,105 @@
 %%
 %%  Department of Electrical, Electronic and Computer Engineering
-%%  MEng Dissertation / PhD Thesis - Addendum A
-%%  Copyright (C) 2011-2016 University of Pretoria.
+%%  MEng Dissertation - Addendum A: Reproducibility
 %%
 
-\chapter{ DERIVATION OF HIGHER ORDER MODELS}
+\chapter{Reproducibility: Run and Sweep Identifiers}
+\label{appendix_repro}
 
-\section{Example Heading}
+Every experimental result in this document traces to a logged run in the Weights \& Biases project
+\texttt{deanmills/multiperson-pose-grouping}.
+Each training run records its full configuration, source-code state, training curves, and checkpoint;
+evaluation results are attached to the source run's summary under \texttt{eval/*} prefixes
+(Section~\ref{sec_meth_evaluation_wandb}).
+This appendix lists the identifier for every run and sweep cited in the body of the document.
+The run identifier doubles as the on-disk output directory name under \texttt{outputs/<config>/<run>/}.
 
-\subsection{Subheading example}
+\section{Bayesian sweeps}
+\label{appendix_repro_sweeps}
 
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabular}{llcl}
+\toprule
+Sweep & Sweep ID & Runs & Winner (run) \\
+\midrule
+Architecture           & \texttt{wg95w0k0} & 32 & \texttt{champion-arch} (\texttt{08d0ffde}) \\
+Loss / regularisation  & \texttt{oyt1isr0} & 24 & \texttt{champion-loss} (\texttt{mkmtc8om}) \\
+Hyperbolic dimension   & \texttt{qpggbsdn} & 8  & \texttt{champion-hyperbolic} (\texttt{ua4wdb3p}) \\
+Fine-tune recipe       & \texttt{i9vpg4t1} & 12 & \texttt{meng-headline} (\texttt{b5noyg7t}) \\
+\bottomrule
+\end{tabular}
+\caption{The four Bayesian sweeps that defend every PG-GAT hyperparameter,
+with their W\&B sweep identifiers and winning runs.}
+\label{tab:appendix_sweeps}
+\end{table}
 
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
+\section{Training runs}
+\label{appendix_repro_runs}
 
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
-Filler text to test template. Filler text to test template. Filler text to
-test template. Filler text to test template. Filler text to test template.
+{
+\footnotesize
+\begin{longtable}{llll}
+\caption{W\&B run identifiers for every training run cited in Chapter~4.}
+\label{tab:appendix_runs} \\
+\toprule
+Result & Section & Configuration & W\&B run \\
+\midrule
+\endfirsthead
+\caption[]{(continued) W\&B run identifiers for every training run cited in Chapter~4.} \\
+\toprule
+Result & Section & Configuration & W\&B run \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Baseline GAT, depth on            & \ref{sec_res_baseline}       & \texttt{train\_knn\_only}                 & \texttt{su8rmvti} \\
+Baseline GAT, depth off           & \ref{sec_res_baseline}       & \texttt{train\_knn\_no\_depth}            & \texttt{jkd1ln4a} \\
+DEC head                          & \ref{sec_res_learned_heads}  & \texttt{train\_dec}                       & \texttt{5q0p9it9} \\
+Slot attention head               & \ref{sec_res_learned_heads}  & \texttt{train\_slot}                      & \texttt{2kq3i8yv} \\
+Graph partitioning head           & \ref{sec_res_learned_heads}  & \texttt{train\_partition}                 & \texttt{s3qr04xm} \\
+Vanilla DMoN (Exp 3-bis)          & \ref{sec_res_sadmon}         & \texttt{train\_dmon\_no\_depth}           & \texttt{124ykt2c} \\
+SA-DMoN v1 (Exp 4)                & \ref{sec_res_sadmon}         & \texttt{train\_sa\_dmon\_no\_depth}       & \texttt{69yfqshy} \\
+SA-DMoN v1 clamped (Exp 5)        & \ref{sec_res_sadmon}         & \texttt{...\_clamped}                     & \texttt{rvd7qaow} \\
+SA-DMoN v1 $\lambda{=}1$ (Exp 6)  & \ref{sec_res_sadmon}         & \texttt{...\_lambda1}                     & \texttt{2ok6u2k3} \\
+SA-DMoN v1 fixed $\sigma$ (Exp 7) & \ref{sec_res_sadmon}         & \texttt{...\_fixed\_sigma}                & \texttt{usjwc380} \\
+SA-DMoN v1 no spectral (Exp 8)    & \ref{sec_res_sadmon}         & \texttt{...\_no\_spectral}                & \texttt{2ucbx3e0} \\
+SA-DMoN v2a                       & \ref{sec_res_sadmon}         & \texttt{...\_v2\_feat\_only}              & \texttt{x6v3wfnv} \\
+SA-DMoN v2b                       & \ref{sec_res_sadmon}         & \texttt{...\_v2\_feat\_only\_low\_lambda} & \texttt{qn7rv98j} \\
+SA-DMoN v2c                       & \ref{sec_res_sadmon}         & \texttt{...\_v2\_entropy\_only}           & \texttt{zz2sj7an} \\
+SA-DMoN v2d                       & \ref{sec_res_sadmon}         & \texttt{...\_v2\_full}                    & \texttt{02jqs33r} \\
+PG-GAT type-pair only             & \ref{sec_res_pggat_ablations}& \texttt{train\_sa\_gat\_type\_pair}       & \texttt{8peqkcyh} \\
+PG-GAT pos-enc only               & \ref{sec_res_pggat_ablations}& \texttt{train\_sa\_gat\_pos\_enc}         & \texttt{ffl2tde3} \\
+PG-GAT repulsion only             & \ref{sec_res_pggat_ablations}& \texttt{train\_sa\_gat\_repulsion}        & \texttt{gfqkbqnw} \\
+PG-GAT full (all three)           & \ref{sec_res_pggat_ablations}& \texttt{train\_sa\_gat\_full}             & \texttt{r5ekg0zl} \\
+Legacy COCO fine-tune             & \ref{sec_res_coco_ft}        & \texttt{finetune\_sa\_gat\_coco}          & \texttt{ugzbgepn} \\
+Architecture-sweep winner         & \ref{sec_res_pggat_sweep}    & \texttt{pg\_gat\_arch\_sweep}             & \texttt{08d0ffde} \\
+Loss-sweep winner                 & \ref{sec_res_pggat_sweep}    & \texttt{pg\_gat\_loss\_sweep}             & \texttt{mkmtc8om} \\
+Fine-tune-sweep winner (headline) & \ref{sec_res_coco_ft}        & \texttt{pg\_gat\_finetune\_sweep}         & \texttt{b5noyg7t} \\
+Hyperbolic H1 (dim 128)           & \ref{sec_res_hyperbolic}     & \texttt{train\_sa\_gat\_hyperbolic}       & \texttt{aox7h3di} \\
+Hyperbolic H2 (dim 32)            & \ref{sec_res_hyperbolic}     & \texttt{...\_hyperbolic\_dim32}           & \texttt{g45tdxi5} \\
+Hyperbolic Option B (COCO ft)     & \ref{sec_res_hyperbolic}     & \texttt{finetune\_...\_dim32\_coco}       & \texttt{lragtfzu} \\
+Hyperbolic-sweep winner           & \ref{sec_res_hyperbolic}     & \texttt{pg\_gat\_hyperbolic\_sweep}       & \texttt{ua4wdb3p} \\
+TriGAT                            & \ref{sec_res_trigat}         & \texttt{train\_trigat}                    & \texttt{y0tw6vc9} \\
+PG-GAT v2, 20 epochs              & \ref{sec_res_v2}             & \texttt{train\_sa\_gat\_v2\_features}     & \texttt{vg43ee4u} \\
+PG-GAT v2, 50 epochs extended     & \ref{sec_res_v2}             & \texttt{...\_v2\_features\_extended}      & \texttt{o8978au7} \\
+\end{longtable}
+}
 
-%% End of File.
+\section{Evaluation attachments}
+\label{appendix_repro_evals}
+
+Evaluation metrics are attached to the source training run's W\&B summary rather than logged as separate runs.
+The headline run \texttt{b5noyg7t} carries the following evaluation prefixes:
+\texttt{eval/e2e} (HigherHRNet end-to-end, oracle and predicted $K$),
+\texttt{eval/e2e\_yolo} and \texttt{eval/e2e\_rtmo} (the detector-swap evaluations of Section~\ref{sec_res_e2e_swap}),
+\texttt{eval/k\_estimation/coco} (K-head accuracy on ground-truth keypoints),
+and \texttt{eval/knn/coco\_multi} (the multi-person diagnostic subset).
+Every other run listed above carries evaluation summary fields from the corresponding COCO evaluation pass.
+Metric keys retain the codebase's historical field names,
+in which the $k$-means read-out is recorded as \texttt{knn} (for example \texttt{knn\_pga});
+every \texttt{knn}-named field therefore reports the $k$-means read-out of Section~\ref{sec_meth_problem_subproblems}.
+The K-head checkpoint used by the autonomous pipeline was trained before the W\&B integration
+and is preserved on disk under \texttt{outputs/k\_head\_meng\_headline\_coco/a636b1c4/};
+its evaluation results are attached to \texttt{b5noyg7t} as listed above.

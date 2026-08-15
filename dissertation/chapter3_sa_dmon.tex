@@ -1,137 +1,313 @@
 \section{SA-DMoN --- Skeleton-Aware Deep Modularity Networks}
 \label{sec_meth_sadmon}
 
-The three learned heads of Section~\ref{sec_meth_learned_heads} all failed to outperform plain $k$-means
-on embeddings produced by the same GAT backbone.
-This section describes a different family of attempts:
-keep the GAT backbone but replace the grouping head with a Deep Modularity Network~\cite{tsitsulin2023dmon},
-in which the head's loss is a differentiable relaxation of the Newman modularity~\cite{newman2006modularity} of the predicted partition.
-The vanilla DMoN baseline and its eleven skeleton-aware variants
-all plateau in a narrow band well below the $k$-means baseline,
-and the resulting diagnosis --- the modularity null model is structurally incompatible with the spatial-proximity skeleton graph ---
-is the second piece of evidence (after Section~\ref{sec_meth_learned_heads}) that the embedding network rather than the grouping head is the binding constraint.
+The three learned grouping heads from
+Section~\ref{sec_meth_learned_heads} all fail to improve on plain
+$k$-means when applied to embeddings from the same GAT backbone.
+This section considers a different approach.
+The GAT backbone is retained -
+but the grouping stage is replaced with a Deep Modularity Network
+(DMoN)~\cite{tsitsulin2023dmon},
+where the training objective is based on a differentiable relaxation
+of Newman modularity~\cite{newman2006modularity}.
+
+A vanilla DMoN configuration is tested first,
+followed by nine skeleton-aware variants
+that modify different parts of the modularity formulation.
+Despite these changes, all ten configurations
+plateau within a relatively narrow performance range
+and remain below the $k$-means baseline.
+The experiments point to a structural problem
+with the modularity objective in this setting -
+its null model is misaligned with a graph
+whose edges are constructed from spatial proximity
+between keypoints.
+
+Together with the learned-head experiments of
+Section~\ref{sec_meth_learned_heads},
+these results provide further evidence
+that changing the grouping head is not the main source of improvement.
+Instead, the quality of the embedding produced by the network
+is the binding constraint.
 
 \subsection{Vanilla DMoN}
 \label{sec_meth_dmon_pose}
 
-Given the keypoint graph $\mathcal{G}$ of Section~\ref{sec_meth_problem_graph} with adjacency matrix $A \in \{0,1\}^{N \times N}$,
-DMoN learns a soft cluster-assignment matrix
-$\mathbf{S} \in [0,1]^{N \times K}$ with row-stochastic constraint $\sum_k S_{ik} = 1$
-by a single linear projection of the GAT embedding followed by a softmax.
-The training loss is a sum of three terms~\cite{tsitsulin2023dmon}:
+Given the keypoint graph $\mathcal{G}$ from
+Section~\ref{sec_meth_problem_graph} - with adjacency matrix
+$A \in \{0,1\}^{N \times N}$ -
+DMoN predicts a soft cluster-assignment matrix
+$\mathbf{S} \in [0,1]^{N \times K}$.
+Each row of $\mathbf{S}$ sums to one,
+so that $S_{ik}$ represents the soft assignment
+of node $i$ to cluster $k$.
+The assignments are produced by applying a single linear projection
+to the GAT embeddings followed by a softmax over the $K$ clusters.
+
+The standard DMoN objective contains three
+terms~\cite{tsitsulin2023dmon}:
 \begin{equation}
     \mathcal{L}_{\text{DMoN}}
     = -\frac{1}{2m}\mathrm{Tr}\bigl(\mathbf{S}^\top \mathbf{B}\,\mathbf{S}\bigr)
-      + \lambda_{\text{ortho}}\,\Bigl\|\mathbf{S}^\top \mathbf{S}/\|\mathbf{S}^\top \mathbf{S}\|_F - \mathbf{I}/\sqrt{K}\Bigr\|_F^{2}
-      + \lambda_{\text{cluster}}\,\|\mathbf{s}_{\text{vol}}\|_1,
+      + \lambda_{\text{ortho}}\,
+      \Bigl\|\mathbf{S}^\top \mathbf{S}/\|\mathbf{S}^\top \mathbf{S}\|_F - \mathbf{I}/\sqrt{K}\Bigr\|_F
+      + \lambda_{\text{cluster}}\,\Bigl(\tfrac{\sqrt{K}}{N}\,\|\mathbf{s}_{\text{vol}}\|_2 - 1\Bigr),
     \label{eq:dmon_loss}
 \end{equation}
-where $\mathbf{B} = \mathbf{A} - \mathbf{d}\mathbf{d}^\top / (2m)$ is the modularity matrix
-with degrees $\mathbf{d}$ and total edge count $m = \tfrac{1}{2}\sum_{ij} A_{ij}$,
-the spectral term maximises modularity,
-the orthogonality term encourages cluster-balanced assignments,
-and the collapse-prevention $\lambda_{\text{cluster}}$ term penalises empty clusters.
-A supervised cross-entropy term against the ground-truth person labels $\mathbf{y}^\star$ is added with weight $\lambda_{\text{type}} = 1$
-to keep the head's predicted partition aligned with identity rather than with the modularity argmax.
+where
+\begin{equation}
+    \mathbf{B}
+    =
+    \mathbf{A}
+    -
+    \frac{\mathbf{d}\mathbf{d}^{\top}}{2m}
+\end{equation}
+is the modularity matrix,
+$\mathbf{d}$ contains the node degrees,
+and $m = \tfrac{1}{2}\sum_{ij} A_{ij}$ is the total number of edges.
+The first term encourages partitions with high modularity.
+The orthogonality term discourages highly unbalanced assignments,
+while the term weighted by $\lambda_{\text{cluster}}$
+helps prevent solutions in which one or more clusters collapse
+and receive no nodes.
 
-This vanilla configuration is reported in Chapter~\ref{chap_4} as the SA-DMoN starting point.
-Its failure mode --- modularity is maximised when grouping spatially proximal nodes together,
-but pose grouping requires separating spatially proximal nodes that belong to different people ---
-motivates the skeleton-aware null model of the next subsection.
+Two further terms are added to the DMoN objective.
+The first is a supervised cross-entropy term,
+computed against the ground-truth person labels $\mathbf{y}^\star$
+after Hungarian matching of clusters to people,
+with weight $\lambda_{\text{supervised}}=1$.
+This keeps the predicted clusters aligned with person identity,
+rather than allowing the network to follow only the partition
+preferred by the modularity objective.
+The second is a type-exclusivity term with weight $\lambda_{\text{type}}=1$,
+which penalises a cluster that accumulates
+more than one joint of the same type.
+In the implementation,
+the spectral term itself also carries a weight,
+with $\lambda_{\text{spectral}}=0.1$ unless a configuration below changes it.
+
+This vanilla configuration forms the starting point
+for the SA-DMoN experiments reported in Chapter~\ref{chap_4}.
+Its main limitation comes from the structure of the graph itself.
+Modularity rewards groups of nodes
+that are more densely connected than expected under its null model,
+while the keypoint graph is constructed from spatial proximity.
+As a result, nearby joints are encouraged to remain together
+even when they belong to different people.
+Pose grouping often requires exactly the opposite behaviour.
+This mismatch motivates the skeleton-aware modifications
+to the null model introduced in the next subsection.
 
 \subsection{SA-DMoN v1: a skeleton-aware null model}
 \label{sec_meth_sadmon_v1}
 
-The v1 variant replaces the degree-based null model
-$\mathbf{N}_{\text{deg}} = \mathbf{d}\mathbf{d}^\top / (2m)$
-with a null that combines spatial proximity and skeleton type adjacency.
-The spatial component is a Gaussian kernel on normalised keypoint positions
+The v1 variant replaces the standard degree-based null model
+$\mathbf{N}_{\text{deg}} = \mathbf{d}\mathbf{d}^\top/(2m)$ with one
+that includes both spatial proximity and the known structure of the
+COCO skeleton.
+The spatial component is defined using a Gaussian kernel
+over the normalised keypoint positions
 \begin{equation}
-    P_{ij} = \exp\!\Bigl(-\,\frac{\|\mathbf{p}_i - \mathbf{p}_j\|_2^{2}}{2\sigma^{2}}\Bigr),
+    P_{ij}
+    =
+    \exp\!\Bigl(
+        -\,\frac{\|\mathbf{p}_i-\mathbf{p}_j\|_2^2}{2\sigma^2}
+    \Bigr),
     \label{eq:sadmon_spatial}
 \end{equation}
-where $\sigma$ is the bandwidth (treated below as a hyperparameter axis).
-The type component is a fixed $17 \times 17$ affinity matrix $T$ derived from breadth-first search on the COCO skeleton graph:
-directly connected joint-type pairs receive $T_{ab} = 1.0$,
-two-hop pairs $0.5$,
-three-hop pairs $0.25$,
-and any pair beyond three hops or topologically disconnected receives $0$.
-The combined skeleton-aware null entry between node $i$ of type $a$ and node $j$ of type $b$ is
+where $\sigma$ controls the spatial bandwidth
+and is treated as a hyperparameter below.
+
+The skeleton component is represented by a fixed $17 \times 17$
+joint-type affinity matrix $T$,
+constructed using breadth-first search over the COCO skeleton graph.
+Joint types that are directly connected in the skeleton
+are assigned an affinity of $T_{ab}=1.0$.
+Pairs separated by two hops receive $0.5$,
+and three-hop pairs receive $0.25$.
+Joint types more than three hops apart -
+or otherwise topologically disconnected -
+receive an affinity of zero.
+
+For nodes $i$ and $j$ with joint types $a$ and $b$, respectively,
+the spatial and skeleton terms are combined as
 \begin{equation}
-    R_{ij} = T_{ab} \cdot P_{ij},
+    R_{ij}
+    =
+    T_{ab} \cdot P_{ij}.
     \label{eq:sadmon_null}
 \end{equation}
-which is then normalised to preserve the total edge mass
-$\tilde{R}_{ij} = R_{ij} \cdot \bigl(2m / \sum_{ij} R_{ij}\bigr)$.
-The modularity matrix becomes
-$\mathbf{B}_{\text{pose}} = \mathbf{A} - \tilde{\mathbf{R}}$
-and is substituted into Equation~\eqref{eq:dmon_loss} in place of $\mathbf{B}$.
-Everything else --- the assignment head, the orthogonality and collapse terms, the supervised type loss --- is unchanged.
+The resulting matrix is rescaled so that its total mass matches the
+edge mass of the original graph,
+\begin{equation}
+    \tilde{R}_{ij}
+    =
+    R_{ij}
+    \left(
+        \frac{2m}{\sum_{ij}R_{ij}}
+    \right).
+\end{equation}
+The pose-specific modularity matrix is then
+\begin{equation}
+    \mathbf{B}_{\text{pose}}
+    =
+    \mathbf{A} - \tilde{\mathbf{R}},
+\end{equation}
+which replaces $\mathbf{B}$ in the DMoN loss of
+Equation~\eqref{eq:dmon_loss}.
+The remaining parts of the model are left unchanged,
+including the assignment head,
+the orthogonality and collapse-prevention terms,
+and the supervised cross-entropy and type-exclusivity terms.
 
-The bandwidth $\sigma$ is the single sensitive hyperparameter of v1,
-and four parameterisations were tried in turn to identify the right operating point.
-Each configuration corresponds to one row of the SA-DMoN ablation in Chapter~\ref{chap_4}.
+The bandwidth $\sigma$ proved to be the main sensitive parameter in
+this formulation.
+Several versions were therefore tested to determine
+whether the behaviour of the null model was mainly caused by how this
+bandwidth was selected.
+Each configuration below corresponds to one of
+the SA-DMoN ablations reported in Chapter~\ref{chap_4}.
 
 \begin{compactenum}
     \item \textbf{Learnable, unconstrained.}
-        $\sigma = \exp(\xi)$ with $\xi$ a free parameter initialised at $\log 0.2$.
-        Lets the optimiser choose the bandwidth.
+        The bandwidth is parameterised as $\sigma=\exp(\xi)$,
+        with $\xi$ initialised to $\log 0.2$,
+        and optimised with the rest of the network.
+        This allows the model to choose its own spatial
+        scale.
+
     \item \textbf{Learnable, clamped.}
-        $\sigma$ as above, with the bandwidth clamped to $[0.05, 0.5]$ in the forward pass.
-        Prevents the divergence seen in the unconstrained case.
-    \item \textbf{Learnable, clamped, $\lambda_{\text{spectral}} = 1$.}
-        Same as the clamped variant with the spectral term re-weighted to equal the supervised loss.
-        Tests whether the modularity signal is helpful when given more influence.
+        The same learnable parameterisation is used -
+        but $\sigma$ is clamped to the range $[0.05,0.5]$
+        during the forward pass.
+        This prevents the bandwidth from diverging,
+        as observed in the unconstrained configuration.
+
+    \item \textbf{Learnable, clamped, $\lambda_{\text{spectral}}=1$.}
+        This uses the clamped bandwidth while increasing the weight of
+        the spectral term so that it has the same weighting as the
+        supervised loss.
+        The purpose is to test whether the modularity
+        signal becomes useful when it has a larger influence on
+        training.
+
     \item \textbf{Fixed at the per-graph median pairwise distance.}
-        Recomputed per scene with \texttt{torch.no\_grad}, eliminating the optimiser's incentive to manipulate $\sigma$.
-        Tests a bandwidth that adapts to scene scale without being directly optimised.
+        Here, $\sigma$ is recalculated for each scene as the median
+        pairwise keypoint distance using \texttt{torch.no\_grad}.
+        This gives a bandwidth that adapts to the spatial scale
+        of the scene without allowing the optimiser to change it directly.
+
     \item \textbf{Spectral term removed.}
-        Sets $\lambda_{\text{spectral}} = 0$ while keeping the skeleton-aware null in place for diagnostic logging.
-        Isolates the supervised type loss from the modularity-driven gradient.
+        The spectral weight is set to $\lambda_{\text{spectral}}=0$.
+        The skeleton-aware null model is still calculated
+        for diagnostic purposes -
+        but it contributes no modularity gradient during training.
+        This configuration separates the effect of the supervised loss
+        from the modularity-based objective.
 \end{compactenum}
 
-These five v1 configurations are the methodological basis of SA-DMoN Experiments~4--8 in Chapter~\ref{chap_4}.
+These five v1 configurations form the methodological basis
+of SA-DMoN Experiments~4--8 reported in Chapter~\ref{chap_4}.
 
 \subsection{SA-DMoN v2: decoupled adjacency and entropy type loss}
 \label{sec_meth_sadmon_v2}
 
-The diagnostic that motivates v2 is that the spatial adjacency $\mathbf{A}$ and the spatial null $\mathbf{P}$ share the same Gaussian-of-distance structure,
-so the modularity matrix $\mathbf{B}_{\text{pose}} = \mathbf{A} - \tilde{\mathbf{R}}$ partially cancels out near the bandwidth.
-The v2 variant addresses this by decoupling adjacency from the geometric null
-and by replacing the ReLU-based supervised type loss with an entropy-based formulation.
-Two independent fixes that can be combined,
-giving four configurations.
+The motivation for the v2 variants comes from a limitation observed in
+the v1 formulation.
+The spatial adjacency $\mathbf{A}$ and the spatial
+component of the null model $\mathbf{P}$ are both strongly determined
+by keypoint distance.
+As a result, the two terms in
+$\mathbf{B}_{\text{pose}} = \mathbf{A} - \tilde{\mathbf{R}}$ can
+partially cancel around the selected bandwidth,
+weakening the modularity signal available during training.
 
-\paragraph{Fix~1: feature-based adjacency.}
-The adjacency used inside the spectral loss is recomputed from the current GAT embedding
-rather than from the geometric $k$NN graph of Section~\ref{sec_meth_problem_graph}.
-The feature-graph adjacency is constructed by $k$-nearest neighbours in the embedding space with $k = 8$;
-the geometric graph is retained for message passing,
-so only the modularity-loss adjacency is replaced.
-The feature graph is regenerated each forward pass as the GAT weights change.
+The v2 formulation tests two changes intended to address this problem.
+The first separates the adjacency used by the modularity loss
+from the geometric graph used for message passing.
+The second replaces the threshold-based type-exclusivity loss
+used in v1 with a smoother entropy-based objective.
+The two changes are independent and can also be used together,
+giving four configurations in total.
 
-\paragraph{Fix~2: entropy type loss.}
-The v1 supervised term is replaced with a soft entropy
-$\mathcal{L}_{\text{type}}^{\text{v2}} = -\sum_{i,k} S_{ik}\, \log p^{\text{type}}_{ik}$
-where $p^{\text{type}}_{ik}$ is the probability that cluster $k$ contains keypoint type $t_i$
-estimated from the current assignment statistics.
-The entropy formulation produces smoother gradient signal than the v1 threshold-based ReLU,
-at the cost of removing the discrete hinge that previously gave the loss its sharpness.
+\textbf{Fix~1: feature-based adjacency:}
+Instead of using the geometric $k$NN adjacency from
+Section~\ref{sec_meth_problem_graph} inside the spectral loss,
+a new adjacency is constructed from the current GAT embeddings.
+This feature graph is formed using $k$-nearest neighbours
+in embedding space with $k=8$.
+The original geometric graph is still used by the GAT
+for message passing -
+only the adjacency supplied to the modularity objective is changed.
+Since the embedding itself changes during training,
+the feature-based graph is reconstructed on each forward pass.
 
-\paragraph{Configurations.}
-Four v2 ablation rows are reported in Chapter~\ref{chap_4}:
-feature adjacency alone with $\lambda_{\text{spectral}} = 1.0$,
-feature adjacency alone with $\lambda_{\text{spectral}} = 0.1$ (matching v1's spectral weight),
-entropy type loss alone with the original spatial adjacency,
-and the combined feature-adjacency-plus-entropy configuration.
+This separates the two roles played by the graph.
+Message passing still uses spatial proximity to define
+which keypoints exchange information,
+while the modularity objective operates on neighbourhoods
+learned in the embedding space,
+rather than another distance-based version of the same spatial graph.
+
+\textbf{Fix~2: entropy type loss:}
+The second change replaces the v1 type-exclusivity term
+with a soft entropy-based objective
+\begin{equation}
+    \mathcal{L}_{\text{type}}^{\text{v2}}
+    =
+    -\sum_{i,k}
+    S_{ik}\,\log p^{\text{type}}_{ik},
+\end{equation}
+where $p^{\text{type}}_{ik}$ is the estimated probability
+that cluster $k$ contains the joint type $t_i$,
+calculated from the current soft assignment statistics.
+Compared with the threshold-based ReLU formulation used in v1,
+this gives a smoother gradient as the assignments change.
+The trade-off is that the sharper discrete hinge
+of the earlier loss is no longer present.
+
+\textbf{Configurations:}
+Four v2 configurations are evaluated in Chapter~\ref{chap_4}.
+The first uses feature-based adjacency with
+$\lambda_{\text{spectral}}=1.0$.
+The second uses the same feature adjacency
+but reduces the spectral weight to
+$\lambda_{\text{spectral}}=0.1$ -
+matching the weighting used in v1.
+The third keeps the original spatial adjacency
+and changes only the supervised term to the entropy type loss.
+The final configuration combines both changes -
+using feature-based adjacency together with the
+entropy-based type objective.
 
 \subsection{Training schedule}
 \label{sec_meth_sadmon_training}
 
-All eleven SA-DMoN variants (vanilla DMoN, five v1 configurations, four v2 configurations, and a no-spectral diagnostic)
-are trained jointly with the GAT for between 100 and 150 epochs on the synthetic training split,
-using the optimiser settings of Section~\ref{sec_meth_baseline_training}.
-The 100-epoch schedule was reserved for variants whose head loss was confirmed to have plateaued by 100 epochs,
-while 150 was used for variants where the head loss was still drifting at 100 epochs to give them every opportunity to escape the plateau.
-None of the configurations converges to a regime that beats the kNN-on-baseline-embeddings number;
-the resulting evidence is the subject of Section~\ref{sec_results_sadmon} and the discussion of modularity-objective alignment is the subject of Section~\ref{sec_disc_modularity}.
+All ten SA-DMoN variants are trained jointly with the GAT on the
+synthetic training split.
+These include the vanilla DMoN baseline,
+the five v1 configurations described above,
+including the no-spectral diagnostic,
+and the four v2 configurations.
+Training otherwise follows the optimiser settings given in
+Section~\ref{sec_meth_baseline_training}.
+
+Depending on the behaviour of the head loss,
+each configuration is trained for either 100 or 150 epochs.
+A 100-epoch schedule is used when the loss has clearly plateaued
+by that point.
+For configurations where the head loss is still changing at 100 epochs,
+training is extended to 150 epochs
+to allow additional time for convergence.
+This avoids discarding a variant simply because its grouping objective
+converges more slowly than the baseline contrastive model.
+
+Despite the longer training schedules,
+none of the SA-DMoN configurations are able to improve
+improve on $k$-means applied to the baseline GAT embeddings.
+The experimental results are reported in
+Section~\ref{sec_res_sadmon}.
+The broader reason for this behaviour -
+particularly the mismatch between the modularity objective
+and the structure of the pose-grouping graph -
+is discussed in Section~\ref{sec_disc_modularity_autonomy_gap}.

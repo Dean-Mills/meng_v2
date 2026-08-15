@@ -1,4 +1,148 @@
-\section{Research Gap}
+\section{Research Gap and Position}
 \label{sec_lit_gap}
 
-Synthesises the review: modular grouping modules for bottom-up HPE are under-explored; existing graph-based pose networks target different tasks; the clustering-head literature has not been systematically applied to pose grouping; and the choice of embedding space (Euclidean vs hyperbolic) is untested in this domain. PG-GAT and its ablations address these gaps.
+The preceding sections have reviewed the literature surrounding multi-person pose grouping
+from several related perspectives.
+Sections~\ref{sec_lit_hpe} and~\ref{sec_lit_grouping} considered the broader bottom-up HPE landscape
+and the different mechanisms used to group detected keypoints.
+Section~\ref{sec_lit_gnn_pose} then examined how graph neural networks have been applied to pose-related problems,
+while Section~\ref{sec_lit_rep_learn} reviewed representation-learning and clustering methods
+that could be used for grouping.
+Finally, Section~\ref{sec_lit_geometry} considered alternative embedding geometries
+that may improve the learned representation.
+
+The aim of this review was not to cover every method in each of these areas -
+instead, the focus was on approaches that are directly relevant to the design choices made in this work,
+including methods that are adopted, evaluated experimentally, or excluded for specific reasons.
+This section brings these different areas together
+and defines the research gap addressed by the methodology in Chapter~\ref{chap_3}
+and the experiments presented in Chapter~\ref{chap_4}.
+
+\subsection{Where the literature leaves the design space}
+\label{sec_lit_gap_landscape}
+
+The HPE literature now contains strong per-keypoint detectors,
+with localisation accuracy reaching relatively high levels on the COCO benchmark.
+This makes the grouping stage the main remaining limitation on performance in bottom-up systems.
+The four main grouping approaches reviewed earlier -
+PAFs, associative embeddings, mid-range offsets, and end-to-end set prediction -
+all connect the grouping mechanism closely to the detector,
+preventing the grouping stage from being reused with a different upstream detector.
+
+Modular grouping,
+where the method operates on detached keypoint coordinates produced by an existing detector,
+is much less explored.
+The graph-based methods reviewed in this chapter provide the closest precedents for PG-GAT.
+HGG~\cite{jin2020hgg} is trained jointly with the detector and is therefore not modular,
+while the instance-aware method of Yang et al.~\cite{yang2023instanceaware}
+incorporates its grouping information into the detector backbone.
+GEC~\cite{maher2025gec} is the closest detector-independent approach,
+but uses an edge-classification formulation -
+the experiments in Chapter~\ref{chap_4} examine this type of formulation
+and show that it is sensitive to the synthetic-to-real transfer considered in this work.
+
+The GNN literature on human pose provides much of the machinery used by PG-GAT,
+but has mostly applied it to other problems -
+examples include skeleton-based action recognition
+with ST-GCN~\cite{yan2018stgcn} and 2s-AGCN~\cite{shi2019twostreamadaptive},
+single-person 3D pose lifting with SemGCN~\cite{zhao2019semanticgcn} and GAST-Net~\cite{liu2020gastnet},
+and hand-object pose estimation with HOPE-Net~\cite{doosti2020hopenet}.
+These methods generally assume that the keypoints have already been associated with a person
+and do not produce a per-keypoint identity representation,
+so the use of GNNs specifically for grouping keypoints in multi-person scenes remains relatively limited.
+
+The representation-learning literature provides several possible alternatives to a simple clustering read-out.
+The approaches considered in this work include deep embedded clustering, slot attention,
+graph partitioning, and modularity-driven clustering -
+each provides a possible learned or graph-based alternative to $k$-means on top of the contrastive embedding.
+Chapter~\ref{chap_4} evaluates these approaches for the pose-grouping problem
+and finds that none improves on the simpler $k$-means baseline,
+which motivates the decision to focus on improving the embedding network itself
+rather than increasing the complexity of the grouping head.
+
+A second area of interest comes from the literature on non-Euclidean embedding spaces.
+Hyperbolic embeddings have been used successfully for data with hierarchical or tree-like structure,
+while the human skeleton can itself be represented as a small kinematic tree -
+this makes the geometry of the embedding space a reasonable design choice to investigate for pose grouping,
+although its usefulness for multi-person keypoint grouping remains largely unexplored.
+The hyperbolic PG-GAT experiments in Chapter~\ref{chap_4}
+therefore examine this second aspect of the proposed embedding approach.
+
+\subsection{The contribution and how it maps to the experiments}
+\label{sec_lit_gap_contribution}
+
+PG-GAT is the embedding network proposed to address the gap identified above.
+It accepts detected keypoint coordinates from any upstream detector,
+processes them using GATv2 attention,
+and produces an embedding for each keypoint.
+A downstream $k$-means step then groups these embeddings into person identities.
+The method introduces three skeleton-aware modifications to the attention mechanism (Section~\ref{sec_meth_pggat}),
+adding explicit structure based on the COCO skeleton topology rather than relying on a type-agnostic graph.
+The resulting embedding is the main component behind the results reported in Chapter~\ref{chap_4}.
+
+The remainder of the methodology and experimental work
+tests different parts of this design and several alternatives identified in the literature:
+
+\begin{compactitem}
+    \item Section~\ref{sec_res_learned_heads} evaluates whether a learned
+    grouping head can improve on $k$-means when using the same backbone -
+    DEC, slot attention, and graph partitioning are tested, but none
+    improves on the simpler read-out. This provides the experimental
+    basis for focusing on the embedding rather than the grouping head.
+
+    \item Section~\ref{sec_res_sadmon} evaluates ten SA-DMoN variants to
+    determine whether changes to the modularity null model can make
+    structural graph clustering suitable for this problem - none of the
+    tested variants improves on the baseline, suggesting
+    that the modularity objective is poorly matched to the keypoint
+    graph used here.
+
+    \item The isolation ablation in
+    Section~\ref{sec_res_pggat_ablations} examines the three
+    skeleton-aware modifications individually and in combination - the
+    complete PG-GAT configuration performs better than each
+    single-modification variant, although the differences between
+    individual variants remain within the variation observed across
+    random seeds.
+
+    \item The architecture and loss sweeps in
+    Section~\ref{sec_res_pggat_sweep} compare the selected PG-GAT
+    configuration against alternatives found through Bayesian search -
+    this checks that the reported performance is not dependent on a
+    single manually selected architectural setting.
+
+    \item Section~\ref{sec_res_coco_ft} evaluates the COCO fine-tuning
+    configuration, confirms the fine-tuning recipe used for the final
+    model, and produces the checkpoint used for the headline result.
+
+    \item The hyperbolic PG-GAT experiment in
+    Section~\ref{sec_res_hyperbolic} tests the alternative embedding
+    geometry against the two hypotheses defined in
+    Section~\ref{sec_lit_geometry_hypotheses} - H2 receives partial
+    support under synthetic-only training, but the advantage does not
+    remain after COCO fine-tuning.
+
+    \item The TriGAT experiment in Section~\ref{sec_res_trigat} tests
+    whether changing the basic graph unit from an individual joint to a
+    skeleton triplet improves the learned representation - it does not,
+    with the subsequent voting stage losing information needed for
+    accurate grouping.
+
+    \item PG-GAT v2, evaluated in Section~\ref{sec_res_v2}, adds
+    pre-trained ImageNet visual features to test whether appearance
+    provides useful identity information beyond keypoint position and
+    type - no improvement is observed despite the addition of
+    $2.2 \times 10^{6}$ parameters.
+
+    \item Finally, Section~\ref{sec_res_e2e} integrates PG-GAT with
+    HigherHRNet and evaluates the complete pipeline - this comparison
+    measures the practical detector-independence gap between the
+    modular PG-GAT design and the jointly trained AE reference.
+\end{compactitem}
+
+Together, these experiments test both the main PG-GAT design and the
+alternatives motivated by the literature reviewed in this chapter.
+Chapter~\ref{chap_3} describes the resulting methodology and its design
+choices in detail, while Chapter~\ref{chap_4} evaluates those choices
+experimentally and shows which parts of the proposed approach are
+supported by the results.

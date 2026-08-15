@@ -1,14 +1,29 @@
 \section{Approach}
 \label{sec_intro_approach}
 
-Train a graph attention network with contrastive loss on detected keypoints;
-cluster at test time with kNN.
-The iteration order mirrors the investigation:
-standard GAT baseline
-$\rightarrow$ a series of learned grouping heads (DEC, slot attention, graph partitioning),
-all of which failed to beat kNN
-$\rightarrow$ SA-DMoN, a skeleton-aware modularity objective, which also failed
-$\rightarrow$ PG-GAT,
-which keeps the clustering head simple but strengthens the embedding with three skeleton-aware modifications.
-Evaluate on synthetic data (controlled $K$, perfect GT) and COCO val2017 (zero-shot and fine-tuned).
-Close the loop by integrating with HigherHRNet for end-to-end validation.
+The grouping module is initially built on a standard implementation of a GATv2~\cite{brody2022gatv2} model trained
+with contrastive loss and $k$-means. This configuration is used as the baseline. The detected keypoints are used to 
+build a graph per image
+where each keypoint is a node and training forces same person keypoints closer together
+in embedding space while separating different person ones. These embeddings are grouped using $k$-means 
+to find person identities. The training pipeline uses a generated synthetic dataset 
+with precise labels and can be further fine-tuned on COCO~\cite{lin2014coco}.
+Three grouping heads are applied to the embeddings (to replace the presumed naive $k$-means): 
+deep embedded clustering~\cite{xie2016dec}, slot attention~\cite{locatello2020slotattention}
+and graph partitioning~\cite{yang2020gcnve} as well as 
+ten variants of a novel skeleton-aware deep modularity network (SA-DMoN) which is an extension of
+DMoN~\cite{tsitsulin2023dmon}. These all fail to outperform $k$-means, forcing a pivot
+to focus on the embeddings themselves, leading to the development of the novel PG-GAT
+which is a GATv2 with three skeleton-aware modifications to the attention mechanism. With the success  
+of this module (as compared to the grouping attempts), its architecture, loss and fine-tune hyperparameters 
+are then selected by Bayesian sweeps. Variants are then created to stress the design including a hyperbolic
+embedding space, a triplet-based graph primitive, and visual-feature augmentation. Finally, 
+a frozen-backbone person count head is added to remove the oracle-$K$ dependency, closing the 
+loop with a fully autonomous end-to-end pipeline.
+
+Evaluation covers three settings: the synthetic distribution, COCO with ground-truth
+keypoints, and a full end-to-end pipeline where the keypoints come from a detector.
+For the end-to-end setting that detector is a frozen HigherHRNet~\cite{cheng2020higherhrnet}.
+Modularity and detector independence are then shown by applying the same grouping module,
+without retraining, to detections from two further detector families:
+YOLO11x-pose~\cite{ultralytics2024yolo11} and RTMO-L~\cite{lu2024rtmo}.

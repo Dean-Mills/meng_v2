@@ -1,24 +1,83 @@
 %%
 %%  Department of Electrical, Electronic and Computer Engineering
-%%  MEng Dissertation / PhD Thesis - Abbreviations
-%%  Copyright (C) 2011-2016 University of Pretoria.
+%%  MEng Dissertation - List of Symbols
 %%
 
 {
   \thispagestyle{empty}
 
-  {\bfseries\Large LIST OF SYMBOLS \textcolor{red}{[OPTIONAL]}}
+  {\bfseries\Large LIST OF SYMBOLS}
 
   \vspace*{1cm}
 
-  \begin{tabular}{p{3cm}l}
-    $I$      & current \\
-    $R$      & resistance \\
-    $V$      & voltage \\
-    \textcolor{red}{Note:}       & \textcolor{red}{Make sure the list of symbols is sorted alphabetically, and/or} \\
-    & \textcolor{red}{according to the Greek alphabet. The list is formatted as a table with} \\
-    & \textcolor{red}{ no borders. Insert rows as needed.}
-  \end{tabular}
+  \begin{longtable}{p{3cm}l}
+
+    \multicolumn{2}{l}{\textit{Sets, spaces and operators}} \\[3pt]
+    $\mathcal{G}$            & keypoint graph, $\mathcal{G}=(\mathcal{V},\mathcal{E})$ \\
+    $\mathcal{V}$            & node (vertex) set of the graph \\
+    $\mathcal{E}$            & edge set of the graph \\
+    $\mathcal{N}(i)$         & neighbourhood of node $i$ \\
+    $\mathcal{X}$            & set of keypoint detections \\
+    $\mathcal{P}^{+},\ \mathcal{P}^{-}$ & sets of positive (same-person) and negative pairs \\
+    $\mathbb{R}^{d}$         & $d$-dimensional Euclidean space \\
+    $\mathbb{S}^{d-1}$       & unit hypersphere of $L_2$-normalised embeddings \\
+    $\mathbb{H}^{d}$         & $d$-dimensional Lorentz-model hyperbolic space \\
+    $\mathrm{PGA}$           & pose grouping accuracy (per-joint accuracy after Hungarian matching) \\
+    $Q(\mathbf{S})$          & Newman modularity of a partition $\mathbf{S}$ \\
+    $\mathrm{Tr}(\cdot)$     & matrix trace \\
+    $\mathbb{1}[\cdot]$      & indicator function \\
+    $\lVert\cdot\rVert_2$    & Euclidean ($L_2$) norm \\
+    $\lVert\cdot\rVert_F$    & Frobenius norm \\[6pt]
+
+    \multicolumn{2}{l}{\textit{Latin symbols}} \\[3pt]
+    $\mathbf{a}$             & learned attention vector \\
+    $\mathbf{A}$             & graph adjacency matrix \\
+    $\mathbf{B}$             & modularity matrix, $\mathbf{A}-\mathbf{d}\mathbf{d}^{\top}/2m$ \\
+    $\mathbf{B}_{\mathrm{pose}}$ & skeleton-aware (pose) modularity matrix, $\mathbf{A}-\tilde{\mathbf{R}}$ \\
+    $d$                      & embedding / feature dimension ($d=128$ at read-out) \\
+    $\mathbf{d}$             & node-degree vector \\
+    $\mathbf{D}$             & degree matrix \\
+    $d_{\mathbb{H}}(\cdot,\cdot)$ & Lorentz geodesic distance \\
+    $e_{ij}$                 & unnormalised attention score for edge $(i,j)$ \\
+    $\mathbf{h}_i^{(l)}$     & hidden state of node $i$ at layer $l$ \\
+    $H$                      & number of attention heads, $H=H_{\mathrm{std}}+H_{\mathrm{rep}}$ \\
+    $k$                      & cluster count in $k$-means; neighbour count in the kNN graph \\
+    $K$                      & number of people (clusters) in an image \\
+    $\hat{K}$                & predicted number of people ($K$-estimation head) \\
+    $L$                      & number of GNN layers ($L$-hop receptive field) \\
+    $\mathcal{L}_{(\cdot)}$  & training loss; subscript names the objective (contrastive, DEC, DMoN, $\mathbb{H}$) \\
+    $m$                      & total edge count of the graph \\
+    $N$                      & number of nodes / keypoint detections \\
+    $\mathbf{p}_i$           & normalised image-plane position of detection $i$ \\
+    $p_{ij}$                 & DEC target assignment distribution \\
+    $P_{ij}$                 & Gaussian spatial-proximity kernel between nodes $i$ and $j$ \\
+    $q_{ij}$                 & DEC soft assignment of node $i$ to cluster $j$ \\
+    $\tilde{\mathbf{R}}$     & skeleton-aware null-model matrix \\
+    $\mathbf{S}$             & soft cluster-assignment matrix ($N\times K$) \\
+    $t_i$                    & joint (keypoint) type of detection $i$ \\
+    $\mathbf{T}$             & $17\times17$ skeleton type-affinity matrix \\
+    $v_i$                    & visibility flag of detection $i$ \\
+    $\mathbf{W}^{(l)}$       & learnable weight matrix at layer $l$ \\
+    $\mathbf{x}_i$           & input feature vector of detection $i$ \\
+    $\hat{\mathbf{y}}$       & predicted per-node person labels \\
+    $\mathbf{y}^{\star}$     & ground-truth person labels \\
+    $z$                      & estimated relative depth coordinate \\
+    $\mathbf{z}_i$           & final learned embedding of node $i$ \\[6pt]
+
+    \multicolumn{2}{l}{\textit{Greek symbols}} \\[3pt]
+    $\alpha_{ij}$            & normalised attention weight for edge $(i,j)$ \\
+    $\gamma$                 & contrastive-loss margin ($\gamma=0.5$) \\
+    $\gamma_{\mathbb{H}}$    & hyperbolic contrastive-loss margin ($\gamma_{\mathbb{H}}=2.0$) \\
+    $\Delta$                 & change in PGA relative to a reference row \\
+    $\theta$                 & pivot angle of a joint triplet (TriGAT) \\
+    $\lambda_{(\cdot)}$      & weight of a loss term (orthogonality, cluster, spectral, type) \\
+    $\boldsymbol{\mu}_j$     & cluster centre $j$ \\
+    $\pi^{\star}$            & optimal cluster-to-person matching (Hungarian) \\
+    $\sigma$                 & Gaussian spatial-kernel bandwidth (SA-DMoN) \\
+    $\tau$                   & learnable tangent-scale of the hyperbolic map \\
+    $\xi$                    & free parameter for the learnable bandwidth, $\sigma=e^{\xi}$ \\
+
+  \end{longtable}
 
   \newpage
 }

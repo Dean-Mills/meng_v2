@@ -1,4 +1,167 @@
-\section{Graph Neural Networks for Pose}
+\section{Graph Neural Networks for Human Pose}
 \label{sec_lit_gnn_pose}
 
-Existing graph-based approaches in the pose literature: STGAT (skeleton-based action recognition), GAST-Net (single-person 3D pose from video), skeleton-aware GCN variants. How these differ from the multi-person keypoint grouping task --- none of the existing ``skeleton-aware'' networks target grouping, which motivates both the PG-GAT contribution and the naming choice (avoiding collision with STGAT/GAST-Net descriptors).
+The previous section identified graph-based grouping as the bottom-up approach that allows a modular grouping stage.
+This section looks more broadly at how graph neural networks (GNNs) have been used for human pose problems
+and identifies where the proposed method fits within this literature.
+
+The aim here is not to provide an exhaustive review of every GNN-based pose method.
+Instead, the focus is on work that uses graph operations similar to those used by the proposed method,
+but applies them to different pose-related tasks.
+In particular,
+relatively little of this work considers the problem of grouping detected keypoints across multiple people.
+
+The underlying mathematical concepts, including message passing, GCN, GAT, and GATv2,
+are described formally in Section~\ref{sec_meth_gnn}.
+This section instead considers how these methods have been applied within the pose literature
+and why multi-person keypoint grouping remains a less explored application.
+
+\subsection{Skeleton-based action recognition}
+\label{sec_lit_gnn_pose_action}
+
+The largest body of GNN-based pose research focuses on skeleton-based action recognition
+rather than pose estimation itself.
+ST-GCN~\cite{yan2018stgcn} introduced the spatio-temporal graph convolutional network
+as an important architecture for this task.
+A spatial graph is first constructed using the COCO or NTU skeleton topology,
+while temporal edges connect each joint to the same joint in the following frame.
+Spatial-temporal graph convolutions are then applied to produce a global representation of the sequence,
+which is used to predict an action label.
+
+2s-AGCN~\cite{shi2019twostreamadaptive} extends this idea
+by replacing the fixed skeleton adjacency with a learned, sample-dependent adjacency,
+allowing the network to learn connections beyond the standard anatomical skeleton
+when those connections are useful for recognising an action.
+
+The focus of these methods is quite different from the grouping problem considered in this work.
+Their inputs are sequences of \emph{already-grouped} skeletons,
+typically with each graph representing a single person,
+and their output is a classification label for the sequence.
+The grouping of keypoints into people is therefore assumed to have taken place before the graph is constructed,
+so the network is not trained to produce an identity or grouping signal for individual keypoints.
+
+Although the underlying graph operations are relevant,
+the graph structure and training objective are designed for a different task.
+Applying an ST-GCN-style architecture directly to grouping
+would require a graph containing multiple people within the same frame
+and an output defined at the individual keypoint level -
+these requirements fall outside the main design of the action-recognition methods in this lineage.
+
+\subsection{Single-person 3D pose lifting}
+\label{sec_lit_gnn_pose_3d}
+
+A second area where GNNs are commonly used in pose research is 3D pose lifting.
+In this setting, the input is a set of 2D keypoint coordinates for a person
+and the aim is to predict the corresponding 3D coordinates.
+SemGCN~\cite{zhao2019semanticgcn} applies a graph convolutional network to the skeleton of a single person
+and introduces learned weights for the graph edges.
+The approach in \cite{ci2019optimizing} extends this idea using locally connected layers,
+allowing information to be shared between joints that are not directly adjacent in the skeleton.
+GAST-Net~\cite{liu2020gastnet} combines a spatial GCN with temporal attention
+to estimate 3D coordinates from a sequence of 2D detections.
+
+The general setup is similar to the action-recognition methods discussed above -
+each input already represents the skeleton of a single person,
+and the graph describes relationships between that person's joints.
+The output is a new coordinate prediction for each keypoint rather than an identity or grouping signal,
+so these methods do not need to determine which person a detected keypoint belongs to
+since that association has already been established before the graph is passed to the network.
+
+The graph convolution operations used by these methods are relevant to the approach developed in this work,
+but they are being applied to a different problem -
+they operate on already-grouped single-person skeletons
+rather than using the graph to separate keypoints belonging to multiple people.
+
+\subsection{Domain-specific graph models}
+\label{sec_lit_gnn_pose_domain}
+
+A smaller group of related pose methods also make use of graph-structured models.
+HOPE-Net~\cite{doosti2020hopenet}, for example,
+predicts 3D joint coordinates in hand-object scenes
+using a small skeleton graph containing both hand and object keypoints.
+Yang et al.~\cite{yang2023instanceaware} take a different approach
+by supervising the self-attention matrix within a Vision Transformer
+so that it captures person instance membership -
+this can be viewed as a form of graph attention,
+although the attention operates over image patch tokens rather than directly over detected keypoints.
+
+The method of Yang et al.~\cite{yang2023instanceaware}
+is relatively close to the problem considered here in terms of its aim,
+but differs in how the grouping information is produced.
+Its attention structure is part of the detector backbone and operates on image features,
+whereas a modular grouping method needs to work on keypoints after they have been produced by the detector
+without requiring access to the detector's internal features.
+
+HOPE-Net~\cite{doosti2020hopenet} is also graph-based,
+but addresses a different pose domain and predicts coordinates rather than person identities.
+Neither approach therefore provides a per-keypoint embedding model for grouping keypoints in multi-person scenes.
+
+\subsection{Graph neural networks for clustering on general graphs}
+\label{sec_lit_gnn_pose_general}
+
+The proposed PG-GAT method is structurally more closely related
+to the broader GNN and clustering literature than to the GNN-based pose methods discussed above.
+Relevant approaches include Newman modularity~\cite{newman2006modularity}
+and its differentiable relaxation DMoN~\cite{tsitsulin2023dmon},
+spectral clustering~\cite{shi2000ncut, vonluxburg2007spectral},
+deep embedded clustering~\cite{xie2016dec},
+and graph-based face clustering methods~\cite{yang2019face, yang2020gcnve}.
+These methods are reviewed in more detail in Section~\ref{sec_lit_rep_learn},
+together with the related representation-learning literature.
+
+The main connection here is architectural -
+these approaches use graph operations or learned representations
+to transform the input nodes into features that can then be used for clustering or classification.
+In the setting considered in this work,
+the nodes are the detected keypoints
+and the required output is a representation that allows keypoints belonging to the same person to be identified.
+
+PG-GAT uses GATv2~\cite{brody2022gatv2} as its attention mechanism,
+operating on a separate graph for each image with keypoint type information included at the node level.
+It then adds the skeleton-aware modifications described in Section~\ref{sec_meth_pggat},
+adapting the more general graph representation and clustering framework
+to the specific problem of grouping human keypoints.
+
+\subsection{The naming convention and its rationale}
+\label{sec_lit_gnn_pose_naming}
+
+The proposed method is named PG-GAT (Pose Grouping Graph Attention Network).
+The name reflects the task the method is intended to solve, rather than a particular architectural feature.
+An earlier name, SA-GAT (Skeleton-Aware Graph Attention Network),
+was considered but ultimately not used
+because similar terminology is already common in the pose literature -
+in particular,
+the attention-based skeleton action-recognition methods following 2s-AGCN~\cite{shi2019twostreamadaptive}
+and 3D pose-lifting methods such as GAST-Net~\cite{liu2020gastnet}
+already make extensive use of skeleton-aware and spatial-temporal attention terminology.
+Several of these methods also publish under acronyms that differ from SA-GAT by only one letter.
+
+Using PG-GAT instead avoids potential confusion with these existing methods
+and makes the purpose of the proposed model clearer -
+the name emphasises pose grouping as the main task,
+while the skeleton-aware attention mechanism remains an architectural part of the method
+described in Section~\ref{sec_meth_pggat}.
+
+\subsection{The empty niche}
+\label{sec_lit_gnn_pose_niche}
+
+The literature reviewed above shows that graph neural networks are well suited to a range of pose-related problems,
+but their use for multi-person keypoint grouping remains relatively limited.
+Action-recognition GNNs operate on skeletons that have already been grouped,
+and the same is true for most 3D pose-lifting methods.
+Other graph-based approaches,
+including those for hand pose, objects, or instance-aware attention,
+either address a different task or incorporate the grouping mechanism directly into the detector.
+
+There is therefore relatively little work on GNNs designed specifically for multi-person pose grouping.
+HGG~\cite{jin2020hgg}, discussed in Section~\ref{sec_lit_grouping_graph}, is the closest example,
+but its graph grouping mechanism is trained jointly with the detector and is therefore not modular.
+GEC~\cite{maher2025gec} provides the closest example of detector-independent grouping,
+although it approaches the problem through edge classification
+rather than learning an embedding for each keypoint.
+
+PG-GAT occupies the position that neither of these approaches fills:
+a detector-independent GNN that produces a per-keypoint embedding for multi-person pose grouping.
+Sections~\ref{sec_lit_rep_learn} and~\ref{sec_lit_geometry}
+review the representation-learning and embedding-space concepts used to support this approach,
+before Section~\ref{sec_lit_gap} brings these areas together and defines the resulting research gap.

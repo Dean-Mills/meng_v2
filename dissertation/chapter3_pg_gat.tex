@@ -1,218 +1,465 @@
 \section{PG-GAT --- Pose Grouping Graph Attention Network}
 \label{sec_meth_pggat}
 
-This section describes the methodological centrepiece of the work:
-PG-GAT, a skeleton-aware modification of the baseline GATv2 embedding network of Section~\ref{sec_meth_baseline}.
-Three modifications to the attention mechanism are introduced,
-each motivated by a specific failure mode of the baseline and each independently configurable for ablation,
-and a two-stage training schedule (synthetic pre-training followed by COCO fine-tuning)
-that is itself defended by a Bayesian sweep over fine-tune hyperparameters.
-Every PG-GAT design choice is justified by reference to a sweep, an ablation, or a prior failure recorded earlier in this chapter.
+This section introduces PG-GAT,
+the main method developed in this work.
+PG-GAT builds on the baseline GATv2 embedding network from
+Section~\ref{sec_meth_baseline},
+but modifies the attention mechanism
+to make better use of the known structure of the human skeleton.
+
+Three changes are introduced to the baseline attention mechanism.
+Each one targets a particular limitation observed in the earlier
+experiments,
+and each can be enabled independently,
+so that its effect can be tested through ablation.
+The aim is to improve the embedding itself,
+rather than add further complexity to the grouping head,
+which follows directly from the learned-head and SA-DMoN results
+described in the previous sections.
+
+PG-GAT is trained in two stages.
+The network is first pre-trained on the synthetic dataset
+and is then fine-tuned on COCO
+to reduce the synthetic-to-real domain gap.
+The architecture and training choices are not treated
+as fixed assumptions -
+the main architectural settings are tested through a Bayesian sweep,
+the three skeleton-aware changes are evaluated
+through isolation ablations,
+and the COCO fine-tuning configuration is selected
+through a separate hyperparameter sweep.
+Together, these experiments provide the basis
+for the final PG-GAT configuration
+used in the headline evaluations.
 
 \subsection{Design intuition}
 \label{sec_meth_pggat_intuition}
 
-The motivation for PG-GAT follows directly from the experimental evidence presented in Section~\ref{sec_meth_learned_heads} and Section~\ref{sec_meth_sadmon}.
-Three independent learned grouping heads (DEC, slot attention, graph partitioning)
-and ten variants of a skeleton-aware modularity objective (SA-DMoN v1 and v2)
-all failed to outperform plain $k$-means clustering on the standard GAT embeddings.
-The persistent failure of learned heads on the same embedding rules out the grouping head as the binding constraint
+The motivation for PG-GAT follows from the results of
+Sections~\ref{sec_meth_learned_heads} and~\ref{sec_meth_sadmon}.
+Three different learned grouping heads (DEC, slot attention, and graph
+partitioning),
+together with ten SA-DMoN variants,
+were unable to improve on plain $k$-means
+applied to the standard GAT embeddings.
+Since these methods change the grouping stage
+while keeping the underlying embedding network largely fixed,
+their repeated failure rules out the grouping head as the binding constraint
 and identifies the embedding network as the dominant axis of variation.
-PG-GAT acts on the embedding stage alone:
-the grouping read-out remains the same $k$-means as in the baseline,
-and every modification described below changes how the attention mechanism processes the skeleton graph
-rather than introducing a new learned component on top of the embedding.
 
-The standard GATv2 attention function~\cite{brody2022gatv2} is type-agnostic with respect to edges:
-the same parameters compute attention coefficients for a left-shoulder--left-elbow edge,
-a left-shoulder--right-shoulder edge,
-and a left-shoulder--right-ankle edge.
-These edges carry categorically different information for pose grouping.
-A same-type pair must belong to different people, an edge that connects two skeletally adjacent joints is the strongest evidence of a same-person grouping, and a far-apart cross-body pair carries little signal.
-PG-GAT introduces three mechanisms that surface this categorical edge structure to the attention layer
-without replacing the GATv2Conv primitive that the baseline relies on.
+PG-GAT therefore changes the embedding stage,
+rather than introducing another grouping head.
+The final read-out remains the same $k$-means procedure
+used by the baseline.
+Instead, the modifications described below change
+how the attention mechanism processes relationships
+between keypoints in the graph.
+This keeps the comparison with the baseline relatively direct -
+the main difference is how the embedding is produced,
+rather than how it is clustered afterwards.
+
+Standard GATv2 attention~\cite{brody2022gatv2}
+does not explicitly distinguish between different categories of edges.
+The same attention mechanism is used for a
+left-shoulder-left-elbow edge,
+a left-shoulder-right-shoulder edge,
+or a left-shoulder-right-ankle edge.
+For pose grouping, however, these relationships have different meanings.
+Two detections of the same joint type cannot belong
+to the same valid person skeleton,
+while skeletally adjacent joint types provide useful evidence
+that two detections may belong together.
+Other pairs,
+particularly those that are distant in both the image
+and the skeleton topology,
+generally provide less direct grouping information.
+
+PG-GAT introduces three modifications that make these differences
+available to the attention mechanism,
+while retaining the GATv2Conv primitive used by the baseline.
+Each modification can be enabled or disabled independently,
+allowing its contribution to be measured in the ablation experiments
+of Chapter~\ref{chap_4}.
+The complete architecture is illustrated
+in Figure~\ref{fig:pggat_architecture}.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.9\linewidth]{figures/demo_example_1.png}
-    % TODO(figure): replace with a block diagram of PG-GAT showing:
-    %   (a) input node features (position, visibility, type embedding)
-    %   (b) edge feature constructor producing the 7-dim edge vector
-    %       (4-way category one-hot + L2 distance + skeleton hop + same-type flag)
-    %   (c) stacked GATv2Conv layers (3 of them per the architecture sweep)
-    %       split into a 3-head standard sub-layer and a 1-head repulsion
-    %       sub-layer that masks all non-same-type edges
-    %   (d) final linear projection + L2 normalisation to embedding dim 256
-    % The three colour-highlighted modifications (1: type-pair bias,
-    % 2: position encoding, 3: repulsion heads) should be visually
-    % distinguishable as the contribution boundaries.
+    \includegraphics[width=\linewidth]{figures/pggat_architecture.pdf}
     \caption{The PG-GAT architecture.
-    Input node features are the keypoint position, the visibility flag,
-    and a learnable joint-type embedding.
-    Modification~1 attaches a four-way edge-category one-hot to every edge
-    that enters the GATv2 attention as a learned additive bias (red).
-    Modification~2 concatenates three geometric edge features
-    (L2 distance, skeleton hop distance, same-type indicator)
-    onto that one-hot before the same edge encoder (blue).
-    Modification~3 splits the multi-head attention into a standard sub-layer
-    over the full neighbourhood and a repulsion sub-layer
-    whose attention mask restricts it to same-type edges only (green).
-    Each modification is independently configurable via a boolean flag,
-    which allows the ablation experiments of Chapter~\ref{chap_4} to isolate its marginal contribution.}
+    Input node features contain the keypoint position,
+    visibility flag,
+    and a learned joint-type embedding.
+    Modification~1 assigns each edge to one of four categories
+    and supplies the resulting one-hot representation
+    to the GATv2 attention through a learned additive bias (red).
+    Modification~2 adds three geometric features to this edge
+    representation:
+    L2 distance,
+    skeleton hop distance,
+    and a same-type indicator (blue).
+    Modification~3 separates the multi-head attention
+    into a standard sub-layer operating over the full neighbourhood
+    and a repulsion sub-layer restricted to same-type edges (green).
+    Each modification can be enabled independently,
+    allowing the ablations in Chapter~\ref{chap_4}
+    to measure its contribution to the final embedding.}
     \label{fig:pggat_architecture}
 \end{figure}
 
 \subsection{Modification~1: type-pair attention bias}
 \label{sec_meth_pggat_typeattn}
 
-Every edge $(i, j) \in \mathcal{E}$ is categorised into one of four mutually exclusive classes based on the joint-type pair $(t_i, t_j)$:
+Every edge $(i,j) \in \mathcal{E}$ is assigned to one of four mutually
+exclusive categories according to the joint types $(t_i,t_j)$:
+
 \begin{compactitem}
-    \item \textsc{Same-Type} --- $t_i = t_j$, indicating two keypoints that must belong to different people.
-        Two left elbows in the same image cannot share an identity.
-    \item \textsc{Skeletal-Neighbour} --- $(t_i, t_j)$ is a directly adjacent pair on the COCO skeleton graph (e.g.\ shoulder--elbow).
-        The strongest cue for same-person grouping:
-        anatomically connected joints from the same person have consistent spatial relationships.
-    \item \textsc{Same-Limb} --- $(t_i, t_j)$ lies on the same limb chain but is not directly adjacent (e.g.\ shoulder--wrist).
-        Provides medium-range structural information.
-    \item \textsc{Cross-Body} --- otherwise.
-        Carries weak or no structural prior.
+    \item \textsc{Same-Type} - $t_i=t_j$.
+        Two detections of the same joint type cannot belong to the same
+        valid person skeleton,
+        so this category provides direct evidence
+        that the nodes should be separated.
+
+    \item \textsc{Skeletal-Neighbour} - $(t_i,t_j)$ forms a directly
+        connected pair in the COCO skeleton graph,
+        such as a shoulder and elbow.
+        These edges provide a strong structural cue because
+        anatomically adjacent joints from the same person tend to have
+        consistent spatial relationships.
+
+    \item \textsc{Same-Limb} - $(t_i,t_j)$ belongs to the same
+        anatomical limb chain but the two joint types are not directly
+        adjacent,
+        for example a shoulder and wrist.
+        This category provides a weaker,
+        longer-range structural relationship.
+
+    \item \textsc{Cross-Body} - all remaining joint-type pairs.
+        These edges have no direct local relationship in the skeleton
+        topology,
+        and therefore carry a weak or no structural prior.
 \end{compactitem}
-The category is represented as a one-hot vector $\mathbf{c}_{ij} \in \{0,1\}^{4}$
-and passed through a small edge-encoder MLP $\phi_{\text{edge}}$ to produce an edge feature
-$\mathbf{e}_{ij}^{\text{cat}} = \phi_{\text{edge}}(\mathbf{c}_{ij}) \in \mathbb{R}^{d_e}$.
-This edge feature enters the GATv2 attention coefficient via the standard \texttt{edge\_dim} mechanism of PyG's \texttt{GATv2Conv} implementation~\cite{fey2019pyg},
-which extends the attention pre-activation by an additive learned edge bias:
+
+The category is encoded as a one-hot vector
+$\mathbf{c}_{ij}\in\{0,1\}^{4}$ and passed through a small edge encoder
+$\phi_{\text{edge}}$,
+\begin{equation}
+    \mathbf{e}_{ij}^{\text{cat}}
+    =
+    \phi_{\text{edge}}(\mathbf{c}_{ij})
+    \in \mathbb{R}^{d_e}.
+\end{equation}
+The resulting feature is supplied to the GATv2 layer through the
+\texttt{edge\_dim} mechanism of the PyTorch Geometric
+\texttt{GATv2Conv} implementation~\cite{fey2019pyg}.
+This introduces a learned edge-dependent contribution
+to the attention pre-activation,
+which can be written as
 \begin{equation}
     \alpha_{ij}^{(l)}
-    \propto \exp\!\Bigl(
+    \propto
+    \exp\!\Bigl(
         \mathbf{a}^{(l)\top}
         \mathrm{LeakyReLU}\!\bigl(
-            \mathbf{W}^{(l)} [\,\mathbf{h}_i^{(l)} \,\|\, \mathbf{h}_j^{(l)}\,]
-            + \mathbf{W}_e^{(l)} \mathbf{e}_{ij}^{\text{cat}}
+            \mathbf{W}^{(l)}
+            [\,\mathbf{h}_i^{(l)} \,\|\, \mathbf{h}_j^{(l)}\,]
+            +
+            \mathbf{W}_e^{(l)}
+            \mathbf{e}_{ij}^{\text{cat}}
         \bigr)
     \Bigr),
     \label{eq:pggat_typeattn}
 \end{equation}
-where the learnable parameters $\mathbf{a}^{(l)}$, $\mathbf{W}^{(l)}$, and $\mathbf{W}_e^{(l)}$ are GATv2 layer-$l$ weights.
-The four edge categories therefore enter the attention as four learnable additive biases that the network can adjust independently
-without disturbing the underlying GATv2Conv numerics.
+where $\mathbf{a}^{(l)}$, $\mathbf{W}^{(l)}$, and
+$\mathbf{W}_e^{(l)}$ are learned parameters of layer $l$.
+The edge category can therefore influence the attention
+assigned to a neighbour,
+while retaining the standard GATv2 attention mechanism.
+In particular, the network can learn different responses
+to same-type, skeletal-neighbour, same-limb, and cross-body edges,
+rather than requiring their significance to be inferred
+from the node features alone.
 
-The decision to inject category information as an edge feature rather than as a per-category weight tensor
-was made on the basis of an initial implementation that used custom scatter-based attention with per-category projection matrices.
-That implementation failed catastrophically (synthetic PGA $0.60$) due to numerical instability in the manual softmax over scattered scores;
-switching to GATv2Conv with edge features recovered stable training and removed the instability without affecting expressive power.
+An earlier implementation instead used custom scatter-based attention
+with separate projection parameters for each edge category.
+This version was numerically unstable during training,
+and reached only $0.60$ synthetic PGA.
+The custom attention implementation was therefore replaced
+by the standard \texttt{GATv2Conv} operator with explicit edge features.
+This restored stable training,
+while retaining the intended type-dependent attention mechanism.
 
 \subsection{Modification~2: skeleton-relative position encoding}
 \label{sec_meth_pggat_posenc}
 
-The baseline GAT carries no explicit spatial information in its attention coefficients:
-positional information is present only as a node feature
-and is mixed indiscriminately with the type embedding and visibility.
-The second modification injects three geometric edge features
-that surface relative-geometry information directly to the attention mechanism:
+The baseline GAT receives position only through the node features.
+Consequently, relative spatial relationships between two connected
+keypoints are not represented explicitly in the attention calculation -
+they must instead be inferred from the endpoint node representations.
+The second PG-GAT modification makes this information directly
+available to the attention mechanism by adding three geometric features
+to each edge:
+
 \begin{compactitem}
-    \item the L2 distance between the two endpoints, $\|\mathbf{p}_i - \mathbf{p}_j\|_2$;
-    \item the skeleton hop distance $d_{\text{hop}}(t_i, t_j)$, defined as the shortest path between the joint types $t_i$ and $t_j$ on the COCO skeleton graph, normalised to $[0,1]$;
-    \item a same-type indicator $\mathbb{1}[t_i = t_j] \in \{0,1\}$.
+    \item the Euclidean distance between the endpoint positions,
+        $\|\mathbf{p}_i-\mathbf{p}_j\|_2$;
+
+    \item the skeleton hop distance $d_{\text{hop}}(t_i,t_j)$, defined
+        as the shortest-path distance between joint types $t_i$ and
+        $t_j$ on the COCO skeleton graph and normalised to $[0,1]$;
+
+    \item a same-type indicator
+        $\mathbb{1}[t_i=t_j]\in\{0,1\}$.
 \end{compactitem}
-These three scalars are concatenated with the four-dimensional category one-hot of Modification~1
-and the resulting seven-dimensional edge vector
-is passed through the same edge-encoder $\phi_{\text{edge}}$ as before.
-The skeleton hop distance is the load-bearing component:
-it tells the attention layer how anatomically related two keypoint types are,
-independently of how spatially close they happen to be in the image.
-A shoulder near an elbow (hop $=1$) is expected and the attention can up-weight the message;
-a shoulder near an ankle (hop $\geq 3$) is surprising and is likely to be a cross-person collision that should be down-weighted.
+
+These three values are concatenated with the four-dimensional category
+encoding introduced in Modification~1,
+giving the edge descriptor
+\begin{equation}
+    \mathbf{g}_{ij}
+    =
+    \left[
+        \mathbf{c}_{ij}
+        \,\middle\|\,
+        \|\mathbf{p}_i-\mathbf{p}_j\|_2
+        \,\middle\|\,
+        d_{\text{hop}}(t_i,t_j)
+        \,\middle\|\,
+        \mathbb{1}[t_i=t_j]
+    \right]
+    \in \mathbb{R}^{7}.
+\end{equation}
+The descriptor is passed through the same edge encoder
+$\phi_{\text{edge}}$ used for the categorical representation,
+\begin{equation}
+    \mathbf{e}_{ij}^{\text{geom}}
+    =
+    \phi_{\text{edge}}(\mathbf{g}_{ij}),
+\end{equation}
+and the resulting feature enters the GATv2 attention calculation
+through the same \texttt{edge\_dim} mechanism described above.
+Modification~2 therefore changes the information supplied
+to the attention layer,
+without requiring a different message-passing operator.
+
+Of the three added features,
+the skeleton hop distance provides the most direct description
+of anatomical structure.
+It tells the network how closely related two joint types are
+in the skeleton topology,
+independently of their proximity in the image.
+A shoulder--elbow pair, for example,
+has a hop distance of one,
+and represents a plausible local skeletal relationship.
+A shoulder--ankle pair has a much larger topological distance,
+so similar image-plane proximity does not carry the same grouping evidence.
+The attention mechanism can use this distinction
+when deciding how strongly information should pass
+between the two nodes.
 
 \subsection{Modification~3: same-type repulsion heads}
 \label{sec_meth_pggat_repulsion}
 
-The third modification dedicates a subset of the multi-head attention to the inter-person discrimination task.
-In a standard GAT layer with $H$ heads, every head attends to every neighbour of the centre node;
-the gradient signal for distinguishing two same-type keypoints of different people
-is therefore averaged across $H$ heads that are simultaneously trying to learn skeletal grouping.
-The repulsion modification splits the layer into a standard GATv2Conv that attends to all neighbours
-and a smaller repulsion GATv2Conv whose attention mask is restricted to same-type edges only.
-The outputs of the two sub-layers are concatenated along the head dimension,
-giving the same total head count as the baseline.
+The third modification reserves part of the multi-head attention
+capacity for distinguishing same-type keypoints that belong to
+different people.
+In a standard GAT layer with $H$ heads,
+every head attends over the same neighbourhood.
+The signal associated with separating, for example,
+two left-elbow detections is therefore learned by heads
+that must also model the relationships between anatomically
+different joints.
+PG-GAT separates these two roles by introducing a
+dedicated repulsion sub-layer.
 
-Formally, let the standard sub-layer use $H_{\text{std}}$ heads attending to the full neighbourhood $\mathcal{N}(i)$,
-and the repulsion sub-layer use $H_{\text{rep}}$ heads attending to the same-type neighbourhood
-$\mathcal{N}_{=}(i) = \{j \in \mathcal{N}(i) : t_j = t_i\}$,
-with $H_{\text{std}} + H_{\text{rep}} = H$.
-The layer-$l$ output is then
+The layer is divided into a standard \texttt{GATv2Conv}
+operating over the full neighbourhood
+and a smaller repulsion \texttt{GATv2Conv}
+restricted to same-type edges.
+Let the standard sub-layer contain $H_{\text{std}}$ heads
+and attend to $\mathcal{N}(i)$,
+while the repulsion sub-layer contains $H_{\text{rep}}$ heads
+and attends only to
+\begin{equation}
+    \mathcal{N}_{=}(i)
+    =
+    \{j \in \mathcal{N}(i) : t_j=t_i\},
+\end{equation}
+with $H_{\text{std}}+H_{\text{rep}}=H$.
+The outputs of the two sub-layers are concatenated
+along the head dimension,
 \begin{equation}
     \mathbf{h}_i^{(l+1)}
-    = \bigl[\, \mathrm{GATv2Conv}_{\text{std}}(\mathbf{h}_i^{(l)}, \mathcal{N}(i))
+    =
+    \bigl[\,
+        \mathrm{GATv2Conv}_{\text{std}}
+        (\mathbf{h}^{(l)},\mathcal{N}(i))
         \,\big\|\,
-        \mathrm{GATv2Conv}_{\text{rep}}(\mathbf{h}_i^{(l)}, \mathcal{N}_{=}(i)) \,\bigr],
+        \mathrm{GATv2Conv}_{\text{rep}}
+        (\mathbf{h}^{(l)},\mathcal{N}_{=}(i))
+    \,\bigr],
     \label{eq:pggat_repulsion}
 \end{equation}
-where $[\cdot \| \cdot]$ denotes concatenation along the head dimension.
-The repulsion sub-layer never sees skeletal-neighbour, same-limb, or cross-body edges,
-and the contrastive loss of Equation~\eqref{eq:contrastive_loss} consequently pushes its parameters
-to produce discriminative features specifically for the case ``two left elbows --- whose elbows are they?''
+so that the total number of attention heads remains equal
+to that of the corresponding standard layer.
 
-The default configuration reserves a single repulsion head out of four ($H_{\text{rep}} = 1$, $H_{\text{std}} = 3$);
-this choice was validated by the architecture sweep described in Section~\ref{sec_meth_pggat_training},
-which is the same sweep that fixes the depth, hidden dimension, output dimension, and dropout of the PG-GAT layer stack.
+The repulsion sub-layer receives only edges connecting detections of
+the same joint type.
+It therefore does not need to divide its attention capacity
+between anatomical grouping and same-type discrimination.
+Under the contrastive objective of
+Equation~\eqref{eq:contrastive_loss},
+these heads receive a focused training signal
+for separating same-type detections belonging to different people.
+In practical terms,
+the sub-layer is specialised for questions such as
+which person each of several left-elbow detections belongs to,
+while the standard heads continue to model the wider
+skeletal neighbourhood.
+
+The default PG-GAT configuration assigns one of the four attention
+heads to this repulsion pathway,
+giving $H_{\text{rep}}=1$ and $H_{\text{std}}=3$.
+The head allocation is evaluated as an axis of the loss sweep
+described in Section~\ref{sec_meth_pggat_training},
+which varies the number of repulsion heads over $\{0, 1, 2\}$.
 
 \subsection{Composing the modifications and training}
 \label{sec_meth_pggat_training}
 
-The three modifications are independently configurable via boolean flags on \texttt{SAGATConfig}\footnote{
-The implementation class retains the legacy name \texttt{SAGATConfig};
-the method is referred to as PG-GAT throughout this document.}
-(\texttt{use\_type\_pair\_attention}, \texttt{use\_position\_encoding}, \texttt{use\_repulsion\_heads}),
-which allows each one to be isolated for the ablation experiments reported in Chapter~\ref{chap_4}.
-The PG-GAT model used in the headline evaluations enables all three;
-the ablation table that reports the marginal contribution of each modification is~Table~\ref{tab:pggat_ablation_headline} in Chapter~\ref{chap_4}.
+The three PG-GAT modifications can be enabled independently through
+boolean flags in \texttt{SAGATConfig}\footnote{The implementation
+retains the legacy class name \texttt{SAGATConfig}; the method is
+referred to as PG-GAT throughout this document.}:
+\texttt{use\_type\_pair\_attention},
+\texttt{use\_position\_encoding}, and
+\texttt{use\_repulsion\_heads}.
+This makes it possible to disable each mechanism independently
+and measure its contribution without changing the rest of the network.
+The PG-GAT configuration used for the headline evaluations
+enables all three modifications.
+Their individual and combined effects are reported in
+Table~\ref{tab:pggat_ablation_headline} of Chapter~\ref{chap_4}.
 
-\paragraph{Architecture defended by Bayesian sweep.}
-The architecture hyperparameters (number of layers, number of heads, hidden dimension, output dimension, joint-type embedding dimension, dropout)
-are not inherited from the baseline of Section~\ref{sec_meth_baseline}.
-Instead, they are selected by a 32-run Bayesian sweep over the six axes,
-with the search space chosen to span the smallest values used by prior GNN-on-pose work
-up to the memory ceiling at batch size 4 on the experimental hardware.
-Selection metric: synthetic validation PGA of Equation~\eqref{eq:pga}.
-Hyperband early termination~\cite{li2018hyperband} retires weak configurations at the fifth validation iteration (epoch 25)
-to keep the sweep within the overnight budget while preserving late-converging configurations.
-The selected configuration --- three layers, four heads, hidden dimension 64, output dimension 256,
-joint-type embedding dimension 64, dropout 0.1 ---
-is the architecture used by every PG-GAT result in Chapter~\ref{chap_4} and Chapter~\ref{chap_5}.
-A complementary loss sweep over the contrastive margin, repulsion head count, learning rate, and weight decay
-returned the defaults of Section~\ref{sec_meth_baseline_loss} as near-optimal,
-which is itself recorded as evidence that the contrastive bar is already at the right operating point.
+\textbf{Architecture selection:}
+The PG-GAT architecture is not inherited directly from the baseline in
+Section~\ref{sec_meth_baseline}.
+Instead, six architectural hyperparameters
+(number of layers,
+number of attention heads,
+hidden dimension,
+output dimension,
+joint-type embedding dimension,
+and dropout)
+are selected through a 32-run Bayesian sweep.
+The search space spans relatively small configurations
+through to the practical memory limit at batch size 4
+on the experimental hardware.
+Synthetic validation PGA from Equation~\eqref{eq:pga}
+is used as the selection metric.
 
-\paragraph{Two-stage training.}
-Pre-training is conducted on the 400-scene synthetic dataset of Section~\ref{sec_meth_data_synth}
-with the optimiser settings of Section~\ref{sec_meth_baseline_training}.
-Fine-tuning then proceeds on COCO~\cite{lin2014coco} \texttt{train2017} for a small number of additional epochs at a reduced learning rate;
-this second stage adapts the embedding to the COCO image distribution
-while retaining the per-person identity structure learned on synthetic data.
-The exact fine-tune schedule (epochs, learning rate, weight decay)
-is selected by a third Bayesian sweep over a 12-run search space around the legacy inherited recipe of 20 epochs at $10^{-4}$ learning rate.
-The selected configuration --- 15 epochs at the sweep-chosen learning rate and weight decay ---
-produces the headline numbers reported in Chapter~\ref{chap_4} and is logged under the W\&B alias \texttt{meng-headline}.
+Hyperband early termination~\cite{li2018hyperband} is used to remove
+weak configurations from the search.
+The first pruning decision is made after the fifth validation point,
+corresponding to epoch 25.
+This reduces the cost of clearly underperforming runs,
+while still allowing configurations with slower initial convergence
+to develop.
+The sweep selects a three-layer network with four attention heads,
+hidden dimension 64,
+output dimension 256,
+joint-type embedding dimension 64,
+and dropout 0.1.
+This configuration is used for the PG-GAT results
+reported in Chapters~\ref{chap_4} and~\ref{chap_5}.
 
-\paragraph{Read-out.}
-The grouping read-out remains the same $k$-means with $k = K$ on the L2-normalised PG-GAT embeddings
-as in the baseline of Section~\ref{sec_meth_baseline_training}.
-PG-GAT changes the embedding;
-the head stays simple by design.
+A separate loss and optimisation sweep varies the contrastive margin,
+number of repulsion heads,
+learning rate,
+and weight decay.
+The search returns settings close to those already used by the baseline,
+including the contrastive margin of $\gamma=0.5$.
+This provides an additional check that the improvement obtained
+with PG-GAT is not primarily the result of retuning
+the contrastive objective or optimiser.
+
+\textbf{Two-stage training:}
+PG-GAT is trained in two stages.
+The first stage uses the 400-scene synthetic training split
+from Section~\ref{sec_meth_data_synth}
+and follows the optimiser settings of
+Section~\ref{sec_meth_baseline_training}.
+The resulting model is then fine-tuned on the
+COCO~\cite{lin2014coco} \texttt{train2017} split
+for a smaller number of epochs and at a reduced learning rate.
+The purpose of this second stage is to adapt the embedding
+to real COCO detections,
+while retaining the person-separation structure learned
+during synthetic pre-training.
+
+The fine-tuning schedule is selected through a separate 12-run Bayesian
+sweep over the number of epochs,
+learning rate,
+and weight decay.
+The search is centred around the previously used fine-tuning recipe
+of 20 epochs at a learning rate of $10^{-4}$.
+The selected configuration uses 15 epochs,
+together with the learning rate and weight decay chosen by the sweep.
+This checkpoint produces the headline PG-GAT results in
+Chapter~\ref{chap_4}
+and is recorded under the W\&B alias \texttt{meng-headline}.
+
+\textbf{Read-out:}
+The grouping stage is unchanged from the baseline.
+For each image, PG-GAT produces L2-normalised per-keypoint embeddings,
+and $k$-means is run with $k=K$ to recover the person assignments,
+following Section~\ref{sec_meth_baseline_training}.
+PG-GAT therefore changes the representation on which grouping is performed,
+while deliberately keeping the final read-out simple.
 
 \subsection{Variants explored after PG-GAT}
 \label{sec_meth_pggat_variants}
 
-PG-GAT as described in this section is the defended embedding network
-and the source of the headline result reported in Chapter~\ref{chap_4}.
-Three independent variants of the PG-GAT design are also reported in Chapter~\ref{chap_4},
-each one a controlled stress-test of a different design choice
-rather than a competing answer to the grouping problem.
-Section~\ref{sec_meth_v2} (PG-GAT v2) tests whether augmenting the positional input with pre-trained visual features extracted by a MobileNetV2 backbone~\cite{sandler2018mobilenetv2} adds identity signal that positions alone cannot provide.
-Section~\ref{sec_meth_hyperbolic} (hyperbolic PG-GAT) replaces the Euclidean output space with a Lorentz-model hyperbolic manifold,
-on the theoretical motivation that tree-structured data embeds with less distortion in hyperbolic space.
-Section~\ref{sec_meth_trigat} (TriGAT) replaces the per-node primitive from a single joint to a skeleton triplet of three connected joints,
-on the motivation that the pivot angle of a triplet is a rotation-invariant articulation descriptor that single-joint embeddings do not directly capture.
-Chapter~\ref{chap_4} reports all three as negative or marginal results;
-their methodologies are recorded here so that the corresponding Chapter~\ref{chap_4} numbers and the Chapter~\ref{chap_5} discussion are interpretable.
+PG-GAT as described in this section is the final embedding network used
+for the headline result in Chapter~\ref{chap_4}.
+Three additional variants are evaluated to test whether particular
+aspects of the design can be improved.
+These variants are treated as controlled extensions of PG-GAT,
+rather than as separate solutions to the grouping problem.
+
+PG-GAT v2, described in Section~\ref{sec_meth_v2},
+tests whether the coordinate-based node representation
+is missing useful appearance information.
+Pre-trained visual features extracted with a
+MobileNetV2~\cite{sandler2018mobilenetv2} backbone are added to the
+positional input to determine whether local image appearance provides
+identity information that cannot be recovered from keypoint position
+and type alone.
+
+The hyperbolic PG-GAT variant of
+Section~\ref{sec_meth_hyperbolic} instead changes the geometry of the
+output space.
+The Euclidean embedding is replaced with an embedding on a
+Lorentz-model hyperbolic manifold,
+motivated by the lower-distortion representations
+that hyperbolic spaces can provide for tree-structured data.
+Since the human skeleton has a tree-like topology,
+this variant tests whether that geometric property translates
+into better or more compact pose-grouping embeddings.
+
+Finally, TriGAT in Section~\ref{sec_meth_trigat}
+changes the basic unit represented by the graph.
+Rather than embedding individual joints,
+it constructs representations from triplets of connected joints.
+The angle at the central joint provides a rotation-invariant description
+of local articulation that is not explicitly available
+to the standard single-joint representation.
+
+The experiments in Chapter~\ref{chap_4} show that none of these three
+extensions provides a clear improvement over the defended PG-GAT
+configuration.
+Their methodologies are nevertheless included here because each tests
+a distinct assumption of the main design,
+and the results provide evidence for retaining the simpler PG-GAT
+formulation used in the final pipeline.

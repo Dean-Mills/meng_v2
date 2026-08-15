@@ -1,100 +1,220 @@
 \section{PG-GAT v2 --- Visual Feature Augmentation}
 \label{sec_meth_v2}
 
-This section describes the visual-feature-augmented variant of PG-GAT.
-The variant tests the hypothesis that pre-trained image features sampled at each detected keypoint
-add identity signal that the positional input of Section~\ref{sec_meth_problem_graph} cannot provide.
-The methodology is recorded here so that the Chapter~\ref{chap_4} negative result is interpretable;
-the discussion of why the visual signal does not translate into a useful headline gain belongs to Section~\ref{sec_disc_v2}.
+This section describes the visual-feature-augmented PG-GAT variant,
+referred to as PG-GAT v2.
+The purpose of the variant is to test whether local appearance
+information provides useful identity cues beyond the position,
+visibility, and joint-type information used by the standard PG-GAT model.
+Pre-trained image features are extracted from the input image
+and sampled at each detected keypoint,
+then incorporated into the node representation
+before graph message passing.
+
+The variant leaves the remaining PG-GAT pipeline unchanged,
+so that the effect of the added visual information can be isolated.
+Its methodology is included here to define the model
+evaluated in Chapter~\ref{chap_4}.
+The experiments show that the additional visual features
+do not improve on the standard PG-GAT configuration -
+the reasons for this result are considered in
+Section~\ref{sec_disc_transfer_v2}.
 
 \subsection{Motivation and design constraints}
 \label{sec_meth_v2_motivation}
 
-The PG-GAT embedding of Section~\ref{sec_meth_pggat} consumes only normalised keypoint positions and joint types.
-The image itself is consumed only by the upstream keypoint detector,
-and no per-pixel visual context is propagated to the grouping stage.
-A complementary lightweight feasibility study (\texttt{eval\_mobilenet\_features.py})
-sampled MobileNetV2~\cite{sandler2018mobilenetv2} features at each detected keypoint
-and showed that the addition of those features to the input of an otherwise unchanged $k$-means improves COCO grouping by a positive but diminishing amount as the grouping method becomes structurally stronger:
-six points on plain $k$-means,
-three points on type-constrained $k$-means,
-and less than one point on Hungarian-matched type-wise assignment.
-That diminishing trajectory is a methodological warning sign:
-the strongest grouping methods barely use the visual signal,
-which already places a ceiling on what a trained variant can extract from it.
-The methodology below was designed to give a trained PG-GAT v2 every advantage the feasibility study did not,
-so that the resulting negative result reported in Chapter~\ref{chap_4} cannot be attributed to an underpowered architecture.
+The standard PG-GAT model of Section~\ref{sec_meth_pggat} performs
+grouping without direct access to the source image.
+Its input consists of the preprocessed keypoint features
+and joint-type information,
+while the RGB image is used only by the upstream detector.
+As a result, local appearance cues around each detected joint
+are discarded before the grouping stage.
+
+Before constructing a learned visual-feature variant,
+a lightweight feasibility study was performed using
+\texttt{eval\_mobilenet\_features.py}.
+Features from a pre-trained
+MobileNetV2~\cite{sandler2018mobilenetv2} were sampled at each detected
+keypoint and added to the representation used for clustering.
+In the simplest configuration,
+these features improved COCO grouping accuracy
+by approximately six percentage points over the positions-only input.
+However, the gain decreased as the surrounding grouping configuration
+became stronger,
+falling below one percentage point in the best configurations tested.
+
+This diminishing improvement suggested that the visual features contain
+some useful identity information,
+but that much of it becomes redundant once the grouping representation
+is already strong.
+The PG-GAT v2 methodology below therefore gives the visual pathway
+substantially more capacity than the initial feasibility study.
+This provides a stronger test of whether appearance information
+can contribute meaningfully when it is learned jointly
+with the PG-GAT embedding,
+rather than simply being appended to the input of a clustering procedure.
+The resulting Chapter~\ref{chap_4} experiment can therefore distinguish
+a genuinely limited visual contribution from a failure caused
+by an underpowered visual-feature integration.
 
 \subsection{Visual feature extraction and caching}
 \label{sec_meth_v2_features}
 
-The feature backbone is MobileNetV2~\cite{sandler2018mobilenetv2} pre-trained on ImageNet~\cite{deng2009imagenet},
-specifically the output of layer~17,
-which produces a $320$-channel feature map at $1/32$ image resolution.
-The choice of layer is methodological:
-shallower layers (mid-level textures and edges) were shown by the feasibility study to hurt every grouping method tested,
-and only the deepest semantic features produced any gain.
-The backbone is held frozen throughout;
-no end-to-end joint training of the backbone with PG-GAT v2 is attempted,
-which keeps the comparison against PG-GAT controlled for everything except the visual input.
+The visual backbone is MobileNetV2~\cite{sandler2018mobilenetv2},
+pre-trained on ImageNet~\cite{deng2009imagenet}.
+Features are taken from layer~17,
+which produces a 320-channel feature map at $1/32$ of the
+input image resolution.
+This layer was selected based on the preceding feasibility study.
+Features from shallower layers,
+which primarily capture lower-level texture and edge information,
+reduced grouping performance across the configurations tested,
+whereas the deeper semantic features were the only ones
+to provide a measurable improvement.
+
+The MobileNetV2 backbone is kept frozen throughout the PG-GAT v2
+experiments.
+Its parameters are therefore not updated by the grouping loss.
+This keeps the experiment focused on whether a fixed,
+pre-trained visual representation contains useful information for pose
+grouping,
+rather than introducing the additional effect of jointly
+fine-tuning a large image backbone.
 
 For each COCO image,
-the backbone is run once and the resulting feature map is bilinearly sampled at every ground-truth keypoint pixel location;
-the result is a per-keypoint feature vector $\mathbf{u}_i \in \mathbb{R}^{320}$.
-This sampling is performed once over the COCO \texttt{train2017} and \texttt{val2017} splits and the per-image cache is written to disk
-as a PyTorch Geometric \texttt{Data} object with the feature attribute attached at the node level.
-The cached dataset contains $54{,}564$ training samples and $2{,}258$ validation samples,
-and removes the backbone forward pass from the training loop entirely.
-Training on cached features takes a fraction of the time that on-the-fly extraction would,
-and trades memory for the ability to iterate quickly over PG-GAT v2 design choices.
+MobileNetV2 is evaluated once to produce the
+$320$-channel feature map.
+The feature map is then bilinearly sampled
+at each ground-truth keypoint location,
+producing a visual descriptor
+\begin{equation}
+    \mathbf{u}_i \in \mathbb{R}^{320}
+\end{equation}
+for keypoint $i$.
+Bilinear sampling is used because the feature map has
+a spatial resolution of only $1/32$ of the input image,
+so a keypoint location will not generally coincide exactly
+with a feature-map location.
+
+Feature extraction is performed as a preprocessing step
+over the COCO \texttt{train2017} and \texttt{val2017} splits,
+rather than during training.
+The resulting per-keypoint descriptors are stored on disk in
+PyTorch Geometric \texttt{Data} objects,
+with the visual descriptor attached as a node-level feature.
+The resulting cache contains $54{,}564$ training samples
+and $2{,}258$ validation samples.
+
+Caching removes the MobileNetV2 forward pass
+from the PG-GAT v2 training loop.
+The frozen visual features therefore need to be computed
+only once,
+reducing the cost of subsequent experiments,
+and allowing different visual-fusion configurations to be evaluated
+without repeating feature extraction.
 
 \subsection{Architecture and input fusion}
 \label{sec_meth_v2_arch}
 
-The PG-GAT v2 network extends the baseline PG-GAT architecture of Section~\ref{sec_meth_pggat}
-with a visual-feature projection block at the input stage.
-Each cached MobileNet feature vector $\mathbf{u}_i$ is projected through
-a learned linear layer to dimension $32$,
-followed by a layer normalisation~\cite{ba2016layernorm} and a GELU activation~\cite{hendrycks2016gelu}:
+The PG-GAT v2 network extends the PG-GAT architecture of
+Section~\ref{sec_meth_pggat} by adding a visual-feature projection at
+the input stage.
+Each cached MobileNetV2 descriptor
+$\mathbf{u}_i \in \mathbb{R}^{320}$ is first projected to 32
+dimensions using a learned linear layer,
+followed by layer normalisation~\cite{ba2016layernorm}
+and a GELU activation~\cite{hendrycks2016gelu}:
 \begin{equation}
     \mathbf{u}_i^{\text{proj}}
-    = \mathrm{GELU}\!\bigl(\mathrm{LayerNorm}(\mathbf{W}_v \mathbf{u}_i + \mathbf{b}_v)\bigr),
-    \quad \mathbf{W}_v \in \mathbb{R}^{32 \times 320}.
+    =
+    \mathrm{GELU}\!\left(
+        \mathrm{LayerNorm}
+        \left(
+            \mathbf{W}_v \mathbf{u}_i + \mathbf{b}_v
+        \right)
+    \right),
+    \qquad
+    \mathbf{W}_v \in \mathbb{R}^{32 \times 320}.
     \label{eq:v2_projection}
 \end{equation}
-The projected vector $\mathbf{u}_i^{\text{proj}} \in \mathbb{R}^{32}$ is concatenated with the positional and joint-type features of Equation~\eqref{eq:node_feature_no_depth}
-before the first GAT layer.
-All three skeleton-aware modifications of Section~\ref{sec_meth_pggat} are retained unchanged;
-visual augmentation is therefore strictly additive to the PG-GAT design rather than a replacement for any of its components.
+The resulting vector
+$\mathbf{u}_i^{\text{proj}} \in \mathbb{R}^{32}$ is concatenated with
+the positional and joint-type representation used by PG-GAT,
+before the first graph-attention layer.
+The visual pathway therefore adds local appearance information
+to the existing node representation,
+without changing the graph construction
+or the later message-passing stages.
+All three skeleton-aware modifications introduced in
+Section~\ref{sec_meth_pggat} are retained.
+PG-GAT v2 is consequently an additive extension of PG-GAT,
+rather than a replacement for any of its structural components.
 
-The total parameter count of PG-GAT v2 is $197{,}280$,
-of which approximately $27{,}000$ are added by the projection block of Equation~\eqref{eq:v2_projection}
-and the small adjustment to the first GAT layer's input dimension.
-The remaining $170{,}560$ parameters are inherited from PG-GAT.
-The MobileNet backbone itself contributes a further $2.2 \times 10^{6}$ parameters
-which are not optimised but do count toward any apples-to-apples comparison against HigherHRNet's $28.6 \times 10^{6}$;
-Section~\ref{sec_results_model_size} addresses the model-size accounting in full.
+The trainable PG-GAT v2 network contains $197{,}280$ parameters.
+Approximately $27{,}000$ additional parameters arise from the visual
+projection block of Equation~\eqref{eq:v2_projection}
+and the corresponding increase in the input dimension
+of the first GAT layer.
+The remaining $170{,}560$ parameters are inherited from the standard
+PG-GAT model.
+
+The frozen MobileNetV2 feature extractor contributes a further
+approximately $2.2\times10^{6}$ parameters.
+Although these parameters are not updated during PG-GAT v2 training,
+they remain part of the inference pipeline,
+and are therefore included when comparing the total model size
+against alternatives such as the
+$28.6\times10^{6}$-parameter HigherHRNet model.
+The complete parameter-count comparison is reported in
+Section~\ref{sec_res_model_size}.
 
 \subsection{Training schedule and the extended run}
 \label{sec_meth_v2_training}
 
-PG-GAT v2 is trained from scratch on the cached COCO training features
-with the standard contrastive loss of Equation~\eqref{eq:contrastive_loss}
-and no grouping head.
-Two training schedules are reported in Chapter~\ref{chap_4}:
-a 20-epoch run at learning rate $10^{-3}$ with cosine decay to $10^{-5}$,
-and a 50-epoch extended run that resumes from the 20-epoch checkpoint at a halved initial learning rate $5 \times 10^{-4}$
-and continues for 30 additional epochs.
-The extended schedule is included to control against the possibility that a short training run undersells the architecture's capacity to extract value from the visual features;
-the result reported in Chapter~\ref{chap_4} shows that the additional 30 epochs add at most a few thousandths of a PGA point above the 20-epoch number,
-which establishes that the comparison against PG-GAT is not limited by undertraining.
+PG-GAT v2 is trained from scratch using the cached COCO training
+features and the contrastive objective of
+Equation~\eqref{eq:contrastive_loss}.
+No learned grouping head is introduced -
+at evaluation time the resulting embeddings are clustered
+using the same $k$-means read-out as the standard PG-GAT model.
+The experiment therefore isolates the effect of adding visual information
+to the embedding network.
 
-The optimiser and clipping settings are inherited from Section~\ref{sec_meth_baseline_training}.
-Validation runs every two epochs on the cached COCO validation features,
-and the checkpoint with the best COCO validation PGA is retained as the final model.
-The decision to validate on COCO rather than on synthetic data is methodological:
-the synthetic generator does not produce per-keypoint MobileNet features,
-and constructing them from rendered images would require running the backbone on a domain it was not trained for
-and would introduce a confounding domain gap.
-Reporting only COCO validation isolates the architectural question without that confound;
-a footnote in Section~\ref{sec_results_v2} reports the synthetic transfer separately for completeness.
+Two training schedules are evaluated in Chapter~\ref{chap_4}.
+The first trains PG-GAT v2 for 20 epochs,
+with an initial learning rate of $10^{-3}$
+and cosine annealing to $10^{-5}$.
+The second extends this training to 50 epochs
+by resuming from the 20-epoch checkpoint
+and training for a further 30 epochs,
+with the initial learning rate reduced to $5\times10^{-4}$.
+The extended schedule is included to test whether the visual pathway
+simply requires more optimisation time
+before its additional capacity becomes useful.
+The results in Chapter~\ref{chap_4} show that the additional 30 epochs
+improve PGA by only a few thousandths,
+indicating that the comparison with standard PG-GAT
+is not explained by premature termination of training.
+
+The optimiser,
+weight-decay,
+and gradient-clipping settings otherwise follow
+Section~\ref{sec_meth_baseline_training}.
+Validation is performed every two epochs
+on the cached COCO validation set,
+and the checkpoint with the highest COCO validation PGA
+is retained for final evaluation.
+
+COCO validation is used rather than synthetic validation
+because the synthetic pipeline does not contain
+cached MobileNetV2 descriptors.
+Generating equivalent features would require applying
+the ImageNet-pre-trained backbone to the rendered synthetic images,
+introducing an additional synthetic-to-real appearance-domain effect
+into an experiment intended to isolate the contribution of visual features.
+Restricting model selection to COCO therefore keeps the experiment
+focused on whether those features improve grouping
+on the real-image distribution for which they were introduced.
+Synthetic transfer is reported separately in
+Section~\ref{sec_res_v2} for completeness.

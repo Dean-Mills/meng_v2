@@ -278,6 +278,7 @@ def evaluate(
     device: str,
     max_images: Optional[int] = None,
     hrnet_device: str = "cpu",
+    k_head_path: Optional[Path] = None,
 ):
     # ── Load SA-GAT/GAT ──────────────────────────────────────────────────
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
@@ -315,6 +316,16 @@ def evaluate(
     )
 
     print(f"Loaded SA-GAT/GAT checkpoint (epoch {ckpt.get('epoch', '?')})")
+
+    # ── Optional K-head ─────────────────────────────────────────────────
+    k_head = None
+    if k_head_path is not None:
+        from k_head import KEstimationHead
+        k_head_ckpt = torch.load(k_head_path, map_location=device, weights_only=False)
+        k_head = KEstimationHead(embedding_dim=embedding_dim).to(device)
+        k_head.load_state_dict(k_head_ckpt["k_head_state"])
+        k_head.eval()
+        print(f"Loaded K-head from {k_head_path}; predicted K will be used alongside GT K")
 
     # ── Load MobileNetV2 extractor (only if needed) ───────────────────────
     mobilenet_extractor = None
@@ -363,6 +374,10 @@ def evaluate(
 
     # ── Evaluate ─────────────────────────────────────────────────────────
     results = {"hrnet_ae": [], "knn": [], "cop_kmeans": [], "tha": []}
+    if k_head is not None:
+        results["knn_pred_k"] = []
+        results["k_pred"] = []
+        results["k_gt"]   = []
     detection_stats = {"total_gt": 0, "total_matched": 0, "total_detected": 0}
 
     with torch.no_grad():
@@ -468,6 +483,17 @@ def evaluate(
             knn_pga = compute_pga(knn_pred, gt_labels.to(device))
             results["knn"].append(knn_pga)
 
+            # kNN with predicted K (optional, if K-head is provided)
+            if k_head is not None:
+                with torch.no_grad():
+                    k_pred = max(1, k_head.predict(embeddings))
+                results["k_pred"].append(k_pred)
+                results["k_gt"].append(n_gt_people)
+                if len(matched_det_idx) >= k_pred:
+                    knn_pred_k_labels = predict_knn(embeddings, k_pred)
+                    knn_pred_k_pga = compute_pga(knn_pred_k_labels, gt_labels.to(device))
+                    results["knn_pred_k"].append(knn_pred_k_pga)
+
             # COP-Kmeans
             cop_pred = predict_cop_kmeans(
                 embeddings, n_gt_people, graph.joint_types,
@@ -506,12 +532,23 @@ def evaluate(
 
     print(f"\n{'Method':<25}{'PGA':>10}{'Std':>10}")
     print("-" * 45)
-    for method, label in [
+    method_labels = [
         ("hrnet_ae", "HigherHRNet AE"),
         ("knn", "SA-GAT + kNN"),
         ("cop_kmeans", "SA-GAT + COP-Kmeans"),
         ("tha", "SA-GAT + THA"),
-    ]:
+    ]
+    if "knn_pred_k" in results:
+        method_labels.append(("knn_pred_k", "SA-GAT + kNN (pred K)"))
+        # Also print K-prediction stats
+        k_preds = results["k_pred"]
+        k_gts   = results["k_gt"]
+        k_exact = sum(1 for p, g in zip(k_preds, k_gts) if p == g) / max(len(k_gts), 1)
+        k_off1  = sum(1 for p, g in zip(k_preds, k_gts) if abs(p - g) <= 1) / max(len(k_gts), 1)
+        print(f"\nK-head accuracy (autonomous):")
+        print(f"  K exact:      {k_exact:.3f}  ({sum(1 for p,g in zip(k_preds,k_gts) if p==g)}/{len(k_gts)})")
+        print(f"  K off-by-1:   {k_off1:.3f}")
+    for method, label in method_labels:
         vals = results[method]
         mean = sum(vals) / len(vals)
         std = (sum((v - mean) ** 2 for v in vals) / len(vals)) ** 0.5
@@ -538,7 +575,14 @@ def evaluate(
     out = {
         f"{m}_pga": sum(v) / len(v)
         for m, v in results.items()
+        if m not in ("k_pred", "k_gt")
     }
+    if "k_pred" in results:
+        k_preds, k_gts = results["k_pred"], results["k_gt"]
+        out["k_exact"]     = sum(1 for p, g in zip(k_preds, k_gts) if p == g) / max(len(k_gts), 1)
+        out["k_off_by_1"]  = sum(1 for p, g in zip(k_preds, k_gts) if abs(p - g) <= 1) / max(len(k_gts), 1)
+        out["k_pred_mean"] = sum(k_preds) / max(len(k_preds), 1)
+        out["k_gt_mean"]   = sum(k_gts) / max(len(k_gts), 1)
     out["n_images"]            = n
     out["detection_recall"]    = recall
     out["detection_precision"] = precision
@@ -549,6 +593,11 @@ def main():
     parser = argparse.ArgumentParser(
         description="End-to-end evaluation: HigherHRNet → SA-GAT → COP-Kmeans"
     )
+    parser.add_argument("--k_head", type=Path, default=None,
+                        help="Optional K-head checkpoint. When set, predicted K is used "
+                             "instead of GT K for the grouping step. Produces an additional "
+                             "row in the output table (knn_pred_k) and logs val/E2E_pred_K_PGA "
+                             "to W&B alongside the standard val/E2E_PGA.")
     parser.add_argument("--checkpoint", type=Path, required=True,
                         help="SA-GAT or GAT checkpoint")
     parser.add_argument("--coco_img_dir", type=Path, required=True)
@@ -574,6 +623,7 @@ def main():
         device=args.device,
         max_images=args.max_images,
         hrnet_device=args.hrnet_device,
+        k_head_path=args.k_head,
     )
 
     run_id = args.wandb_run_id

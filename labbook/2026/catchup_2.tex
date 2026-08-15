@@ -2178,3 +2178,109 @@ Synth val preserved at $0.9634$; synth test essentially unchanged across fine-tu
 \end{itemize}
 
 
+
+\section[2026/08/07]{Friday, 7 August 2026}
+
+\subsection{THA Multi-Restart --- Test-Time Compute for the Assignment Stage (Negative Result)}
+
+\subsubsection{Motivation}
+
+Reading the Gemma 4 technical report \cite{gemmateam2026gemma4} prompted a question about test-time compute in the assignment stage: modern LLMs improve answers by spending more inference compute (the report's ``thinking mode''), and their mixture-of-experts routing is itself a typed assignment problem solved with balanced-assignment machinery --- the same primitive family as SCOT and THA. The nearest transferable idea for the PEng side is restart parity: COP-Kmeans gets 10 random restarts with best-inertia selection, while THA runs a single deterministic initialisation (best-of-10 k-means, fixed seed). THA also trails COP-Kmeans by $0.0006$ on exactly one cell of the headline table (COCO end-to-end). Does giving THA the same restart budget close that cell?
+
+\subsubsection{Setup}
+
+New evaluation script \texttt{eval\_tha\_multirestart.py} --- a pure addition; no existing module was modified, and the baseline columns are computed by the imported existing implementations. THA-MR runs the unchanged THA loop from $10$ initialisations (restart 0 reproduces the baseline init exactly; restarts 1--9 are single k-means++ draws with distinct seeds) and keeps the solution with the lowest constrained inertia. Because restart 0 is included, THA-MR is never worse than THA in the selection objective. Evaluated on \texttt{meng-headline} (run \texttt{b5noyg7t}, checkpoint \texttt{3362f752}), synth test (100 images) and COCO val GT keypoints (2307 images).
+
+\subsubsection{Results}
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Setting} & \textbf{kNN} & \textbf{COP-Kmeans} & \textbf{THA} & \textbf{THA-MR (10)} \\
+\hline
+Synth test      & $0.9580$ & $0.9659$ & $\mathbf{0.9785}$ & $0.9785$ \\
+COCO val GT kps & $0.9715$ & $0.9776$ & $\mathbf{0.9779}$ & $0.9777$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+All baseline columns reproduce the recorded headline numbers, so the deltas are trustworthy. THA-MR gains nothing on synth and loses $0.0002$ on COCO.
+
+\subsubsection{Analysis}
+
+\textbf{1. The THA assignment landscape is effectively unimodal.} On synth all 10 restarts converge to the same solution ($\Delta = 0.0000$ exactly). The deterministic single init is already at the ceiling of what the objective can reach; there is nothing for extra restarts to recover.
+
+\textbf{2. Constrained inertia is misaligned with PGA at the margin.} THA-MR is strictly $\leq$ THA in inertia by construction, yet COCO PGA dropped $0.0002$: in a handful of scenes the lower-inertia solution is the worse grouping. Selection criteria built on cluster geometry do not track grouping accuracy at the third decimal.
+
+\textbf{3. The positive reading is a robustness claim for THA.} Unlike COP-Kmeans, which needs 10 restarts to be competitive, THA requires no restart machinery at all --- one deterministic init suffices. That is a usable sentence for the PEng thesis, not a headline.
+
+\subsubsection{What to do next}
+
+Nothing --- closed as a documented negative. The restart budget idea is exhausted; the follow-up experiment (K-selection, below) attacks the K estimate instead of the assignment.
+
+\subsection{K-Selection for the Autonomous Pipeline --- The Feasibility Clamp}
+
+\subsubsection{Motivation}
+
+The second place test-time compute could act is the K estimate. The K-head is $75.9\%$ exact / $92.0\%$ off-by-1 on detections, and the Phase-C analysis established the recall-deficit mechanism: predicted K helps on detections (it calibrates to the \emph{effective} person count among detected keypoints) and hurts on GT keypoints. Two ideas tested here. First, a structural observation: K has a hard lower bound $K_{lb} = \max_t |\{\text{keypoints of type } t\}|$ --- with $K < K_{lb}$, any type-constrained grouping is structurally forced to violate the type constraint. This bound was enforced nowhere in the pipeline. Second, candidate search: run the grouping at $K \in \{K_{pred}-1, K_{pred}, K_{pred}+1\}$ and select by silhouette score.
+
+\subsubsection{Setup}
+
+New evaluation script \texttt{eval\_k\_selection.py} --- again a pure addition importing the existing detection, matching, and grouping code unchanged. Selectors compared, each scored with kNN (k-means) and THA grouping: \emph{oracle} ($K = K_{gt}$), \emph{pred} (K-head, the current autonomous baseline), \emph{clamp} ($K = \max(K_{pred}, K_{lb})$), \emph{select} (best silhouette over the candidate set, candidates raised to $K_{lb}$), and \emph{ceiling} (per-scene best candidate by PGA --- an oracle-selection headroom bound, not a deployable method). Two modes: COCO val GT keypoints (control, 2307 images) and end-to-end on HigherHRNet detections (2166 scenes; HRNet ran on GPU this time, so the matched subset differs marginally from the Phase-C run --- $n\!=\!2166$ vs $2165$, oracle kNN $0.9587$ vs the recorded $0.9591$). Checkpoint \texttt{meng-headline}; K-head \texttt{k\_head\_meng\_headline\_coco}.
+
+\subsubsection{Results}
+
+COCO val, GT keypoints (control):
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Selector} & \textbf{K mean} & \textbf{K$=$eff} & \textbf{kNN} & \textbf{THA} \\
+\hline
+oracle  & $2.74$ & $100.0\%$ & $0.9715$ & $0.9779$ \\
+pred    & $2.63$ & $85.4\%$  & $0.9649$ & $0.9677$ \\
+\textbf{clamp} & $2.72$ & $\mathbf{91.7\%}$ & $\mathbf{0.9689}$ & $\mathbf{0.9743}$ \\
+select  & $3.22$ & $46.1\%$  & $0.8147$ & $0.8194$ \\
+ceiling & ---    & ---       & $0.9733$ & $0.9792$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+End-to-end, HigherHRNet detections ($K_{eff}$ = people with $\geq 1$ matched detection; mean $2.59$ vs $K_{gt}$ mean $2.74$):
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Selector} & \textbf{K mean} & \textbf{K$=$eff} & \textbf{kNN} & \textbf{THA} \\
+\hline
+oracle  & $2.74$ & $89.0\%$ & $0.9587$ & $0.9631$ \\
+pred    & $2.46$ & $82.1\%$ & $0.9644$ & $0.9659$ \\
+\textbf{clamp} & $2.55$ & $\mathbf{88.5\%}$ & $\mathbf{0.9714}$ & $\mathbf{0.9755}$ \\
+select  & $3.05$ & $43.6\%$ & $0.8088$ & $0.8127$ \\
+ceiling & ---    & ---      & $0.9769$ & $0.9814$ \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. The feasibility clamp is the headline: end-to-end autonomous PGA $0.9644 \rightarrow 0.9755$.} THA at clamped predicted K reaches $0.9755$ --- $+0.0096$ over pred-K THA, $+0.0111$ over the previous best autonomous number ($0.9644$, kNN pred-K), and $+0.0124$ over oracle-K THA. This is the best autonomous end-to-end number in the project, from one \texttt{max()} with zero parameters.
+
+\textbf{2. The mechanism is the Phase-C recall-deficit story, now with a corrective.} Oracle K over-clusters the detected subset (some GT people have no detections: $K_{eff}$ mean $2.59 < K_{gt}$ $2.74$); the K-head undershoots ($2.46$). The clamp corrects the estimate upward \emph{only where the detections prove more people exist} (duplicate keypoints of one type), landing at $88.5\%$ agreement with effective K --- statistically tied with oracle-K's own $89.0\%$. The clamp is not a K-head fix; it is a complement that supplies exactly the information the K-head's pooled features miss.
+
+\textbf{3. The clamp is safe on the control.} On GT keypoints it recovers roughly $60\%$ of pred-K's deficit (THA $0.9677 \rightarrow 0.9743$ against oracle $0.9779$) and barely activates ($K_{lb}$ mean $2.65$ vs pred mean $2.63$). It cannot fire spuriously: with GT keypoints a duplicate type genuinely indicates another person.
+
+\textbf{4. Silhouette selection is a clear negative.} It over-segments in this embedding space (K mean $3.05$--$3.22$, K-exact $39$--$46\%$) and costs $\sim\!0.15$ PGA. Together with the THA-MR result this closes the door on cluster-geometry selection criteria in this pipeline.
+
+\textbf{5. Headroom remains but no deployable selector reaches it.} The ceiling bound ($0.9814$ E2E THA) shows the right K is usually inside the candidate set; the clamp captures $\sim\!62\%$ of the pred-to-ceiling gap. A better selector than silhouette could claim the rest, but none tested here does.
+
+\textbf{6. The gap to HigherHRNet AE is now $\sim\!0.009$ --- with a caveat.} $0.9847 - 0.9755 \approx 0.009$, sub-$0.01$ for the first time in the project. The caveat: the AE reference was not recomputed on this run's matched subset ($n\!=\!2166$ vs $2165$), so the gap must be confirmed on an identical subset before it is cited anywhere.
+
+\textbf{7. Untested variant.} $K_{lb}$ alone (no K-head at all) was not run; on E2E its mean ($2.46$) coincidentally equals the K-head's. Whether the K-head still earns its place over the bare bound is an open ablation.
+
+\subsubsection{What to do next}
+
+\begin{itemize}
+    \item Confirm the AE gap on an identical matched subset, and repeat the clamp across the detector-swap suite (YOLO11x, RTMO). RTMO's $0.774$ recall is where the clamp should gain most.
+    \item Run the $K_{lb}$-only ablation (no K-head).
+    \item Placement decision (recorded): the masters is frozen --- none of today's results enter the MEng dissertation. THA-MR (negative), the silhouette negative, and the feasibility clamp are all PEng thesis material.
+    \item Log both evaluations to W\&B run \texttt{b5noyg7t} (today's runs used \texttt{--wandb\_run\_id none}); prefixes \texttt{eval/tha\_multirestart/*} and \texttt{eval/k\_selection/*}.
+\end{itemize}

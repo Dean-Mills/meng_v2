@@ -55,6 +55,8 @@ ALLOWED_SCRIPTS = {
     "eval_cop_kmeans",
     "eval_hungarian_grouping",
     "eval_end_to_end",
+    "eval_k_estimation",
+    "eval_trigat",
 }
 
 

@@ -2,344 +2,271 @@
 \label{sec_lit_hpe}
 
 Human pose estimation (HPE) is the problem of localising a fixed set of
-anatomical keypoints --- such as the seventeen joints of the COCO
-skeleton~\cite{lin2014coco} --- on every person present in an image.
-The dissertation restricts attention to the 2D, multi-person, image-level
-formulation: per-image keypoint coordinates for an unknown number of
-people, without temporal context and without 3D reconstruction.
-Three surveys provide broader scope and historical depth:
+anatomical keypoints - such as the seventeen joints of the COCO
+skeleton~\cite{lin2014coco} - on every person present in a given image.
+This is a large domain, so the work is restricted to 2D and multi-person.
+In this context the goal is to find per-image keypoints
+for an unknown number of people without the use of temporal context
+or 3D reconstruction.
+The following three useful surveys provide a reader with considerable background and scope:
 Chen et al.~\cite{chen2022hpesurvey} cover monocular HPE end-to-end,
 Zheng et al.~\cite{zheng2023hpesurvey} provide a more recent
 deep-learning-focused survey, and Andriluka et al.~\cite{andriluka2014mpii}
 anchor the modern benchmark culture with the MPII dataset.
 
-The single-person estimators that underpin most multi-person systems
-emerged in a clear lineage of convolutional architectures.
-Toshev and Szegedy's DeepPose~\cite{toshev2014deeppose} framed
+The single-person pose estimators that underpin most multi-person systems
+emerged from a series of convolutional architectures.
+Toshev and Szegedy's DeepPose~\cite{toshev2014deeppose} (a seminal work) framed
 keypoint localisation as direct coordinate regression from a deep
 network.
 Subsequent architectures shifted to dense heatmap prediction:
 convolutional pose machines~\cite{wei2016cpm} introduced iterative
 belief-map refinement, and the stacked hourglass
 network~\cite{newell2016hourglass} established the
-encoder--decoder-with-skip-connections topology that underpins most
+encoder-decoder-with-skip-connections topology that underpins most
 modern single-person estimators.
 Xiao et al.'s ``simple baselines'' work~\cite{xiao2018simplebaselines}
 showed that a ResNet trunk with three deconvolution layers matched
-hourglass accuracy at lower complexity, establishing a strong baseline
-that subsequent methods are still measured against.
+hourglass accuracy at lower complexity (an important finding given the trend of increasing model size).
 The HRNet family~\cite{sun2019hrnet} pushed this further by running
 several parallel branches at different spatial resolutions throughout
 the network and exchanging information between them at every stage,
 rather than recovering resolution through up-sampling at the end of an
-encoder--decoder pass.
-The resulting consistent access to high-resolution feature maps yielded
+encoder-decoder pass.
+The resulting access to high-resolution feature maps yielded
 sharper keypoint heatmaps and lower localisation error than any prior
 backbone of comparable parameter count, which is why HRNet became the
-de facto backbone for most top-down systems and for the bottom-up
+gold-standard backbone for most top-down systems and for the bottom-up
 HigherHRNet variant~\cite{cheng2020higherhrnet} discussed in
 Section~\ref{sec_lit_grouping}.
 
 \subsection{Top-Down Approaches}
 \label{sec_lit_hpe_topdown}
 
-Top-down systems decompose multi-person HPE into two stages:
-a person detector produces bounding boxes, and a single-person estimator
-runs on each crop.
-The canonical instantiations of this architecture are Mask
-R-CNN~\cite{he2017maskrcnn}, which attaches a per-keypoint mask head to
-the Faster R-CNN detector, and AlphaPose~\cite{fang2017rmpe},
-which couples a person-detection front-end with a symmetric spatial
-transformer and a parametric pose non-maximum suppression step.
-Top-down methods inherit the strong per-person localisation accuracy
-of the underlying single-person estimator and consequently dominate the
-COCO leaderboards across most years.
-Two structural limitations apply.
-First, runtime scales linearly with the number of detected people,
-which becomes prohibitive in dense scenes.
-Second, performance is bounded by detection quality:
-missed or over-merged person detections propagate directly to missed
-or incorrectly grouped keypoints, with no opportunity for the pose
-estimator to recover.
+Top-down systems handle multi-person HPE by
+first detecting each person (using a person detector)
+and then applying a single-person pose estimator to each detected bounding box.
+This architecture is most notably represented by Mask R-CNN~\cite{he2017maskrcnn},
+which extends the Faster R-CNN detector with a per-keypoint mask head,
+and AlphaPose~\cite{fang2017rmpe},
+which combines a person-detection front-end with a symmetric spatial transformer
+and a parametric pose non-maximum suppression step.
+Top-down methods generally have strong per-person keypoint localisation accuracy
+due to the simplification of the pose estimation task to a single person at a time.
+However, there are two main limitations to this approach.
+Firstly, runtime scales linearly with the number of detected people.
+Secondly, the performance of these methods is limited by the quality of the person detection stage:
+any incorrectly detected or missed bounding boxes will lead to missed or incorrectly grouped keypoints,
+with no opportunity for the pose estimator to recover from these errors.
 
 \subsection{Bottom-Up Approaches}
 \label{sec_lit_hpe_bottomup}
 
-Bottom-up methods reverse the dependency:
-all keypoints in the image are detected first,
-and a separate grouping mechanism assigns each keypoint to a person.
-Runtime is then approximately constant in the number of people, and
-detection errors are localised to individual keypoints rather than to
-entire person instances.
-Three distinct grouping lineages have emerged within the bottom-up
-family, and the literature on the grouping mechanisms themselves is
-reviewed in Section~\ref{sec_lit_grouping};
-the present section names them only to map the bottom-up landscape.
-
-The first lineage, originating with OpenPose~\cite{cao2017openpose} and
-extended by PifPaf~\cite{kreiss2019pifpaf},
-predicts a dense 2D vector field along each anatomical limb
-(the ``part affinity field'') in addition to per-keypoint heatmaps.
-At inference time, candidate keypoint pairs are scored by the line
-integral of the affinity field between them, and consistent person
-skeletons are recovered by bipartite matching on the resulting graph.
-PifPaf adds a Laplace-distributed regression head on top of the same
-field structure to improve fine-grained localisation in crowded scenes.
-The second lineage, introduced by Newell et al.\ as associative
-embedding~\cite{newell2017associative} and extended to high-resolution
-backbones by HigherHRNet~\cite{cheng2020higherhrnet}, attaches a learned
-scalar (or short vector) tag to each detected keypoint and trains the
-network to make tags of same-person keypoints close and tags of
-different-person keypoints far apart.
-Grouping at inference is then a clustering operation on tag values,
-typically resolved by simple thresholding.
-The third lineage, exemplified by
-DEKR~\cite{geng2021dekr} and CenterGroup~\cite{braso2021centergroup},
-predicts a person-centre heatmap and per-keypoint offset vectors from
-those centres,
-assembling each person skeleton by following the offsets back to the
-keypoint locations.
-End-to-end transformer methods (Section~\ref{sec_lit_hpe_transformer})
-collapse the detect-and-group structure entirely;
-they are catalogued separately here because they no longer admit a
-modular grouping stage.
+Bottom-up methods work in reverse.
+The first task is to detect all the keypoints in an image
+and then a separate grouping mechanism assigns each keypoint to a person.
+Detecting all keypoints in a single pass allows for a runtime that is approximately constant in the number of people,
+and detection errors are localised to individual keypoints rather than to entire person instances.
+Grouping, being a critical step (specifically for this work), is reviewed further in Section~\ref{sec_lit_grouping}.
+The exception to this is end-to-end transformer methods (Section~\ref{sec_lit_hpe_transformer}),
+which do not require a separate grouping stage and are discussed separately.
 
 \subsection{Transformer-Based Approaches}
 \label{sec_lit_hpe_transformer}
 
-The transformer architecture has been applied to HPE in two distinct
-ways:
-as a drop-in replacement for the convolutional backbone of an
-otherwise standard heatmap-based estimator,
-and as a complete reformulation of the multi-person task as
-end-to-end set prediction with no separate grouping stage.
-The two lines of work have different consequences for whether a
-modular grouping module of the kind developed here can
-be attached downstream.
+The transformer architecture has been applied to HPE in two distinct ways:
+as a drop-in replacement for the convolutional backbone of a standard heatmap-based estimator,
+and as a complete reimagining of the multi-person task
+using end-to-end set prediction with no separate grouping stage.
+The latter approach cannot be decoupled from the backbone
+and does not produce embeddings that a downstream grouping module could use.
 
 TokenPose~\cite{li2021tokenpose} demonstrated that a pure-transformer
-network treating each keypoint as a learned token could match the
+network where each keypoint is a learned token could match the
 heatmap accuracy of CNN baselines at comparable parameter counts.
 HRFormer~\cite{yuan2021hrformer} preserved the parallel-resolution
 structure of HRNet while replacing convolutions with local-window
-self-attention, recovering high-resolution feature representations in
-the transformer family.
-ViTPose~\cite{xu2022vitpose} took the opposite design choice ---
-a plain, monolithic Vision Transformer as backbone with no
+self-attention, recovering high-resolution feature representations.
+ViTPose~\cite{xu2022vitpose} took the opposite design choice -
+a plain, monolithic Vision Transformer as the backbone with no
 high-resolution path and no domain-specific inductive bias for
-keypoint localisation ---
-and showed that this minimal architecture nonetheless scales cleanly
-to model sizes from 100M up to 1B parameters and consistently improves
-with scale.
-A simple deconvolution head turns the patch-token grid into
-per-keypoint heatmaps,
-so ViTPose plugs into the same downstream pipeline as a CNN backbone.
-Its successor ViTPose++~\cite{xu2023vitposepp} adds a
-mixture-of-experts formulation to cover the wholebody, hand, and
+keypoint localisation -
+it then showed that this minimal architecture can scale cleanly
+to model sizes from 100M up to 1B parameters (improving with scale).
+A simple deconvolutional head turns the patch-token grid into
+per-keypoint heatmaps, so ViTPose plugs into the same downstream pipeline as a CNN backbone.
+Its successor ViTPose++~\cite{xu2023vitposepp} extends the original ViTPose by adding a
+mixture-of-experts (MoE) formulation to cover the wholebody, hand, and
 animal-pose distributions within a single trunk.
 
-A separate line of transformer work reformulates multi-person HPE as
-direct set prediction, dispensing with the explicit grouping stage
-altogether.
+A separate line of transformer work reimagines multi-person HPE as direct set prediction,
+so the keypoints are generated already grouped by person,
+meaning there is no need for a separate grouping stage.
 PETR~\cite{shi2022petr} was the first end-to-end pose detector to
-apply the DETR set-prediction paradigm to human keypoints:
-a fixed pool of pose queries attends to the image feature map,
-each query learns to predict a complete per-person skeleton,
-and bipartite matching at training time assigns each ground-truth
-person to one of the queries.
-There is no separate grouping operation at inference;
-the binding between keypoints and a person is the query identity.
+apply the DETR~\cite{carion2020detr} set-prediction paradigm to human keypoints:
+a fixed pool of pose queries cross-attends to image features,
+and each query learns to predict a complete per-person skeleton (one shot).
+The predictions form an unordered set with no fixed pairing to the ground-truth people,
+so Hungarian matching at training time assigns each ground-truth person to one of the queries.
+Here the binding between keypoints and person is the query identity.
 QueryPose~\cite{xiao2022querypose} sparsified the attention pattern by
 splitting each pose query into part-level sub-queries.
 ED-Pose~\cite{yang2023edpose} and GroupPose~\cite{liu2023grouppose}
-further developed the query-based formulation,
-reaching competitive performance on the COCO benchmark without any
+modified the query-based formulation with ED-Pose adding a person-box
+and GroupPose simplifying the architecture to allow keypoints of the same person to communicate;
+both reaching competitive performance on the COCO benchmark without any
 post-hoc grouping step.
-These methods couple grouping tightly to the backbone:
-they do not produce explicit per-keypoint embeddings that a downstream
-module could group separately,
-and the grouping mechanism is consequently not transferable to
-checkpoints from other detectors.
 
 \subsection{Heatmap and Regression Trends}
 \label{sec_lit_hpe_regression}
 
-The traditional bottleneck of regression-based pose estimation is the
-discontinuity of the argmax operator that maps a continuous output to a
-discrete keypoint coordinate.
-Sun et al.'s integral pose regression~\cite{sun2018integral} bridged the
-heatmap and regression paradigms with a differentiable soft-argmax,
-and DSNT~\cite{nibali2018dsnt} formalised the same idea as a normalised
-spatial-coordinate layer.
-A direct probabilistic treatment was given by residual log-likelihood
-estimation (RLE)~\cite{li2021rle},
-which models the residual between predicted and ground-truth
-coordinates with a flow-based density and was the first regression
-method to exceed heatmap accuracy on multi-person COCO.
-SimCC~\cite{li2022simcc} reformulated coordinate prediction as a
-two-axis classification problem,
-producing the underlying mechanism for the real-time RTMPose
-family~\cite{jiang2023rtmpose}.
-RTMO~\cite{lu2024rtmo} unifies detection and regression in a single
-stage, and RTMW~\cite{jiang2024rtmw} extends the family to whole-body
-pose at real-time rates.
-These methods are relevant here only insofar as they
-produce per-keypoint coordinates;
-the grouping module proposed in
-Chapter~\ref{chap_3} operates on detected coordinates and is agnostic
-to whether they originated from a heatmap or a regressor.
+A long-standing issue in regression-based pose estimation is the non-differentiability of the argmax operator
+which maps continuous outputs to discrete keypoint coordinates.
+Sun et al.~\cite{sun2018integral} addressed this with integral pose regression,
+introducing a differentiable soft-argmax that bridged heatmap and regression paradigms.
+DSNT~\cite{nibali2018dsnt} later formalised the same idea as a normalised spatial-coordinate layer.
+
+RLE~\cite{li2021rle} offered a more direct probabilistic treatment,
+done by modelling residuals between predicted and ground-truth coordinates with a flow-based density
+and it was the first regression method to exceed heatmap accuracy on COCO.
+SimCC~\cite{li2022simcc} took a different route,
+reframing coordinate prediction as two-axis classification,
+which became the basis for the real-time RTMPose family~\cite{jiang2023rtmpose}.
+RTMO~\cite{lu2024rtmo} later unified detection and regression in a single stage,
+and RTMW~\cite{jiang2024rtmw} extended this to whole-body pose at real-time rates.
+The YOLO family follows the same single-stage pattern,
+attaching a per-instance keypoint regression head to its object detector,
+with YOLO11-pose~\cite{ultralytics2024yolo11} as the current representative.
+
+For this context, the specific paradigm is not critical.
+The grouping module proposed in Chapter~\ref{chap_3} operates on per-keypoint coordinates
+and is indifferent to whether those coordinates came from a heatmap or a regressor.
 
 \subsection{Foundation Models for Pose Estimation}
 \label{sec_lit_hpe_foundation}
 
-Recent work has pushed the backbone trajectory toward foundation-model
-scale.
-Sapiens~\cite{khirodkar2024sapiens} pretrains Vision Transformer
-backbones from 0.3 to 2 billion parameters on 300M curated human
-images, producing a unified human-vision backbone that reaches
-state-of-the-art accuracy across pose estimation, segmentation, depth,
-and surface normal prediction.
-The same trend toward promptable, dataset-unified methods is
-represented by X-Pose~\cite{yang2024xpose},
-which detects arbitrary keypoint categories conditioned on a textual
-or visual prompt across thirteen datasets,
-and by the compositional-token approach of
-PCT~\cite{geng2023pct},
-which represents poses as discrete codebook tokens to improve
-occlusion robustness.
-The foundation-model trajectory matters here as
-context rather than as comparison:
-a sufficiently large pretrained backbone reduces the per-keypoint
-localisation error to near saturation,
-which sharpens the case for studying grouping as a modular problem
-downstream of detection.
+Recent work has also moved human pose backbones towards foundation-model scale.
+Sapiens~\cite{khirodkar2024sapiens}, for example,
+pretrains Vision Transformer backbones ranging from 0.3 to 2 billion parameters
+using 300M curated human images.
+This produces a unified human-vision backbone that achieves state-of-the-art accuracy
+across pose estimation, segmentation, depth, and surface normal prediction.
+
+A similar move towards promptable and dataset-unified methods can be seen in X-Pose~\cite{yang2024xpose},
+which detects arbitrary keypoint categories based on either a textual or visual prompt
+across thirteen datasets.
+PCT~\cite{geng2023pct} takes another approach
+using discrete codebook tokens to represent poses and improve robustness to occlusion.
+
+These foundation-model approaches are relevant here mainly as context rather than direct points of comparison.
+Larger pretrained backbones can reduce the localisation error of individual keypoints to near saturation.
+This further makes the case for studying grouping as a separate, modular stage after detection.
 
 \subsection{Benchmarks}
 \label{sec_lit_hpe_benchmarks}
 
-Three datasets dominate the 2D multi-person literature.
-MPII Human Pose~\cite{andriluka2014mpii} established the modern
-benchmark protocol with 25K images and approximately 40K annotated
-people across 410 activities;
-its focus is single-person crops and it has been largely superseded
-for multi-person research.
-COCO~\cite{lin2014coco} is the de facto multi-person benchmark,
-with seventeen keypoints per person and approximately 250K annotated
-instances across the train, val, and test partitions;
-val2017 is the standard reporting set
-and the one used for the COCO evaluations in
-Chapter~\ref{chap_4}.
-CrowdPose~\cite{li2019crowdpose} targets the dense-crowd regime
-explicitly,
-with a crowd-index metric and approximately 20K images selected for
-inter-person occlusion;
-it is the appropriate benchmark for stress-testing grouping methods,
-although it is not used in the experiments that follow.
-The OCHuman benchmark, introduced alongside
-Pose2Seg~\cite{zhang2019pose2seg},
-isolates occluded humans and is similarly relevant to grouping
-robustness.
+Three datasets are particularly common in the 2D multi-person pose literature.
+MPII Human Pose~\cite{andriluka2014mpii} established much of the modern benchmark protocol,
+with 25K images and approximately 40K annotated people across 410 activities.
+However, its focus is mainly on single-person crops,
+and it has largely been superseded for multi-person research.
 
-Across these benchmarks the dominant evaluation metric is average
-precision (AP) under the Object Keypoint Similarity (OKS) family of
-thresholds, introduced with the COCO benchmark itself~\cite{lin2014coco}.
-OKS measures the agreement between a predicted and ground-truth
-keypoint as a Gaussian-tolerance similarity in which the variance
-depends on the keypoint type and the size of the person bounding box;
-a prediction is counted as correct above an OKS threshold,
-and AP is averaged across thresholds in the range $[0.50, 0.95]$ in
-steps of $0.05$.
-The earlier MPII-era metric, Percentage of Correct Keypoints (PCK),
-counts a prediction as correct if it falls within a fixed fraction of
-the head segment length;
-it is still occasionally reported on MPII but has been largely
-superseded by AP@OKS on multi-person datasets.
-The dissertation does not report AP@OKS directly because its grouping
-contribution is evaluated as a Hungarian-matched per-joint accuracy
+COCO~\cite{lin2014coco} is now the de facto benchmark for multi-person pose estimation,
+using seventeen keypoints per person
+and containing approximately 250K annotated instances across the train, val, and test partitions.
+The val2017 set is commonly used for reporting results
+and is also the set used for the COCO evaluations in Chapter~\ref{chap_4}.
+
+CrowdPose~\cite{li2019crowdpose}, on the other hand, is designed specifically for crowded scenes.
+It includes a crowd-index metric and approximately 20K images selected for significant inter-person occlusion,
+making it a useful benchmark for testing grouping methods under more difficult conditions,
+although it is not used in the experiments later in this work.
+The OCHuman benchmark, introduced alongside Pose2Seg~\cite{zhang2019pose2seg},
+also focuses on heavily occluded people and is therefore relevant when considering grouping robustness.
+
+Across these benchmarks,
+average precision (AP) under the Object Keypoint Similarity (OKS) metric is the dominant evaluation measure.
+OKS was introduced with the COCO benchmark~\cite{lin2014coco}
+and measures the agreement between predicted and ground-truth keypoints using a Gaussian-based tolerance,
+where the variance depends on the keypoint type and the size of the person's bounding box.
+A prediction is counted as correct above an OKS threshold,
+with AP normally averaged over thresholds in the range $[0.50, 0.95]$ in steps of $0.05$.
+
+The earlier MPII-era metric, Percentage of Correct Keypoints (PCK), uses a different approach:
+a keypoint is counted as correct when it falls within a fixed fraction of the head segment length.
+PCK is still sometimes reported for MPII,
+but AP@OKS has largely replaced it for multi-person benchmarks.
+
+AP@OKS is not reported directly in Chapter~\ref{chap_4}.
+Instead, the grouping contribution is evaluated using Hungarian-matched per-joint accuracy
 (see Section~\ref{sec_meth_evaluation}),
-which isolates the grouping decision from detection quality;
-however, every grouping baseline cited in this chapter is reported in
-its original publication on the AP@OKS metric, and the relationship
-between the two is discussed in Chapter~\ref{chap_4}.
+which separates the grouping decision from the quality of the initial keypoint detections.
+The grouping baselines discussed in this chapter are, however,
+reported using AP@OKS in their original publications,
+and the relationship between the two metrics is discussed further in Chapter~\ref{chap_4}.
 
 \subsection{Pose Tracking}
 \label{sec_lit_hpe_tracking}
 
-Multi-person 2D pose tracking extends per-image HPE with temporal
-association across frames.
-PoseFlow~\cite{xiu2018poseflow} is the canonical online tracker
-that propagates per-person identities through pose-similarity matching
-in a small temporal window.
-LightTrack~\cite{ning2020lighttrack} provides a top-down tracking
-framework with a learned re-identification head.
-The PoseTrack benchmark~\cite{andriluka2018posetrack} is the standard
-evaluation set for this video-pose formulation.
-Pose tracking is out of scope for the present work,
-which is restricted to per-image grouping.
-The grouping decisions are nonetheless the bottleneck within each
-tracked frame:
-once per-frame skeletons have been assembled, temporal association is
-typically a comparatively shallow re-identification problem over
-short time windows,
-so the per-image grouping module developed in
-Chapter~\ref{chap_3} is compatible with downstream temporal
-association via standard ReID techniques.
+Multi-person 2D pose tracking extends per-image HPE by associating people across multiple frames.
+PoseFlow~\cite{xiu2018poseflow} is a well-known online tracker
+that maintains person identities using pose-similarity matching over a small temporal window,
+while LightTrack~\cite{ning2020lighttrack} uses a top-down tracking framework with a learned re-identification head.
+The PoseTrack benchmark~\cite{andriluka2018posetrack} is the standard evaluation set
+for this video-based pose tracking problem.
 
-\subsection{Position of This Dissertation}
+Pose tracking is outside the scope of this work,
+which is limited to grouping keypoints within individual images.
+However, grouping remains an important step for each frame.
+Once the per-frame skeletons have been assembled,
+temporal association can generally be treated as a re-identification problem over a short sequence of frames.
+The per-image grouping module developed in Chapter~\ref{chap_3} can therefore be used as a separate stage
+before temporal association,
+with standard ReID methods handling the subsequent tracking step.
+
+\subsection{Position of the Present Work}
 \label{sec_lit_hpe_position}
 
-The HPE literature has converged on a small set of strong single-image
-detection backbones whose per-keypoint localisation accuracy is
-approaching saturation.
-HRNet-family backbones already reach mean OKS-based average precision
-above $0.75$ on COCO val2017,
-and recent foundation-model approaches such as
-Sapiens~\cite{khirodkar2024sapiens} push that figure higher by
-pretraining on hundreds of millions of human-centric images.
-For systems that do not yet use foundation-model-scale backbones,
-real-time variants such as
-RTMPose~\cite{jiang2023rtmpose} and RTMO~\cite{lu2024rtmo} compress
-much of the same accuracy into far smaller models,
-indicating that per-keypoint localisation is no longer the binding
-constraint on multi-person performance for typical deployment regimes.
+The HPE literature has converged on a relatively small set of strong single-image detection backbones,
+with per-keypoint localisation accuracy now reaching saturation.
+HRNet-family backbones already achieve mean OKS-based average precision above $0.75$ on COCO val2017,
+while more recent foundation-model approaches such as Sapiens~\cite{khirodkar2024sapiens}
+improve on this further through pretraining on hundreds of millions of human-centric images.
+For systems where models of this scale are not practical,
+real-time approaches such as RTMPose~\cite{jiang2023rtmpose} and RTMO~\cite{lu2024rtmo}
+achieve much of the same accuracy using considerably smaller models.
+This suggests that, for many practical multi-person systems,
+localising individual keypoints is no longer the main limitation on performance.
 
-The remaining sources of error in bottom-up pipelines are therefore
-concentrated downstream of detection,
-in the grouping decision that assigns each detected keypoint to a
-person identity.
-In the established lineages reviewed above, this decision is taken in
-ways that prevent decoupling from the detector:
-part-affinity fields are predicted by the same network that produces
-the heatmaps, associative-embedding tags are trained jointly with the
-heatmap loss on a specific backbone,
-and centre-regression methods such as DEKR fold the grouping into a
-backbone-specific keypoint-from-centre offset head.
-End-to-end transformer pose detectors take the coupling further still:
-no per-keypoint representation is ever exposed,
-because the binding between keypoints and a person is the identity of
-the pose query that produced them.
-In all of these cases, swapping out the detector after training is not
-a supported operation, and grouping research is consequently
-constrained to architectures whose authors release both the detector
-weights and the matching grouping head.
+For bottom-up approaches, an important source of error therefore lies after detection,
+particularly in deciding which detected keypoints belong to the same person.
+Most of the established methods reviewed above
+make this grouping decision in a way that is closely tied to the detector.
+Part-affinity fields, for example, are predicted by the same network that generates the keypoint heatmaps.
+Associative-embedding tags are similarly trained together with the heatmap loss on a particular backbone.
+Centre-regression methods such as DEKR also combine detection and grouping
+through a backbone-specific keypoint-from-centre offset head.
+End-to-end transformer pose detectors couple the two stages even more closely:
+in these models there is no separate per-keypoint representation to group,
+since the keypoints are already associated through the pose query that produced them.
+As a result, replacing the detector after training is impossible,
+and grouping methods are often tied to the detector and grouping head used by the original architecture.
 
-The lineage of \emph{modular} grouping methods --- methods that take
-detected keypoints as input from any detector, run a separable
-algorithm, and return per-keypoint person identities --- is much
-sparser.
-A handful of recent works can be read in this lineage:
-HGG~\cite{jin2020hgg} formulates grouping as higher-order graph
-matching on detected keypoints,
-GEC~\cite{maher2025gec} as binary edge classification,
-and the instance-aware approach of Yang et al.~\cite{yang2023instanceaware}
-as a learned per-person assignment head.
-This dissertation contributes to the same lineage with a
-graph-neural-network embedding approach (PG-GAT, Chapter~\ref{chap_3})
-that operates on the detected-keypoint output of an arbitrary
-upstream detector and produces per-keypoint embeddings on which simple
-clustering recovers person identities.
-The next two sections develop the supporting literature on grouping
-mechanisms (Section~\ref{sec_lit_grouping}) and on graph neural
-networks for pose
-(Section~\ref{sec_lit_gnn_pose}),
-both of which directly inform the design of the contributed method.
+In comparison, the literature on \emph{modular} grouping is much smaller.
+Here, modular grouping refers to methods that accept detected keypoints from any upstream detector,
+perform grouping as a separate stage,
+and return a person identity for each keypoint.
+Several recent methods can be viewed in this way.
+HGG~\cite{jin2020hgg} treats the problem as higher-order graph matching between detected keypoints,
+while GEC~\cite{maher2025gec} formulates it as binary edge classification.
+The instance-aware method of Yang et al.~\cite{yang2023instanceaware}
+instead uses a learned per-person assignment head.
+
+The method proposed in this work follows the same modular direction.
+PG-GAT, presented in Chapter~\ref{chap_3},
+uses a graph neural network to operate on keypoints produced by any upstream detector
+and generates an embedding for each detected keypoint.
+These embeddings can then be clustered to recover the individual person identities.
+The following sections review the literature that most directly supports this approach:
+grouping mechanisms in Section~\ref{sec_lit_grouping}
+and graph neural networks for pose in Section~\ref{sec_lit_gnn_pose}.

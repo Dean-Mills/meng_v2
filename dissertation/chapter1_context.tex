@@ -1,4 +1,52 @@
 \section{Context}
 \label{sec_intro_context}
 
-Introduces the detection/grouping split in bottom-up HPE: modern detectors (HigherHRNet, HRNet) produce accurate per-joint heatmaps; assigning those joints to person identities is the remaining bottleneck. Summarises why joint-to-person assignment is intrinsically difficult (unknown $K$, type constraints, occlusion, scale) and why it deserves to be studied as a module in its own right.
+Multi-person pose estimation is the task of identifying and locating a fixed set of anatomical keypoints -
+the seventeen joints of the COCO skeleton~\cite{lin2014coco} - on every person present in an image. The 
+bottom-up family of methods breaks the task up into two distinct stages: a detector first identifies
+every keypoint in the image (regardless of which person it belongs to) and then the grouping stage
+assigns each detected keypoint to a person (Figure~\ref{fig:context_example}). This separation of concerns is what
+defines the bottom-up methods starting from the smallest unit available (a joint) and working 
+up towards a person. This allows the runtime to be approximately constant in the number of people
+but means that the grouping decision itself becomes difficult. 
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{figures/context_example.pdf}
+    \caption{Multi-person keypoints from COCO \texttt{val2017} (image 482800), drawn from 
+    the ground-truth annotations. In (a) every keypoint carries a joint type but no person identity, 
+    which is what the grouping stage is given;
+    the circled section shows the right eyes of two different people, 33 pixels apart.
+    In (b) the same keypoints are coloured by the person they belong to and joined by the COCO skeleton,
+    which is what the grouping stage has to produce.
+    The two people on the right overlap while the person on the left does not.}
+    \label{fig:context_example}
+\end{figure}
+
+In this context multi-person pose estimation is then two things: keypoint detection and keypoint
+grouping. The detection stage is well studied with high-resolution 
+convolutional backbones~\cite{sun2019hrnet, cheng2020higherhrnet}, transformer estimators~\cite{xu2022vitpose},
+and human-centric foundation models~\cite{khirodkar2024sapiens} which 
+have pushed per-keypoint localisation accuracy on the COCO benchmark toward saturation. Residual errors
+of modern bottom-up pipelines happen downstream of detection in deciding which person each 
+detected keypoint belongs to. This decision is quite difficult for
+a number of structural reasons:
+
+\begin{compactitem}
+    \item The number of people in the scene is unknown at inference time.
+    \item Every person can contribute at most one keypoint of each joint type.
+    \item Occlusion and truncation remove keypoints unpredictably.
+    \item People who overlap in the image (without occluding) place same-type keypoints
+    close to each other, for example two left elbows.
+\end{compactitem}
+
+In established bottom-up methods, this grouping decision is produced by a mechanism
+that is trained jointly with the keypoint detector. Part-affinity fields~\cite{cao2017openpose},
+associative-embedding tags~\cite{newell2017associative, cheng2020higherhrnet},
+centre-offset regression~\cite{geng2021dekr},
+and end-to-end set prediction~\cite{shi2022petr} all couple the grouping method 
+to a particular estimation backbone. This coupling buys accuracy 
+at the cost of reusability - a grouping mechanism trained with respect to one detector 
+cannot be detached and applied to the output of another one. This work studies the alternative:
+a grouping module that consumes arbitrary detector-emitted keypoints and types. The question is 
+what that costs in accuracy and whether the modularity is worth it.

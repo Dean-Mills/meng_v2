@@ -208,3 +208,10 @@ artifacts/
 *.bcf
 *.run.xml
 *-blx.bib
+
+# Downloaded reference PDFs (kept locally; REFERENCES.md stays tracked)
+dissertation/references/*.pdf
+# Auto-downloaded detector weights (>100 MB; re-fetched by eval_e2e_generic.py)
+code_v3/yolo11x-pose.pt
+code_v3/*.pt
+code_v3/*.pth

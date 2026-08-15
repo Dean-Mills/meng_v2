@@ -1,4 +1,189 @@
-\section{Representation Learning for Clustering}
+\section{Representation Learning and Clustering Primitives}
 \label{sec_lit_rep_learn}
 
-Contrastive learning (InfoNCE, SimCLR), triplet losses, metric learning. Deep clustering lineage: DEC (Xie et al.), IDEC, DeepCluster, DMoN. What these methods assume about the feature space and how those assumptions interact with the pose-grouping task.
+The proposed PG-GAT method uses an embedding network trained with a contrastive loss,
+followed by a $k$-means read-out during inference.
+Chapter~\ref{chap_4} also evaluates three learned grouping heads
+applied to the same embeddings (Section~\ref{sec_res_learned_heads}),
+as well as ten modularity-based variants (Section~\ref{sec_res_sadmon}).
+In the experiments,
+none of these alternatives performs as well as the simpler combination of contrastive learning and $k$-means.
+
+This section reviews the representation-learning and clustering approaches
+that are used or evaluated in the experimental work.
+They are presented in roughly the same order as they appear in the methodology.
+Contrastive learning is considered first,
+as it provides the loss used by the final PG-GAT model.
+This is followed by deep embedded clustering and slot attention,
+which form the basis of the alternative learned grouping heads,
+and then modularity-driven clustering, which provides the structural graph alternatives.
+Finally, graph-based face clustering is reviewed
+as the closest related work in terms of using learned graph representations to recover identities.
+
+The mathematical details of these methods are introduced in Section~\ref{sec_meth_clustering}.
+The focus here is instead on their role in the existing literature
+and how they relate to the grouping approaches evaluated in this work.
+
+\subsection{Contrastive embedding objectives}
+\label{sec_lit_rep_learn_contrastive}
+
+Contrastive learning defines an embedding space using pairwise relationships between samples.
+Points that share the same identity are encouraged to move closer together in the embedding space,
+while points with different identities are pushed further apart.
+Early siamese network approaches~\cite{hadsell2006contrastive, chopra2005contrastive}
+used this idea with a learned distance metric,
+pulling positive pairs together while separating negative pairs by a specified margin.
+FaceNet~\cite{schroff2015facenet} later extended this idea using a triplet loss,
+where an anchor is compared with both a positive and a negative example within the same loss term.
+
+More recent self-supervised approaches apply the same general idea at a larger scale.
+SimCLR~\cite{chen2020simclr}, for example,
+constructs positive pairs within a batch using different augmentations of the same sample.
+InfoNCE~\cite{oord2018infonce} instead expresses the contrastive objective through noise-contrastive estimation
+and provides a connection between the learned representation and mutual information.
+
+The loss used in Section~\ref{sec_meth_baseline_loss} follows the more direct margin-based approach,
+using cosine similarity between embeddings.
+This choice fits the grouping problem for several reasons.
+First, the training data provides an exact supervisory signal -
+the synthetic-data generator described in Section~\ref{sec_meth_data_synth}
+supplies a ground-truth person label for every joint,
+so positive and negative pairs can be constructed directly
+rather than inferred through augmentation or other self-supervised techniques.
+
+Second, the network produces L2-normalised embeddings,
+meaning that the embedding space lies on the unit hypersphere.
+Cosine similarity is therefore a natural measure of how close two embeddings are.
+A margin-based objective also keeps the formulation relatively simple,
+with only a single margin parameter $\gamma$ controlling the required separation between negative pairs.
+The loss sweep in Section~\ref{sec_res_pggat_sweep} confirms $\gamma = 0.5$ as near-optimal.
+
+Triplet-mining and InfoNCE-based alternatives were not explored further in this work.
+The simpler margin-based loss already produces embeddings that work effectively with a $k$-means read-out,
+and Section~\ref{sec_res_learned_heads} shows
+that the learned grouping heads tested on the same embeddings do not improve on this result.
+
+\subsection{Deep clustering and slot attention}
+\label{sec_lit_rep_learn_deepcluster}
+
+The contrastive-plus-$k$-means approach places most of the grouping responsibility in the learned embedding,
+while the clustering stage acts mainly as a simple read-out.
+Another family of methods takes a different approach
+by learning the clustering behaviour as part of the network itself.
+Deep Embedded Clustering (DEC)~\cite{xie2016dec} combines an autoencoder
+with soft cluster assignments based on a Student's $t$-distribution.
+The embedding and cluster centres are optimised together
+by minimising the KL divergence between a sharpened target distribution and the current soft assignments -
+importantly, this process is unsupervised and does not require ground-truth cluster labels.
+
+Slot Attention~\cite{locatello2020slotattention} approaches the problem differently.
+It uses an iterative attention process between a set of learned ``slot'' vectors and the input features,
+with the aim of having each slot represent a separate object or instance.
+Both DEC and Slot Attention are established representation-learning approaches
+for discovering structure within image-level features,
+and were therefore considered as possible learned grouping heads on top of the contrastive backbone.
+
+Neither approach improved the grouping results in the experiments reported in Section~\ref{sec_res_learned_heads}.
+For DEC, the main problem is related to the behaviour described in Section~\ref{sec_meth_dec_pose} -
+its unsupervised sharpening step reinforces the current cluster assignments,
+but has no direct way of correcting an incorrect initial assignment.
+If two same-type keypoints from different people are already close in the embedding space,
+the sharpening process can therefore strengthen the incorrect grouping rather than resolve it.
+
+Slot Attention has a different limitation in this setting -
+its competitive assignment between slots is driven by the embedding features,
+without an explicit constraint based on keypoint type.
+Consequently, there is no structural rule preventing two keypoints of the same type,
+such as two left elbows, from being assigned to the same person slot.
+These behaviours are examined further in Chapter~\ref{chap_4} and discussed in Chapter~\ref{chap_5}.
+For the present literature review,
+the important distinction is that neither approach directly incorporates
+the type-exclusivity prior available in human pose.
+PG-GAT instead makes use of this structural information through its skeleton-aware attention mechanism.
+
+\subsection{Modularity-driven graph clustering}
+\label{sec_lit_rep_learn_modularity}
+
+A third family of methods performs clustering directly on the graph structure rather than on a learned embedding.
+Newman modularity~\cite{newman2006modularity} measures
+how much more edge connectivity exists within a proposed cluster
+than would be expected under a degree-based null model.
+DMoN~\cite{tsitsulin2023dmon} turns this idea into a differentiable clustering objective,
+allowing the modularity criterion to be trained together with a GNN
+using a linear projection followed by a softmax assignment.
+
+DMoN provides a useful alternative to the learned grouping heads discussed in the previous subsection
+because it makes direct use of graph topology rather than relying only on the learned embedding.
+The keypoint $k$NN graph described in Section~\ref{sec_meth_problem_graph} provides this structural information,
+making modularity-based clustering a reasonable approach to test for the grouping problem.
+
+However, none of the ten SA-DMoN variants evaluated in Section~\ref{sec_res_sadmon}
+outperform the simpler $k$-means approach.
+The analysis in Chapter~\ref{chap_5} suggests
+that this is largely due to a mismatch between the modularity null model
+and the spatial-proximity graph used for pose grouping -
+the degree-based null model assumes that node connectivity can be explained mainly through node degree,
+an assumption that is more appropriate for networks such as co-authorship or protein-protein graphs.
+In the keypoint $k$NN graph, however, edges are created primarily from spatial proximity,
+so nearby keypoints are strongly connected regardless of whether they belong to the same person.
+
+As a result, the modularity objective can favour spatially compact groups
+that do not correspond to the correct person identities.
+The null-model modifications tested in the SA-DMoN experiments
+do not provide enough useful signal to overcome this problem.
+Although the result is negative, it is still useful for the design of PG-GAT:
+on the same underlying keypoint graph,
+directly optimising the graph partition is less effective
+than learning a contrastive embedding and clustering that representation afterwards.
+
+\subsection{Graph partitioning and spectral methods}
+\label{sec_lit_rep_learn_partition}
+
+The classical alternative to embedding-based clustering is to partition the graph directly.
+Normalised cut~\cite{shi2000ncut} formulates this as a balanced partitioning problem using the graph Laplacian.
+The spectral clustering review by von Luxburg~\cite{vonluxburg2007spectral}
+describes the relaxations that make the original discrete problem tractable
+by using the eigenvectors of the Laplacian.
+A learned version of a related idea
+appears in the face-clustering work of Yang et al.~\cite{yang2019face, yang2020gcnve} -
+their approach uses a GCN to predict pairwise same-identity affinities,
+after which identities are recovered from connected components in a thresholded affinity graph.
+
+The graph-partitioning head evaluated in Section~\ref{sec_res_learned_heads}
+adapts the pair-feature construction of Yang et al. to the pose embeddings used in this work.
+It is the third of the three learned grouping heads tested
+and gives the strongest performance on the synthetic validation data,
+although this improvement does not carry across to COCO.
+As described in Section~\ref{sec_meth_partition_pose},
+the binary edge classifier is sensitive to changes in the distribution of the embeddings -
+the synthetic-to-real domain gap introduces this type of shift and results in poorer transfer to real detections.
+The corresponding experimental results are reported in Section~\ref{sec_res_learned_heads}.
+
+Importantly, the partitioning head uses the same contrastive embeddings as the $k$-means baseline,
+without changing or retraining the embedding network.
+This provides a useful control in the comparison:
+both methods receive the same learned representation,
+so the difference in their performance can be attributed more directly to the grouping head
+rather than to the quality of the underlying embedding.
+
+
+\subsection{Implication for the methodology}
+\label{sec_lit_rep_learn_implication}
+
+Of the four families reviewed in this section,
+contrastive embedding is the only approach retained in the final PG-GAT method.
+The three learned grouping heads - deep clustering, slot attention, and graph partitioning -
+are evaluated using the same backbone in the experimental chapter.
+The SA-DMoN variants are also tested as an alternative based more directly on graph structure,
+but none of these approaches improves on the simpler $k$-means read-out.
+
+These results support the argument developed in the experimental chapter
+that the embedding itself has a greater effect on grouping performance than adding a more complex grouping head.
+This also narrows the design space considered for PG-GAT -
+the contrastive loss and $k$-means read-out are kept relatively simple,
+while the embedding network itself is modified to make better use of the structure available in human pose.
+
+Section~\ref{sec_lit_geometry} continues this review
+by considering which embedding \emph{space} is most appropriate for representing skeletons.
+Section~\ref{sec_lit_gap} then brings the preceding literature together
+and defines the research gap addressed by the proposed method.

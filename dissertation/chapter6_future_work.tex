@@ -1,4 +1,167 @@
 \section{Future Work}
 \label{sec_conc_future}
 
-Three directions. (1) The PEng follow-up re-frames grouping as structured assignment and develops SCOT, SCOT-KI, and THA --- closing on HigherHRNet's 0.985 with algorithmic rather than embedding changes. (2) A fully hyperbolic PG-GAT architecture (hyperbolic attention, not only hyperbolic output) would test the geometric-prior hypothesis more cleanly than the partial variant evaluated here. (3) End-to-end joint training with a detector would give up modularity to regain the coupling advantage AE exploits, and would quantify how much of the 0.03 gap is fundamental versus avoidable.
+The supported hypothesis and the negative results reported in this work
+leave several questions open.
+Five directions follow directly from the experimental findings,
+each addressing a limitation or unresolved mechanism identified during
+the investigation.
+
+\subsection{Constraint-aware grouping read-outs}
+\label{sec_conc_future_constrained}
+
+The experiments in this work use unconstrained $k$-means as the final
+grouping read-out.
+This keeps the grouping stage simple and makes the effect of changes to
+the embedding easier to isolate,
+but it does not use all of the structure available in the COCO skeleton.
+In particular, a valid person instance cannot contain two keypoints of
+the same joint type.
+Standard $k$-means has no mechanism for enforcing this type-exclusivity
+constraint.
+
+A constraint-aware read-out could impose this rule directly during
+inference while retaining the same learned embedding.
+Such a method would not require the PG-GAT network to be retrained and
+could therefore be evaluated as a direct replacement for $k$-means.
+This would also provide a useful continuation of the learned-head
+experiments -
+rather than increasing the capacity of the grouping stage,
+the read-out would remain simple but make use of a known structural
+constraint.
+Measuring how much of the remaining grouping error can be recovered in
+this way is a natural extension of the present work.
+
+\subsection{Fully hyperbolic architecture}
+\label{sec_conc_future_hyperbolic}
+
+The hyperbolic PG-GAT evaluated in Section~\ref{sec_res_hyperbolic}
+is a hybrid architecture.
+Message passing remains Euclidean and only the final representation is
+projected onto the Lorentz hyperboloid.
+Under this design, H1 (improved or matched quality at the same
+embedding dimension) is not supported.
+H2 shows a more promising result at low dimension,
+where the hyperbolic model matches the larger Euclidean representation
+under synthetic-only training,
+but this advantage does not survive COCO fine-tuning.
+
+These results do not completely resolve the geometric-prior question
+because most of the network still operates in Euclidean space.
+A fully hyperbolic PG-GAT would instead perform the relevant
+transformations and aggregation operations directly in hyperbolic space.
+Possible components include M\"obius operations for the learnable
+transformations,
+Fr\'echet-mean aggregation during message passing,
+and attention mechanisms defined consistently with the chosen hyperbolic
+geometry.
+
+Such an architecture would require substantially more implementation and
+numerical-stability work than the hybrid model tested here.
+The hybrid design was therefore a reasonable first test of whether the
+additional complexity was likely to be justified.
+Its negative H1 result does not rule out a fully hyperbolic model,
+however, because the Euclidean message-passing layers remain a
+confounding factor.
+A fully hyperbolic implementation would provide a cleaner test of
+whether the skeleton's tree structure offers a useful geometric prior
+for pose grouping.
+
+\subsection{End-to-end joint training with the detector}
+\label{sec_conc_future_jointtrain}
+
+The headline modular pipeline trails HigherHRNet's jointly trained AE
+grouping by $0.0256$ PGA on the same matched detections.
+The present work interprets this difference as the measured cost of
+detector independence,
+but the experiments do not determine how much of the gap follows from
+the absence of joint training and how much follows from differences
+between the grouping mechanisms themselves.
+
+Jointly training PG-GAT with a keypoint detector would separate these
+effects.
+The experiment would deliberately give up the detector-swap property
+established in this work
+but would provide a controlled measurement of the benefit obtained from
+detector-specific feature adaptation.
+If joint training closes the gap to AE,
+the result would show that the remaining difference is largely the price
+paid for modularity.
+If a substantial gap remains,
+this would suggest that the native AE formulation benefits from
+properties that are not recovered simply by exposing PG-GAT to the
+detector during training.
+
+This experiment would therefore quantify the accuracy--modularity
+trade-off more directly and help identify the source of the remaining
+end-to-end difference.
+
+\subsection{Detector-recall sensitivity of autonomous K estimation}
+\label{sec_conc_future_recall}
+
+The detector-swap experiments of Section~\ref{sec_res_e2e_swap}
+provide four operating points for the relationship between detection
+recall and the advantage of predicted $K$ over oracle $K$.
+Across the three detectors, the predicted-$K$ advantage increases as
+recall decreases,
+while the ground-truth-keypoint control reverses the sign when recall
+is effectively complete.
+This supports the effective-person-count explanation developed in
+Section~\ref{sec_disc_modularity_autonomy_autonomy}.
+
+The existing comparison cannot isolate recall completely, however,
+because changing the detector also changes localisation noise,
+duplicate detections,
+confidence calibration,
+training data,
+and the distribution of missed joints.
+A controlled experiment could vary recall while holding the detector
+fixed,
+for example by changing its detection threshold or by systematically
+removing detections from a fixed output set.
+The resulting experiment would trace predicted-$K$ versus oracle-$K$
+performance across a continuous range of recall values while removing
+the main between-detector confounding factors.
+
+The current four operating points establish a credible relationship.
+A controlled within-detector sweep would determine its shape and could
+identify the recall range at which predicting the effective person count
+becomes preferable to using the annotation-level count.
+
+\subsection{Multi-seed variance characterisation}
+\label{sec_conc_future_seeds}
+
+The experiments reported in Chapter~\ref{chap_4} use a single training
+seed per configuration.
+This is most relevant for the synthetic experiments,
+where validation is performed on only 100 scenes and the smallest
+reported differences are approximately $0.005$ PGA.
+Differences of this size should therefore be interpreted cautiously,
+as already done for the individual PG-GAT ablation rows.
+The much larger COCO validation set reduces evaluation variance
+but does not remove variation introduced by training initialisation.
+
+A useful follow-on would repeat the main synthetic experiments over
+three to five seeds and report the resulting mean and variance.
+The PG-GAT isolation ablation of Section~\ref{sec_res_pggat_ablations}
+is the highest-priority case,
+because its individual modification gains are small.
+Repeating selected SA-DMoN configurations would similarly provide a
+tighter empirical bound on the $0.77$--$0.79$ plateau and distinguish
+training-seed variation from the already small differences between
+variants.
+
+The same experiment could independently vary the graph neighbourhood
+size $k$.
+In the present implementation, $k$ is coupled to embedding dimension
+($k=8$ below dimension $256$ and $k=16$ at dimension $256$) rather than
+treated as an independent hyperparameter
+(Section~\ref{sec_meth_problem_graph}).
+Separating these variables would show whether part of the
+architecture-sweep gain attributed to embedding capacity is associated
+with the corresponding change in graph connectivity.
+
+A three- to five-seed replication of the synthetic experiments would
+require only a fraction of the compute used for the COCO fine-tuning
+investigation and would provide a stronger statistical basis for a
+publication-oriented version of the ablation and SA-DMoN results.

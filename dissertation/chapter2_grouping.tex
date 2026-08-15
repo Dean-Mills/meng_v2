@@ -1,4 +1,187 @@
 \section{Grouping in Bottom-Up Pose Estimation}
 \label{sec_lit_grouping}
 
-Review of the major grouping mechanisms in the bottom-up literature: part-affinity fields (OpenPose), associative embeddings (Newell et al.), PersonLab mid-range offsets, HGG (graph-based), CenterGroup. How each binds tightly to its host detector and why that limits modularity.
+The bottom-up methods discussed in Section~\ref{sec_lit_hpe_bottomup} generally follow the same structure:
+a single-image detector first produces the keypoints present in the image,
+after which a grouping mechanism determines which keypoints belong to each person.
+It is mainly this grouping stage that separates the different bottom-up approaches.
+The way grouping is performed determines whether the detector can be replaced independently of the rest of the system.
+
+This section reviews the four main grouping approaches identified in the bottom-up literature,
+following the order in which they were introduced.
+It then considers the smaller group of graph-based methods,
+which is where the contribution of this work is positioned.
+Finally, the section identifies the main property
+that the proposed method in Chapter~\ref{chap_3} is intended to preserve.
+
+
+\subsection{Part-affinity fields}
+\label{sec_lit_grouping_paf}
+
+The first end-to-end bottom-up method, OpenPose~\cite{cao2017openpose},
+predicts a dense 2D vector field for each anatomical limb alongside the standard per-keypoint heatmaps.
+These vector fields are known as part-affinity fields (PAFs).
+At each pixel, the PAF contains a 2D vector pointing in the direction of the corresponding limb.
+During inference, candidate pairs of keypoints, such as a left shoulder and left elbow,
+are scored using the line integral of the PAF between their locations.
+Bipartite matching is then applied to the resulting weighted graph to assemble the individual person skeletons.
+
+This matching is performed greedily, one limb at a time.
+While this makes the approach efficient, it also means that decisions are made locally.
+An incorrectly assigned limb cannot easily be corrected through a later global optimisation step
+once the matching decision has already been made.
+PifPaf~\cite{kreiss2019pifpaf} builds on the PAF approach using a Laplace-distributed regression head,
+improving keypoint localisation for low-resolution inputs and partially occluded people.
+However, its grouping stage still relies on a similar greedy bipartite-matching procedure.
+
+An important consequence of the PAF design is that the limb-field and heatmap predictions
+come from a shared backbone and are trained together.
+This makes replacing the detector after training impossible:
+the PAF head is tied to properties of the detector such as its spatial resolution and feature stride,
+while the matching procedure depends on the relationship between the predicted PAFs and heatmap peaks.
+This differs from the approach taken by PG-GAT,
+which is designed to work directly with keypoint coordinates produced by an upstream detector.
+PG-GAT therefore treats grouping as a separate, detector-independent stage
+rather than as an extension of the PAF framework.
+
+\subsection{Associative embeddings}
+\label{sec_lit_grouping_ae}
+
+Newell and Deng~\cite{newell2017associative} introduced associative embeddings
+as another approach to bottom-up grouping.
+A small head attached to the keypoint detector predicts a scalar, or short vector, ``tag'' for each detected keypoint.
+The training loss consists of two main parts:
+a pull term encourages keypoints belonging to the same person to have tags close to their per-person mean,
+while a push term encourages the means of different people to remain separated.
+At inference, the predicted tags can then be clustered using a simple threshold
+or, for scalar tags, a method such as 1D k-means.
+The resulting clusters correspond to the different people in the image.
+HigherHRNet~\cite{cheng2020higherhrnet} later applied this approach
+to the high-resolution HRNet~\cite{sun2019hrnet} backbone family
+and provides the publicly available reference used for the end-to-end comparisons in Chapter~\ref{chap_4}.
+
+One of the strengths of associative embeddings
+is that the grouping representation and keypoint detector are trained together.
+The associative-embedding loss is calculated
+using the keypoint detections produced by the heatmap head during the same forward pass,
+so the tag head can adapt to the feature representation and detection errors of the particular backbone.
+This can be useful in difficult regions where poses overlap or keypoint locations are ambiguous,
+and helps explain the strong end-to-end performance of associative embedding methods.
+
+The disadvantage is that this also creates a close dependency between the detector and grouping head.
+The learned tags are based on the features of the backbone used during training,
+meaning that the tag head cannot be moved to a different detector.
+This is an important difference from the modular approach considered in this work.
+Chapter~\ref{chap_4} therefore uses the AE pipeline's headline E2E PGA
+as an upper-bound reference point for the proposed method.
+The difference between this result and the modular approach,
+referred to as the detector-independence gap in Section~\ref{sec_res_e2e},
+provides a measure of the performance cost associated with giving up this joint-training advantage.
+
+\subsection{Mid-range offsets and centre regression}
+\label{sec_lit_grouping_centre}
+
+PersonLab~\cite{papandreou2018personlab} introduced another major approach to bottom-up grouping.
+Alongside the keypoint heatmaps,
+the network predicts mid-range offset vectors that connect keypoints belonging to the same person.
+Person skeletons are then constructed by starting from a high-confidence keypoint, such as the nose or shoulder,
+and following the predicted offsets to the remaining joints.
+
+DEKR~\cite{geng2021dekr} takes a simpler centre-based approach.
+Rather than predicting a full set of pairwise offsets,
+it predicts offsets between keypoints and a corresponding person centre,
+making the grouping stage more direct since keypoints can be associated through their predicted centre.
+CenterGroup~\cite{braso2021centergroup} develops this idea further
+using a transformer to generate context-aware embeddings for both detected keypoints and predicted person centres.
+Multi-head cross-attention is then used to associate each joint with the appropriate centre.
+
+There are two main consequences of centre-regression methods when considering them for downstream grouping.
+First, the grouping decision is largely determined by the predicted offsets or centre associations at inference,
+which makes grouping relatively fast
+but does not provide a general per-keypoint representation that could be passed to a different clustering method.
+Second, as with associative embeddings,
+the offset predictions are learned jointly with the keypoint detector,
+so the grouping behaviour is closely linked to the backbone and features used during training.
+
+These approaches achieve strong end-to-end performance,
+but this comes with reduced flexibility when the detector or grouping stage needs to be replaced independently.
+This same trade-off between end-to-end performance and modularity
+is also present in the approaches discussed in the following two subsections.
+
+\subsection{End-to-end set prediction}
+\label{sec_lit_grouping_setpred}
+
+The fourth grouping lineage takes a different approach
+by removing the explicit grouping stage and replacing it with end-to-end set prediction.
+Methods such as PETR~\cite{shi2022petr}, ED-Pose~\cite{yang2023edpose},
+GroupPose~\cite{liu2023grouppose}, and QueryPose~\cite{xiao2022querypose}
+follow the DETR~\cite{carion2020detr} set-prediction paradigm.
+A fixed set of pose queries attends to the image features,
+with each query learning to predict a complete skeleton for one person.
+During training, bipartite matching is used to assign each ground-truth person to a corresponding query.
+There is no separate grouping stage during inference -
+the keypoints are already associated with a person through the query that produced them.
+
+These approaches achieve competitive results on COCO without requiring additional grouping logic after detection.
+However, this structure is less suitable when grouping needs to be treated as an independent problem.
+The network does not expose a separate per-keypoint representation,
+since the relationship between a person and their keypoints is contained within the pose query itself.
+A modular grouping method that works on detached keypoint coordinates
+therefore cannot be added to a DETR-style pipeline without making significant changes to the pose-query architecture.
+
+For this reason,
+set-prediction methods are included here as an alternative approach to solving the multi-person pose problem
+rather than as a direct comparison with the modular grouping method proposed in this work.
+
+\subsection{Graph-based grouping}
+\label{sec_lit_grouping_graph}
+
+A smaller but growing area of the bottom-up literature treats keypoint grouping as a graph problem.
+This is also the area in which the proposed PG-GAT method is positioned.
+HGG~\cite{jin2020hgg} formulates grouping as hierarchical higher-order graph matching,
+where detected keypoints form the nodes and candidate connections between them form the edges.
+A learned discriminator is then used
+to progressively merge smaller sub-graphs into clusters representing individual people.
+However, the graph edges and merge predictor are trained together with the detector -
+this keeps the benefits of joint training,
+but also means that the grouping method remains closely linked to the detector.
+
+Yang et al.~\cite{yang2023instanceaware} take a different graph-related approach
+by supervising the self-attention weights within a Vision Transformer to become instance-aware.
+The resulting attention matrix contains information about which keypoints belong to the same person.
+In this case, however, grouping is again learned as part of the detector backbone rather than as a separate stage.
+
+The graph-based method most closely related to the approach proposed in this work
+is Graph Edge Classification (GEC)~\cite{maher2025gec}.
+GEC predicts a binary same-person label for pairs of detected keypoints
+and then recovers person identities from connected components in the resulting affinity graph.
+Importantly, GEC operates on the outputs of an existing detector without requiring the detector itself to be retrained,
+making it the most direct comparison point for modular grouping methods.
+
+PG-GAT, introduced in Chapter~\ref{chap_3},
+differs from GEC mainly in how the graph information is learned and represented.
+It uses type-aware edge attention and produces an embedding for each keypoint,
+rather than predicting only a binary score for each edge.
+The graph-partitioning ablation in Section~\ref{sec_res_learned_heads}
+evaluates an edge-classification alternative using the same backbone as PG-GAT,
+providing a more direct comparison between the two formulations,
+and is used to evaluate the choice of a per-keypoint embedding over a per-edge classifier.
+
+\subsection{The modularity criterion}
+\label{sec_lit_grouping_modularity_criterion}
+
+The five approaches discussed above cover most of the bottom-up grouping literature.
+In four of these, the grouping mechanism is closely tied to the detector that produces the keypoints.
+Graph-based grouping with explicit per-keypoint operations is the exception,
+since the grouping stage can, at least in principle, be used with outputs from a different detector.
+
+This separation is the defining property of the proposed PG-GAT method.
+The embedding network operates directly on detected keypoint coordinates
+and does not require access to the detector's internal feature maps or its original training data.
+The upstream detector can therefore be replaced after PG-GAT has been trained
+without requiring the grouping network to be retrained.
+
+The detector-independence described in Section~\ref{sec_meth_integration} follows from this modular design,
+and its practical effect is evaluated through the end-to-end comparison in Section~\ref{sec_res_e2e}.
+The following section reviews the graph neural network literature
+that provides the basis for the proposed embedding network.

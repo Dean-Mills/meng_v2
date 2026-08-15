@@ -1,0 +1,82 @@
+\section{Research Question Recap}
+\label{sec_disc_rq_recap}
+
+This closing section consolidates the answers to the seven research questions of Section~\ref{sec_intro_objective} for the reader's convenience.
+The substantive arguments and evidence appear in Sections~\ref{sec_disc_embedding}--\ref{sec_disc_modularity_autonomy} of this chapter and the corresponding experimental sections of Chapter~\ref{chap_4};
+the table below maps each question to its answer and the section in which the supporting evidence is developed.
+
+\begingroup
+\tablesize
+\renewcommand{\arraystretch}{1.25}
+\begin{longtable}{p{0.18\linewidth}p{0.55\linewidth}p{0.18\linewidth}}
+\toprule
+Research question & Answer & Evidence \\
+\midrule
+\endfirsthead
+\toprule
+Research question & Answer & Evidence \\
+\midrule
+\endhead
+\midrule
+\multicolumn{3}{r}{\emph{continued on next page}} \\
+\endfoot
+\bottomrule
+\caption{Concise mapping of each research question to its answer and the discussion section in which the supporting argument is developed.
+The substantive interpretation of each result appears in the referenced section;
+this table is a navigation aid and not the substance of the chapter.}
+\label{tab:rq_recap}
+\endlastfoot
+RQ1 --- The lever &
+The binding constraint is the per-keypoint embedding, not the grouping algorithm.
+Three learned heads and ten modularity variants all fail to outperform plain $k$-means on the standard embedding,
+while embedding-side modifications are the only changes whose gains survive transfer to COCO.
+& \S\ref{sec_disc_embedding_heads}, \S\ref{sec_disc_embedding_sadmon}, \S\ref{sec_disc_embedding_pggat} \\
+
+RQ2 --- Inductive biases &
+The three skeleton-aware modifications (type-pair attention, skeleton-relative positional encoding, same-type repulsion heads) each contribute approximately $+0.005$ in isolation and approximately $+0.011$ in combination.
+The architecture sweep over depth and capacity dominates the modifications ($+0.0738$ over the ablation row).
+The loss sweep produces no configuration above the defaults.
+& \S\ref{sec_disc_embedding_pggat} \\
+
+RQ3 --- Detector independence &
+The modular grouper reaches $0.9591$ E2E PGA against HigherHRNet AE's $0.9847$ on the same matched detections,
+a gap of $0.0256$.
+Applied zero-shot to YOLO11x-pose and RTMO-L detections,
+the autonomous pipeline trails each detector's native grouping by $0.0210$ and $0.0220$;
+the price of detector independence is therefore stable at approximately $0.02$ PGA across three detector families.
+& \S\ref{sec_disc_modularity_autonomy_gap}, \S\ref{sec_res_e2e_swap} \\
+
+RQ4 --- Embedding geometry &
+The hyperbolic variant matches the Euclidean variant at four-fold smaller embedding dimension under synthetic-only training (H2 supported)
+but loses to the Euclidean variant by $0.0166$ COCO PGA after COCO fine-tuning.
+Hyperbolic geometry is an efficiency observation at low dimension, not a quality win at the headline operating point.
+H1 (quality at matched dimension) is unsupported.
+& \S\ref{sec_disc_transfer_hyperbolic} \\
+
+RQ5 --- Graph primitive &
+The triplet primitive underperforms the joint primitive by $0.0156$ synth val PGA at matched training compute.
+The dominant failure mode is the voting step that converts per-triplet cluster labels into per-joint labels;
+small per-triplet errors propagate to multiple joint memberships.
+The negative result is attributed to the triplet-to-joint voting stage
+rather than to the articulation signal itself.
+& \S\ref{sec_disc_transfer_trigat} \\
+
+RQ6 --- Synthetic-to-real transfer &
+COCO fine-tuning lifts the embedding by approximately $+0.07$ COCO val PGA at the architecture-sweep winner,
+the single largest gain measured in the experimental chapter.
+Synthetic-validation accuracy is preserved through fine-tuning (no catastrophic forgetting at the sweep operating point),
+and the lift is comparable in magnitude to the entire architecture sweep.
+& \S\ref{sec_disc_transfer_finetune} \\
+
+RQ7 --- Autonomous deployment &
+The K-head trained on the meng-headline COCO embeddings achieves $76.1\%$ exact K-prediction accuracy and $91.9\%$ off-by-one accuracy on COCO val.
+The resulting autonomous pipeline produces $0.9644$ E2E PGA,
+$0.0053$ \emph{above} the oracle-K row at $0.9591$.
+The evidence is consistent with the K prediction calibrating to the effective person count in the matched-detection set,
+whereas oracle K describes the annotated scene;
+the advantage is monotone in the recall deficit across four operating points
+($+0.0006$ to $+0.0304$ as recall falls from $0.816$ to $0.774$, with a sign flip at perfect recall).
+The autonomous pipeline is therefore not a compromise relative to oracle K but the operational measurement of the complete system.
+& \S\ref{sec_disc_modularity_autonomy_autonomy}, \S\ref{sec_res_e2e_swap} \\
+\end{longtable}
+\endgroup

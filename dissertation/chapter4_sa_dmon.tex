@@ -1,118 +1,238 @@
 \section{SA-DMoN}
 \label{sec_res_sadmon}
 
-This section reports the results for the eleven SA-DMoN variants of Section~\ref{sec_meth_sadmon}:
-the vanilla DMoN baseline,
-five v1 configurations that parameterise the spatial-bandwidth $\sigma$ of the skeleton-aware null,
-four v2 configurations that decouple the spectral-loss adjacency from the message-passing adjacency and replace the supervised type loss with an entropy formulation,
-and a no-spectral diagnostic that removes the modularity term entirely.
-The collective result motivates abandoning modularity-driven heads as a research direction:
-every SA-DMoN configuration plateaus inside a $0.77$--$0.79$ band on synthetic validation,
-well below the no-depth baseline of $0.8783$.
-No bandwidth schedule, no null-model modification, and no type-loss reformulation moves the result above this plateau.
+This section reports the results for the ten SA-DMoN configurations
+introduced in Section~\ref{sec_meth_sadmon}.
+The experiments begin with vanilla DMoN
+and then evaluate five v1 configurations based on the skeleton-aware
+spatial null model.
+These vary the treatment of the spatial bandwidth $\sigma$
+and include a diagnostic configuration in which the spectral term
+is removed entirely.
+Four v2 configurations then test whether the result changes
+when the adjacency used by the modularity objective is decoupled
+from the geometric message-passing graph,
+when the type-exclusivity term is replaced by the entropy-based
+formulation,
+or when both changes are applied together.
+
+Across these changes, the result remains largely unchanged.
+All ten configurations converge to synthetic-validation PGA values
+in a narrow range of approximately $0.77$--$0.79$,
+below the no-depth GAT baseline of $0.8783$.
+Neither changing the bandwidth treatment nor modifying the adjacency
+and type-loss formulations produces a configuration that breaks out
+of this range.
+The consistency of the result across the two SA-DMoN generations
+suggests that the limitation is not associated with a single choice
+of $\sigma$ or one particular implementation of the auxiliary losses.
+Instead, the experiments provide evidence that the modularity objective
+itself is poorly aligned with the spatial keypoint graph used
+for pose grouping.
+On this basis, modularity-driven grouping is not pursued further,
+and the investigation moves toward modifying the embedding network
+directly.
 
 \subsection{Setup}
 \label{sec_res_sadmon_setup}
 
-All eleven configurations share the GAT backbone of Section~\ref{sec_meth_baseline}
-and the optimiser and schedule of Section~\ref{sec_meth_baseline_training};
-the only differences are the head loss and, in v2, the adjacency feeding the spectral term.
-The v1 configurations train for 150 epochs and the v2 configurations for 100 epochs;
-the longer v1 schedule was reserved for variants whose head loss had not plateaued by 100 epochs
-to give every opportunity to escape the plateau,
-and the v2 schedule was set to the shorter value after empirical verification that all v2 head losses converge well before 100 epochs.
-The head-loss weight $\lambda_{\text{spectral}}$ is reported per-variant in the table below;
-the orthogonality and collapse-prevention weights are fixed at $0.1$ (the values in the original DMoN paper~\cite{tsitsulin2023dmon}),
-and the supervised-CE term retains weight $1.0$ throughout.
+All ten SA-DMoN configurations use the standard GAT backbone of
+Section~\ref{sec_meth_baseline}
+and otherwise retain the optimiser and training settings of
+Section~\ref{sec_meth_baseline_training}.
+The experimental variables are confined to the DMoN head and,
+for the v2 variants, the adjacency matrix supplied to the spectral objective.
+This keeps the underlying embedding architecture fixed
+while testing whether changes to the modularity formulation improve
+the resulting grouping.
+
+The v1 configurations are trained for 150 epochs.
+This longer schedule was retained for variants whose head losses
+were still changing at epoch 100,
+so that an apparent plateau was not caused simply by terminating
+training too early.
+The v2 configurations are trained for 100 epochs,
+after preliminary runs showed that their head losses had already
+converged within this interval.
+The difference in training length therefore reflects the observed
+convergence behaviour of the two groups
+rather than a change in the optimisation objective.
+
+The spectral-loss coefficient $\lambda_{\text{spectral}}$ varies
+between configurations and is reported with the corresponding results
+below.
+The orthogonality and collapse-prevention terms are both assigned
+a fixed weight of $0.1$,
+following the DMoN formulation of Tsitsulin et al.~\cite{tsitsulin2023dmon}.
+The supervised cross-entropy term retains a weight of $1.0$ throughout.
+Consequently, the ablation isolates the treatment of the modularity
+signal
+while keeping the remaining loss weights and GAT training configuration
+fixed.
 
 \subsection{Headline numbers}
 \label{sec_res_sadmon_numbers}
 
 \begin{table}[H]
 \centering
-\footnotesize
-\begin{tabular}{llccl}
+\tablesize
+\begin{tabular}{lp{0.42\linewidth}ccl}
 \toprule
-ID & Configuration & Synth val PGA & COCO val PGA (kNN, GT kp) & W\&B run \\
+ID & Configuration & Synth val PGA & COCO val PGA & W\&B run \\
 \midrule
-& Standard GAT baseline (depth off) & 0.8783 & 0.8841 & \texttt{jkd1ln4a} \\
+& Standard GAT baseline (depth off)
+    & 0.8783 & 0.8841 & \texttt{jkd1ln4a} \\
 \midrule
-Exp 3-bis & Vanilla DMoN, $\lambda_{\text{spectral}} = 0.1$               & 0.7879 & [Phase C] & \texttt{124ykt2c} \\
-Exp 4     & SA-DMoN v1, learnable $\sigma$, unconstrained                & 0.7872 & [Phase C] & \texttt{69yfqshy} \\
-Exp 5     & SA-DMoN v1, learnable $\sigma$, clamped $[0.05, 0.5]$        & 0.7918 & [Phase C] & \texttt{rvd7qaow} \\
-Exp 6     & SA-DMoN v1, clamped $\sigma$, $\lambda_{\text{spectral}} = 1.0$ & 0.7892 & [Phase C] & \texttt{2ok6u2k3} \\
-Exp 7     & SA-DMoN v1, $\sigma$ = per-graph median pairwise distance     & 0.7769 & [Phase C] & \texttt{usjwc380} \\
-Exp 8     & SA-DMoN v1, spectral term removed                             & 0.7889 & [Phase C] & \texttt{2ucbx3e0} \\
-Exp v2a   & SA-DMoN v2, feature adjacency only, $\lambda_{\text{spectral}} = 1.0$ & 0.7849 & [Phase C] & \texttt{x6v3wfnv} \\
-Exp v2b   & SA-DMoN v2, feature adjacency only, $\lambda_{\text{spectral}} = 0.1$ & 0.7925 & [Phase C] & \texttt{qn7rv98j} \\
-Exp v2c   & SA-DMoN v2, entropy type loss only                            & 0.7934 & [Phase C] & \texttt{zz2sj7an} \\
-Exp v2d   & SA-DMoN v2, feature adjacency + entropy type loss             & 0.7910 & [Phase C] & \texttt{02jqs33r} \\
+Exp 3-bis & Vanilla DMoN, $\lambda_{\text{spectral}} = 0.1$
+    & 0.7879 & 0.8657 & \texttt{124ykt2c} \\
+Exp 4 & SA-DMoN v1, learnable $\sigma$, unconstrained
+    & 0.7872 & 0.8658 & \texttt{69yfqshy} \\
+Exp 5 & SA-DMoN v1, learnable $\sigma$, clamped $[0.05, 0.5]$
+    & 0.7918 & 0.8649 & \texttt{rvd7qaow} \\
+Exp 6 & SA-DMoN v1, clamped $\sigma$, $\lambda_{\text{spectral}} = 1.0$
+    & 0.7892 & 0.8628 & \texttt{2ok6u2k3} \\
+Exp 7 & SA-DMoN v1, $\sigma$ = per-graph median pairwise distance
+    & 0.7769 & 0.8642 & \texttt{usjwc380} \\
+Exp 8 & SA-DMoN v1, spectral term removed
+    & 0.7889 & 0.8684 & \texttt{2ucbx3e0} \\
+Exp v2a & SA-DMoN v2, feature adjacency only,
+          $\lambda_{\text{spectral}} = 1.0$
+    & 0.7849 & 0.8622 & \texttt{x6v3wfnv} \\
+Exp v2b & SA-DMoN v2, feature adjacency only,
+          $\lambda_{\text{spectral}} = 0.1$
+    & 0.7925 & 0.8677 & \texttt{qn7rv98j} \\
+Exp v2c & SA-DMoN v2, entropy type loss only
+    & 0.7934 & 0.8660 & \texttt{zz2sj7an} \\
+Exp v2d & SA-DMoN v2, feature adjacency + entropy type loss
+    & 0.7910 & 0.8652 & \texttt{02jqs33r} \\
 \bottomrule
 \end{tabular}
-\caption{All eleven SA-DMoN configurations.
-Synthetic-validation PGA stays within the $0.77$--$0.79$ band across every configuration,
-spanning a range of $0.0165$ across the eleven runs ---
-smaller than the per-image standard deviation of the metric.
-The variation between rows is statistically indistinguishable from seed noise,
-which is the strongest possible evidence that the modifications under test do not produce any useful gradient signal on the keypoint $k$NN graph.}
+\caption{Results for the ten DMoN and SA-DMoN configurations compared
+with the no-depth GAT baseline. COCO val PGA is $k$-means on ground-truth
+keypoints. Synthetic-validation PGA remains within
+$[0.7769, 0.7934]$ across all ten configurations, a total range of
+$0.0165$, and every configuration remains below the baseline value of
+$0.8783$. The same pattern is observed on COCO: applying $k$-means to
+the jointly trained embeddings produces PGA values between $0.8622$
+and $0.8684$, compared with $0.8841$ for the baseline. The DMoN heads'
+own COCO read-outs are lower still, ranging from $0.8107$ to $0.8213$.
+Across the tested configurations, neither the skeleton-aware null model,
+the treatment of $\sigma$, the spectral-loss weight, feature-based
+adjacency, nor the entropy type loss produces an improvement over the
+standard GAT baseline.}
 \label{tab:sadmon_headline}
 \end{table}
 
 \subsection{Interpretation}
 \label{sec_res_sadmon_discussion}
 
-The eleven configurations of Table~\ref{tab:sadmon_headline} are reported as a group rather than as eleven independent ablations,
-because the dominant signal in the data is the plateau itself rather than any individual row.
-Three observations follow.
+The ten configurations in Table~\ref{tab:sadmon_headline} are most
+informative when considered as a sequence of attempts to change the
+same underlying objective. The dominant result is not the ranking of
+individual configurations, but the narrow range in which all ten
+remain. Three observations follow.
 
-\paragraph{1. The plateau is the result.}
-Every configuration lands in $[0.7769, 0.7934]$,
-a range of $0.0165$ that is comparable to the per-scene standard deviation of the PGA metric.
-Whatever the modularity-driven head is doing,
-it is not converging to a regime that depends on the modifications under test:
-the spatial bandwidth $\sigma$ can be learnable, clamped, fixed, or removed entirely;
-the spectral term can be present or absent;
-the adjacency can be geometric or feature-based;
-the type loss can be ReLU-hinge or entropy-based.
-None of these changes the band by more than $0.02$.
-The plateau height itself is $0.09$ below the no-depth baseline,
-which means the modifications collectively cost embedding quality rather than improving it.
+\textbf{1. The plateau is the main result:}
+Every DMoN and SA-DMoN configuration reaches a synthetic-validation
+PGA between $0.7769$ and $0.7934$, giving a total spread of only
+$0.0165$. This remains true despite substantial changes to the
+modularity formulation. The spatial bandwidth $\sigma$ is made
+learnable, constrained, or scene-dependent; the spectral contribution
+is re-weighted or removed; the adjacency supplied to the modularity
+objective is changed from geometric to feature-based; and the
+type-related loss is reformulated. None of these changes moves the
+result outside a band of approximately two PGA points.
 
-\paragraph{2. The bandwidth experiments isolate the root cause.}
-Experiments~4--7 vary the spatial-bandwidth $\sigma$ across four parameterisations:
-learnable-unconstrained,
-learnable-clamped,
-learnable-clamped at higher spectral weight,
-and fixed at per-scene median pairwise distance.
-The first parameterisation drives $\sigma$ to extremely large values (the learned $\sigma$ diverges to approximately $341$ under the unconstrained configuration),
-which collapses the spatial kernel $P_{ij}$ in Equation~\eqref{eq:sadmon_spatial} to a near-uniform $1.0$,
-which collapses the skeleton-aware null in Equation~\eqref{eq:sadmon_null} to the type-affinity matrix alone,
-which makes the modularity matrix $\mathbf{B}_{\text{pose}} = \mathbf{A} - \tilde{\mathbf{R}}$ nearly equal to the adjacency itself,
-which gives the spectral loss nothing to do.
-Clamping $\sigma$ to $[0.05, 0.5]$ prevents the divergence
-and the learned value pins at the upper bound,
-which is the optimiser saying ``the loss prefers a weaker null model even with the clamp''.
-Increasing $\lambda_{\text{spectral}}$ to $1.0$ amplifies this weakened signal and degrades performance further ($-0.0026$);
-the fixed median-distance $\sigma$ moves to the opposite extreme (null too tight, $\mathbf{B} \approx 0$ on the kNN edges) and degrades performance most of all ($-0.0149$).
-The bandwidth has no useful operating point on the keypoint $k$NN graph.
+More importantly, the entire band lies below the no-depth GAT baseline
+of $0.8783$. The best SA-DMoN result, $0.7934$, remains $0.0849$ below
+the baseline. The same pattern appears after transfer to COCO, where
+$k$-means on the jointly trained embeddings remains within
+$[0.8622,0.8684]$, compared with $0.8841$ for the standard GAT.
+The consistency of the result across the ten configurations suggests
+that the limitation is associated with the modularity-based training
+signal rather than with a single poorly chosen hyperparameter.
 
-\paragraph{3. v2 isolates the second-order failure mode and confirms it.}
-The v2 configurations were introduced after the v1 bandwidth diagnosis to test two structural hypotheses:
-that the spatial-adjacency and spatial-null collinearity could be broken by computing adjacency from features (Fix~1),
-and that the ReLU-hinge type loss could be smoothed via an entropy formulation (Fix~2).
-Both fixes were necessary to test;
-neither produces a configuration that beats v1's best.
-Feature adjacency at $\lambda_{\text{spectral}} = 1.0$ underperforms because the adjacency now drifts during training and the modularity signal chases a moving target (v2a, $0.7849$).
-Dropping the spectral weight to $0.1$ recovers (v2b, $0.7925$) but still does not improve on v1's best ($0.7918$).
-Entropy type loss alone is neutral (v2c, $0.7934$).
-Combining both fixes is no better than entropy alone (v2d, $0.7910$).
-The diagnosis is therefore complete:
-modularity is the wrong objective on a spatial-proximity $k$NN graph,
-and no null-model or adjacency modification rescues it.
+\textbf{2. The bandwidth experiments expose a weakness in the
+skeleton-aware null model:}
+Experiments~4--7 vary the spatial bandwidth $\sigma$ through four
+different treatments: unconstrained learning, constrained learning,
+constrained learning with increased spectral weight, and a fixed
+scene-adaptive value based on the median pairwise distance. None
+produces a useful improvement.
 
-\paragraph{Methodological pivot.}
-The collective evidence of Sections~\ref{sec_res_learned_heads} and~\ref{sec_res_sadmon}
-is that no modification of the grouping head on top of the standard GAT embedding produces a configuration that beats $k$-means on the same embedding.
-This rules out the head as the binding constraint
-and is the empirical justification for the PG-GAT investigation of Section~\ref{sec_res_pggat_ablations},
-which keeps the head fixed at $k$-means and modifies the embedding instead.
+The unconstrained configuration provides the clearest diagnostic.
+During training, the learned bandwidth grows to approximately $341$.
+From Equation~\eqref{eq:sadmon_spatial}, increasing $\sigma$ causes
+the spatial kernel to approach
+\begin{equation}
+    P_{ij} \rightarrow 1,
+\end{equation}
+so the spatial component of the proposed null model progressively
+loses its dependence on keypoint distance. In this limit,
+Equation~\eqref{eq:sadmon_null} is governed primarily by the
+joint-type affinity $T_{ab}$ rather than by the intended combination
+of type and spatial information. The optimiser therefore finds a
+regime in which the spatial part of the skeleton-aware null contributes
+very little discrimination.
+
+Constraining $\sigma$ to $[0.05,0.5]$ prevents this numerical growth,
+but the learned value moves to the upper boundary of the allowed
+interval. This behaviour is consistent with the objective favouring a
+broader spatial kernel than the imposed range permits. The resulting
+PGA of $0.7918$ is nevertheless only $0.0046$ above the unconstrained
+configuration and remains well below the GAT baseline. Increasing
+$\lambda_{\text{spectral}}$ from $0.1$ to $1.0$ reduces PGA from
+$0.7918$ to $0.7892$, while replacing the learned bandwidth with the
+per-scene median pairwise distance reduces it further to $0.7769$.
+Within the bandwidth treatments tested here, there is therefore no
+evidence of an operating point at which the skeleton-aware null
+produces a competitive grouping representation.
+
+\textbf{3. The v2 changes do not break the plateau:}
+The v2 experiments test whether the v1 result is caused by two more
+specific design choices. The first replaces the geometric adjacency
+inside the spectral objective with an adjacency recomputed from the
+current embedding, reducing the direct similarity between the
+spatially constructed adjacency and spatial null. The second replaces
+the original type-related term with the smoother entropy formulation
+described in Section~\ref{sec_meth_sadmon}.
+
+Feature adjacency with
+$\lambda_{\text{spectral}}=1.0$ reaches $0.7849$ (v2a). Reducing the
+spectral weight to $0.1$ raises this to $0.7925$ (v2b), a marginal
+$0.0007$ above the best v1 configuration and far too small to alter the
+overall conclusion. The entropy type loss alone gives the highest
+synthetic PGA among the ten experiments at $0.7934$ (v2c), while
+combining feature adjacency and entropy produces $0.7910$ (v2d).
+Their COCO results remain similarly close, between $0.8622$ and
+$0.8677$ for the four v2 configurations.
+
+The v2 experiments therefore do not support either proposed change as
+a solution to the SA-DMoN plateau. Decoupling the spectral adjacency
+from the geometric graph and reformulating the type loss both alter the
+objective, but neither produces a meaningful improvement over v1 or
+approaches the standard GAT baseline. Taken together with the bandwidth
+experiments, the results support the interpretation that Newman-style
+modularity is poorly aligned with the spatial-proximity graph used in
+this pose-grouping formulation. The graph connects joints because they
+are spatially close, whereas the desired communities are defined by
+person identity; proximity and community membership are therefore not
+the same structural signal.
+
+\textbf{Methodological pivot:}
+The learned-head experiments of
+Section~\ref{sec_res_learned_heads} and the SA-DMoN experiments above
+approach grouping from substantially different directions, yet neither
+produces an improvement over the standard GAT followed by $k$-means.
+This does not rule out learned grouping heads in general, but it
+provides little evidence that further complexity at the read-out stage
+is the most productive direction under the present formulation.
+
+The investigation therefore shifts to the representation itself.
+PG-GAT, evaluated in Section~\ref{sec_res_pggat_ablations}, retains
+$k$-means as the grouping read-out and instead modifies the GAT
+attention mechanism to expose pose-specific structural information
+directly during embedding. This change tests the hypothesis suggested
+by the preceding experiments: that improving the representation
+available to the grouping stage is more effective than replacing the
+grouping stage itself.

@@ -1,4 +1,151 @@
 \section{Geometric Embedding Spaces}
 \label{sec_lit_geometry}
 
-Euclidean versus non-Euclidean embedding spaces. Hyperbolic embeddings (Poincar\'e ball, Lorentz model) and their suitability for tree-structured data. Relevance to skeletons, which are trees. Sets up the motivation for the hyperbolic PG-GAT variant evaluated in Chapter~\ref{chap_4}.
+The previous section reviewed the loss functions and clustering methods that operate on the learned embedding,
+while assuming that the embedding itself lies in a Euclidean vector space.
+This section considers an alternative representation based on non-Euclidean geometry,
+with the focus specifically on hyperbolic embedding spaces.
+The main aim is to identify the property of hyperbolic geometry
+that motivates the PG-GAT variant evaluated in Section~\ref{sec_res_hyperbolic}.
+
+The scope is intentionally limited to hyperbolic geometry -
+other manifolds, including spherical, product, and mixed-curvature spaces,
+have also been explored in the wider representation-learning literature,
+but they are not evaluated in this work.
+The discussion therefore focuses on the aspects of hyperbolic geometry
+that are directly relevant to the experiments presented later.
+
+\subsection{Why an embedding space is a choice}
+\label{sec_lit_geometry_choice}
+
+In a standard contrastive-learning pipeline, the embedding space is usually treated as Euclidean.
+The network produces a vector in $\mathbb{R}^{d}$,
+similarity is measured using a Euclidean or cosine metric,
+and the resulting representations are clustered using Euclidean methods such as $k$-means.
+This is the conventional choice, but it is not the only possible one.
+
+For data with a strong hierarchical or tree-like structure,
+Euclidean space can be a poor geometric match -
+the volume of a Euclidean ball grows polynomially with its radius, approximately $\mathcal{O}(r^{d})$,
+while the number of nodes in a tree can grow exponentially with depth,
+approximately $\mathcal{O}(c^{r})$ for a branching factor $c$.
+Representing this type of structure faithfully in Euclidean space
+can therefore require either a larger embedding dimension or some amount of distortion.
+
+Human pose provides a natural reason to investigate this difference -
+a single skeleton can be represented as a kinematic tree rooted at the pelvis in the COCO joint topology,
+while a multi-person image contains several such structures.
+It is therefore reasonable to ask
+whether an embedding geometry better suited to tree-like data
+can represent the grouping problem more effectively than a standard Euclidean space.
+The hyperbolic PG-GAT variant described in Section~\ref{sec_meth_hyperbolic}
+provides an experimental test of this idea.
+
+\subsection{Hyperbolic geometry for tree-like data}
+\label{sec_lit_geometry_hyperbolic}
+
+Hyperbolic space with curvature $-1$ has a useful property for representing tree-like structures:
+the volume of a ball grows exponentially with its radius -
+this is similar to the way the number of nodes in a tree increases with depth.
+Sarkar~\cite{sarkar2011treeembed} formalised this relationship
+by showing that trees can be embedded in the hyperbolic plane with arbitrarily low distortion,
+whereas achieving similarly low distortion in Euclidean space
+can require the embedding dimension to increase with the size of the tree.
+
+Sala et al.~\cite{sala2018learningmrep} later considered this property in the context of learned representations.
+Their analysis examined the trade-off between embedding dimension and distortion
+across several tree-structured datasets,
+showing that low-dimensional hyperbolic embeddings could represent these structures
+with distortion comparable to, or lower than, Euclidean embeddings using considerably more dimensions.
+
+Two common representations of hyperbolic space are used in the deep learning literature:
+the Poincar\'e ball and the Lorentz, or hyperboloid, model.
+The Poincar\'e model represents the manifold inside an open Euclidean unit ball,
+with the metric increasing towards the boundary,
+while the Lorentz model represents the same underlying geometry
+in a higher-dimensional ambient space using a Minkowski inner product.
+
+The Lorentz model is often more convenient for neural-network optimisation
+because it avoids some of the numerical difficulties
+that can occur close to the boundary of the Poincar\'e ball -
+Nickel and Kiela~\cite{nickel2018lorentz} showed that the Lorentz formulation
+allows stable optimisation for the embedding magnitudes encountered in practice.
+This motivates the use of the Lorentz model
+for the hyperbolic architecture described in Section~\ref{sec_meth_hyperbolic_arch}.
+
+\subsection{Hyperbolic deep learning}
+\label{sec_lit_geometry_hyperbolic_dl}
+
+There are several ways of combining hyperbolic geometry with deep learning.
+One of the simpler approaches is to keep the neural network itself Euclidean
+and make only the final embedding hyperbolic -
+the network produces a vector in the Euclidean tangent space,
+which is mapped onto the hyperbolic manifold using an exponential map.
+When a standard Euclidean operation is required later,
+the representation can be mapped back into the tangent space.
+
+A more complete approach is to make the network itself hyperbolic,
+with linear transformations and aggregation operations replaced by their hyperbolic equivalents -
+for example using M\"obius operations or Fr\'echet-mean aggregation.
+This keeps the representations on the manifold throughout the network,
+but also introduces considerably more implementation complexity.
+
+The hyperbolic PG-GAT variant described in Section~\ref{sec_meth_hyperbolic} follows the first approach -
+the message-passing layers remain Euclidean,
+while only the final embedding is projected onto the Lorentz hyperboloid.
+For the downstream $k$-means step,
+these embeddings are mapped back to the tangent space at the origin.
+
+This provides a relatively small change to the original PG-GAT architecture
+and allows the effect of the hyperbolic output space to be tested separately.
+A fully hyperbolic attention network would require more substantial changes to the architecture,
+so the simpler variant provides a useful first test
+of whether hyperbolic geometry offers a measurable benefit for the grouping problem.
+
+\subsection{Two pre-registered hypotheses}
+\label{sec_lit_geometry_hypotheses}
+
+The potential benefit of a hyperbolic embedding
+depends partly on the depth and branching structure of the data being represented.
+A COCO skeleton contains only seventeen joints and has a maximum tree depth of approximately four hops -
+at this relatively small scale,
+the theoretical advantage of hyperbolic geometry over a Euclidean representation may therefore be limited.
+
+For this reason,
+two separate hypotheses are defined in Section~\ref{sec_meth_hyperbolic_hypotheses}
+before the experiments are run.
+H1 tests whether a hyperbolic embedding can match or outperform the Euclidean model at the same output dimension,
+which would indicate an improvement in representation quality.
+H2 instead tests whether the hyperbolic model can achieve comparable performance
+using a substantially smaller embedding dimension,
+indicating an efficiency advantage.
+The results for both hypotheses are reported in Section~\ref{sec_res_hyperbolic}.
+
+Defining these hypotheses in advance is important
+because an advantage at lower embedding dimensions is different from an improvement in overall grouping accuracy -
+a small efficiency gain can still be a useful result
+even if the hyperbolic model does not outperform the Euclidean model at the same dimension.
+Treating these as separate hypotheses makes this distinction clear
+and allows both the positive and negative experimental outcomes
+to be reported against the criteria defined beforehand.
+
+\subsection{Alternative geometries not pursued}
+\label{sec_lit_geometry_alternatives}
+
+For completeness,
+two other families of non-Euclidean embeddings are worth noting,
+although neither is explored in the experimental chapter.
+The first is spherical embeddings,
+which are already partly represented by the L2-normalised output of the contrastive backbone
+and are therefore not treated as a separate experiment.
+The second includes product and mixed-curvature manifolds,
+which provide a much broader geometric design space
+but would also add considerably more implementation and evaluation complexity.
+
+The hyperbolic variant is therefore used as the most direct non-Euclidean alternative
+to the standard Euclidean embedding -
+it requires relatively limited changes to the existing architecture
+while still testing whether a geometry better suited to hierarchical structure provides a useful advantage.
+The results of this experiment are reported in Section~\ref{sec_res_hyperbolic}.
+Other manifold choices remain possible directions for future work
+if the results justify a more detailed investigation of embedding geometry.

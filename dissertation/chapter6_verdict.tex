@@ -1,0 +1,189 @@
+\section{Verdict on the Hypothesis}
+\label{sec_conc_verdict}
+
+The hypothesis stated in Section~\ref{sec_intro_hypothesis} consists of
+three separate claims.
+Each clause is evaluated against the experimental evidence in turn,
+before the overall verdict on the hypothesis is given at the end of the
+section.
+
+\subsection{Clause~1: pose grouping is an embedding-quality problem}
+\label{sec_conc_verdict_embedding}
+
+\textbf{Supported:}
+The first clause proposes that pose-grouping performance is constrained
+primarily by the quality of the per-keypoint embedding rather than by the
+choice of grouping algorithm applied afterwards.
+The experiments provide consistent evidence for this claim.
+Three learned grouping heads (DEC,
+slot attention,
+and graph partitioning) were evaluated on the standard GAT backbone
+under matched training conditions (Section~\ref{sec_res_learned_heads}),
+followed by ten SA-DMoN variants that explored a separate family of
+graph-structural grouping objectives (Section~\ref{sec_res_sadmon}).
+None produced a configuration that outperformed plain $k$-means once
+transfer to COCO was considered.
+
+The graph-partitioning result is particularly illustrative.
+It reaches $0.9714$ synthetic-validation PGA,
+making it the strongest of the learned heads on the synthetic
+distribution,
+but its own grouping read-out falls to $0.7514$ on COCO.
+By comparison, the no-depth standard GAT with $k$-means reaches
+$0.8841$ on the same COCO evaluation setting.
+The SA-DMoN experiments show the same broader pattern from a different
+direction -
+changing the grouping objective and its graph construction does not
+recover the performance lost when the underlying embedding is not
+sufficiently transferable.
+
+The embedding-side experiments produce the opposite result.
+The three skeleton-aware PG-GAT modifications of
+Section~\ref{sec_meth_pggat} improve the representation at matched
+architecture size,
+the architecture sweep of Section~\ref{sec_res_pggat_sweep} raises
+synthetic-validation PGA from $0.8896$ to $0.9634$,
+and subsequent COCO fine-tuning raises COCO val PGA from $0.9010$
+to $0.9715$.
+These gains are substantially larger than those obtained by changing
+the grouping head while leaving the basic embedding formulation
+unchanged.
+
+Taken together with the analysis of Section~\ref{sec_disc_embedding},
+the evidence supports the first clause of the hypothesis.
+For the pose-grouping setting studied here,
+the main performance lever is the representation in which the detected
+keypoints are embedded.
+Once that representation separates people effectively,
+a simple $k$-means read-out is sufficient -
+increasing the complexity of the grouping stage does not provide a
+corresponding improvement.
+
+\subsection{Clause~2: skeleton-aware GAT with two-stage training}
+\label{sec_conc_verdict_architecture}
+
+\textbf{Supported, with qualification:}
+The second clause proposes that the modular grouping approach can achieve
+quality competitive with a jointly trained end-to-end alternative.
+The architecture and fine-tune sweeps produce the
+\texttt{meng-headline} checkpoint (W\&B run \texttt{b5noyg7t}),
+which reaches $0.9715$ COCO validation PGA when evaluated on
+ground-truth keypoints and $0.9591$ end-to-end PGA when applied to
+HigherHRNet detections.
+On the same matched detections,
+HigherHRNet's native associative-embedding grouping reaches $0.9847$,
+leaving a difference of $0.0256$ PGA.
+
+The modular method therefore does not match or exceed the jointly
+trained reference on this evaluation.
+The result instead establishes a relatively small measured cost for
+separating the grouping stage from the detector.
+This distinction matters because the two methods provide different
+capabilities.
+HigherHRNet's AE representation is trained jointly with its detector and
+achieves the higher grouping accuracy,
+whereas PG-GAT can be applied as a separate grouping module to
+detections produced by different architectures.
+The detector-swap experiments strengthen this interpretation by showing
+a similar autonomous gap of approximately $0.02$ PGA across
+HigherHRNet,
+YOLO11x-pose,
+and RTMO-L.
+
+The hypothesis described the target as "quality competitive with an
+end-to-end joint-trained alternative" without defining a numerical
+equivalence margin in advance.
+The verdict must therefore remain qualitative rather than being
+presented as a statistical non-inferiority result.
+Within that limitation, a difference of $0.0256$ against a reference
+operating at $0.9847$ PGA is considered sufficiently small to support
+the intended claim of competitive grouping quality,
+particularly in settings where detector independence is itself a
+requirement.
+
+The qualification is that this conclusion depends on what the deployment
+setting values.
+If the objective is solely to maximise PGA with a fixed HigherHRNet
+detector, the native AE grouping remains the better choice by $0.0256$.
+If grouping must remain independent of the detector,
+the experiments show that PG-GAT provides that capability while
+retaining $0.9591$ PGA on the same detections.
+The second clause is therefore supported as a claim of competitive
+rather than superior performance,
+with the measured accuracy difference forming part of the modularity
+trade-off rather than being hidden by the verdict.
+
+\subsection{Clause~3: autonomous deployment and detector swap}
+\label{sec_conc_verdict_autonomy}
+
+\textbf{Supported, with the autonomy result stronger than originally expected:}
+The third clause concerns whether the proposed grouping pipeline can
+operate without ground-truth knowledge of the number of people and can
+be transferred between keypoint detectors without retraining.
+Both parts are supported by the experiments.
+
+The autonomous evaluation of Section~\ref{sec_res_e2e} replaces the
+ground-truth person count with the prediction of the learned K-head.
+The head achieves $76.1\%$ exact-count accuracy and $91.9\%$ off-by-one
+accuracy on COCO validation.
+Despite this imperfect agreement with the annotated person count,
+the resulting pipeline reaches $0.9644$ end-to-end PGA,
+compared with $0.9591$ when $k$-means is supplied with the ground-truth
+$K$.
+Predicted $K$ therefore improves the measured PGA by $0.0053$ rather
+than introducing the degradation that might normally be expected when an
+oracle quantity is replaced by an estimate.
+
+As discussed in Section~\ref{sec_disc_modularity_autonomy_autonomy},
+this result follows from the distinction between the annotated number of
+people and the number represented by an incomplete detection set.
+The K-head predicts from the detected embeddings and keypoint count,
+allowing it to adapt to the evidence that actually reaches the grouping
+stage.
+Ground-truth $K$ describes the complete annotated image and can
+therefore overestimate the appropriate number of clusters when one or
+more people are poorly represented by the detector.
+The detector-swap experiments and ground-truth-keypoint control support
+this interpretation -
+the predicted-$K$ advantage grows as detection recall decreases and
+reverses when complete ground-truth keypoints are supplied.
+The autonomy result is therefore stronger than the original requirement
+that predicted $K$ should merely preserve acceptable grouping quality.
+
+The detector-independence part of the clause is supported both by the
+architecture and by direct evaluation.
+PG-GAT operates on detected keypoints rather than detector-specific
+intermediate feature maps,
+so its grouping network has no architectural dependency on the model
+that produced those keypoints.
+More importantly, this property is exercised experimentally rather than
+inferred from the interface alone.
+The detector-swap evaluation of Section~\ref{sec_res_e2e_swap} applies
+the same frozen \texttt{meng-headline} checkpoint and frozen K-head
+zero-shot to HigherHRNet,
+YOLO11x-pose,
+and RTMO-L outputs.
+No grouping retraining is performed for either of the swapped detectors.
+
+The autonomous PG-GAT pipeline remains close to each detector's native
+person assignment,
+the measured gaps are $0.0203$ for HigherHRNet,
+$0.0210$ for YOLO11x-pose,
+and $0.0220$ for RTMO-L.
+The consistency of these values across three substantially different
+detector families is the stronger result.
+It shows not only that detector swapping is possible,
+but that the accuracy cost remains approximately $0.02$ PGA across the
+detectors tested.
+
+The third clause is therefore supported in both respects.
+The pipeline can estimate the person count from the detected evidence
+without a ground-truth dependency,
+and the same frozen grouping components can be used across multiple
+detector families without retraining.
+The autonomous component goes slightly beyond the original expectation -
+predicted $K$ does not merely approximate the oracle-$K$ result under
+real detector outputs,
+but can provide a better clustering constraint when detection
+incompleteness makes the annotation-level person count misaligned with
+the evidence available to the grouping stage.

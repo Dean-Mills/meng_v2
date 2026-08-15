@@ -525,6 +525,7 @@ class Evaluator:
         coco_img_dir:  Optional[Path] = None,
         coco_ann_file: Optional[Path] = None,
         max_images:    Optional[int]  = None,
+        min_people:    int = 1,
     ) -> Dict:
         if coco_img_dir is not None and coco_ann_file is not None:
             from coco_adapter import CocoAdapter
@@ -533,6 +534,7 @@ class Evaluator:
                 ann_file=coco_ann_file,
                 device=self.device,
                 use_depth=self._use_depth,
+                min_people=min_people,
             )
             print(f"Evaluating on COCO: {coco_ann_file.name}")
         elif virtual_dir is not None:
@@ -665,6 +667,9 @@ def main():
     parser.add_argument("--coco_ann_file", type=Path, default=None)
     parser.add_argument("--max_images",    type=int,  default=None,
                         help="Limit number of images evaluated (useful for quick checks)")
+    parser.add_argument("--min_people",    type=int,  default=1,
+                        help="COCO only: restrict to images with at least this many people "
+                             "(e.g. 2 for the multi-person diagnostic subset)")
     parser.add_argument("--save",          type=Path, default=None,
                         help="Override save path (default: next to checkpoint)")
     parser.add_argument("--device",        type=str,
@@ -682,6 +687,7 @@ def main():
         coco_img_dir=args.coco_img_dir,
         coco_ann_file=args.coco_ann_file,
         max_images=args.max_images,
+        min_people=args.min_people,
     )
 
     evaluator.print_comparison(summary)

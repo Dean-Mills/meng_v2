@@ -1,4 +1,27 @@
 \section{Problem Statement}
 \label{sec_intro_problem}
 
-Formulates the task: given $N$ detected keypoints with joint-type labels $t_i \in \{1,\dots,17\}$ from an image containing an unknown number of people $K$, assign each keypoint to one of $K$ person groups under the constraint that every person has at most one keypoint of each type.
+A given image contains an unknown number of people, denoted by $K$.
+A keypoint detector produces $N$ detections, where each detection has an
+image-plane position, a joint-type label $t_i \in \{1,\dots,17\}$
+corresponding to the 17 COCO joint types, and a visibility flag.
+The pose-grouping problem is to partition these $N$ detections into $K$
+groups such that each group corresponds to a single person. The
+partition is also subject to the structure of the human skeleton: each
+person can contain at most one keypoint of a given joint type.
+
+Two restrictions define the problem considered in this work. First, the
+grouping module operates only on the detected keypoints. It has no access
+to the source image, intermediate detector feature maps, or the
+detector's training procedure. This separation is intended to make the
+grouping stage independent of the upstream detector, provided that the
+detector produces keypoints using the COCO 17-joint representation.
+
+Second, the number of people $K$ is not assumed to be known at inference
+time. The complete pipeline must therefore estimate $K$ from the
+detected keypoints before producing the final partition. An oracle-$K$
+configuration, in which the ground-truth person count is supplied, is
+retained as a diagnostic. This separates the quality of the learned
+embedding and grouping procedure from errors introduced by person-count
+estimation. The formal notation, graph construction, and evaluation
+metric used for this problem are defined in Chapter~\ref{chap_3}.

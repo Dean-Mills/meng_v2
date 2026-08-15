@@ -1,4 +1,243 @@
 \section{Summary of Contributions}
 \label{sec_conc_contributions}
 
-Restates the five numbered contributions from Section~\ref{sec_intro_contributions}, each now grounded in the numbers from Chapter~\ref{chap_4}. PG-GAT is the main technical contribution. The empirical finding that the embedding dominates the grouping head is the main scientific contribution. The COCO fine-tuning protocol, the hyperbolic variant, and the TriGAT negative result are supporting contributions.
+The verdict of Section~\ref{sec_conc_verdict} brings the experimental
+evidence together in relation to the composite hypothesis.
+This section considers the same evidence from the perspective of the
+contributions made by the work.
+Each contribution is tied to a specific experimental result from
+Chapter~\ref{chap_4},
+so that the claimed contributions remain separated from observations
+that were exploratory or produced negative results.
+
+\subsection{Methodological contribution: PG-GAT}
+\label{sec_conc_contrib_pggat}
+
+The principal technical contribution of this work is PG-GAT - the
+skeleton-aware graph attention network introduced in
+Section~\ref{sec_meth_pggat}.
+PG-GAT modifies the standard GATv2 attention mechanism in three ways
+that make the structure of the COCO skeleton explicit:
+type-pair attention bias,
+skeleton-relative position encoding,
+and dedicated same-type repulsion heads.
+These modifications target different aspects of the grouping problem
+rather than relying on the network to recover the relevant edge
+structure from node features alone.
+
+The isolation ablation of Section~\ref{sec_res_pggat_ablations} shows
+that the full configuration produces the strongest result under
+matched architecture and training compute,
+while the individual margins of the three modifications are small and
+close to the run-to-run variation of the metric.
+The architecture is then selected through a 32-run Bayesian sweep over
+six architectural parameters,
+which raises synthetic-validation PGA to $0.9634$.
+A separate 24-run loss sweep finds no alternative that improves
+meaningfully on the inherited contrastive-loss settings,
+providing experimental support for retaining those defaults.
+Finally, the COCO fine-tuning procedure is evaluated through a 12-run
+Bayesian sweep over fine-tuning duration,
+learning rate,
+and weight decay.
+
+The resulting \texttt{meng-headline} checkpoint reaches $0.9715$ COCO
+validation PGA when grouping ground-truth keypoints and $0.9591$
+end-to-end PGA when grouping HigherHRNet detections.
+The contribution is therefore not only the three attention modifications
+themselves,
+but a sweep-defended PG-GAT configuration whose architecture,
+loss settings,
+and fine-tuning procedure have each been evaluated experimentally
+rather than selected solely by manual tuning.
+
+\subsection{Scientific contribution: the embedding is the binding constraint}
+\label{sec_conc_contrib_embedding}
+
+The principal scientific contribution is the evidence that, for the
+bottom-up pose-grouping setting studied in this work, the main
+constraint on grouping performance is the quality of the per-keypoint
+embedding rather than the complexity of the grouping algorithm applied
+to it.
+This conclusion is supported by two independent families of head-side
+experiments.
+Three learned grouping heads (DEC,
+slot attention,
+and graph partitioning) were evaluated on the standard GAT backbone,
+followed by ten SA-DMoN configurations that approached grouping through
+a modularity-based objective.
+None produced a configuration that outperformed plain $k$-means on the
+corresponding embeddings once synthetic-to-real transfer was considered.
+
+The embedding-side experiments show the opposite pattern.
+Introducing the skeleton-aware PG-GAT modifications and subsequently
+selecting the network architecture produces improvements substantially
+larger than those obtained by replacing or modifying the grouping head.
+The architecture sweep alone raises synthetic-validation PGA from
+$0.8896$ for the matched PG-GAT ablation configuration to $0.9634$,
+while the subsequent COCO fine-tuning raises COCO validation PGA from
+$0.9010$ to $0.9715$.
+Across the experiments, improving the representation therefore has a
+much larger effect than increasing the sophistication of the downstream
+grouping procedure.
+
+This finding leads to a practical design rule for this work -
+keep the final grouping operation simple and direct modelling capacity
+towards the embedding that precedes it.
+From Section~\ref{sec_meth_pggat} onward,
+$k$-means is therefore retained as the read-out while the investigation
+focuses on the structure,
+capacity,
+and domain adaptation of the embedding network.
+The contribution is both empirical and methodological,
+the experiments identify where the dominant performance limitation lies
+and use that evidence to determine where additional model complexity is
+most effectively spent.
+
+\subsection{Operational contribution: autonomous deployment without an oracle}
+\label{sec_conc_contrib_autonomy}
+
+The third contribution is the autonomous person-count estimation
+component that removes the final ground-truth dependency from the
+grouping pipeline.
+As evaluated in Section~\ref{sec_res_e2e}, a small K-estimation head
+is trained on top of the frozen \texttt{meng-headline} embedding and
+reaches $76.1\%$ exact-count accuracy and $91.9\%$ off-by-one accuracy
+on COCO validation.
+When its predicted person count is supplied to the downstream $k$-means
+grouping, the complete pipeline reaches $0.9644$ end-to-end PGA,
+which is $0.0053$ above the corresponding oracle-$K$ result of $0.9591$.
+
+The significance of this result is not that the K-head estimates the
+annotation-level person count more accurately than the oracle,
+but that the two counts describe different quantities once detection is
+incomplete.
+Ground-truth $K$ describes all annotated people in the image,
+whereas the grouping stage only receives the subset represented by the
+detected keypoints.
+Supplying the annotation-level count can therefore force $k$-means to
+create clusters for people who are poorly represented or absent from the
+detected set.
+The K-head instead predicts from the detected embeddings themselves and
+consequently adapts to the effective number of people represented by the
+available evidence.
+
+This interpretation is supported by the detector-swap experiments and
+the ground-truth-keypoint control,
+where the advantage of predicted $K$ increases as detector recall
+decreases and reverses when complete ground-truth keypoints are used.
+The result therefore contributes more than a mechanism for removing an
+oracle from the inference path -
+it identifies a distinction between the annotated and effective person
+counts that becomes relevant whenever a modular grouper operates
+downstream of an imperfect detector.
+Operationally, the experiment demonstrates that PG-GAT can run without
+ground-truth knowledge of $K$ and,
+under the detector conditions evaluated here, does so without an
+accuracy penalty relative to the oracle-$K$ configuration.
+
+\subsection{Documented negative results}
+\label{sec_conc_contrib_negatives}
+
+Four documented negative results complement the supported contributions
+and help define the limits of the approaches explored in this work:
+
+\begin{compactitem}
+\item \textbf{Hyperbolic embedding.}
+The hyperbolic PG-GAT variant matches the Euclidean PG-GAT at a
+four-fold smaller embedding dimension under synthetic-only training,
+supporting a potential representation-efficiency advantage at low
+dimension.
+This advantage does not survive COCO fine-tuning,
+where the Euclidean configuration achieves the stronger result.
+Hyperbolic geometry is therefore retained as an efficiency observation
+rather than a quality improvement at the headline operating point.
+
+\item \textbf{Triplet-level graph representation.}
+TriGAT underperforms the matched joint-level PG-GAT configuration under
+the same training budget.
+The main limitation is the additional voting stage required to convert
+independently clustered triplet embeddings back into joint assignments.
+Errors at the triplet level can propagate to several joints through this
+operation,
+offsetting the additional articulation information provided by the
+triplet representation.
+The negative result therefore applies to the particular
+triplet-clustering-and-voting formulation tested here,
+rather than ruling out articulation features more generally.
+
+\item \textbf{Visual-feature augmentation.}
+PG-GAT v2 augments each keypoint with pre-trained MobileNetV2 features,
+but neither the initial nor extended training schedule exceeds the
+no-visual-features PG-GAT headline.
+The visual pipeline also requires the frozen MobileNetV2 backbone,
+adding approximately $2.2 \times 10^{6}$ parameters at inference.
+At the operating point reached by the sweep-selected PG-GAT,
+the additional visual information therefore does not justify its
+computational and parameter cost.
+
+\item \textbf{Modularity-driven grouping.}
+The ten SA-DMoN variants remain within a narrow $0.77$--$0.79$
+synthetic-validation PGA band,
+well below the no-depth baseline.
+Changes to the spatial bandwidth,
+null model,
+spectral weighting,
+adjacency construction,
+and type-loss formulation do not remove this plateau.
+The experiments indicate that the limitation is structural -
+modularity is poorly matched to a spatial-proximity $k$NN graph whose
+edges primarily encode geometric proximity rather than person identity.
+The tested null-model modifications do not recover a useful
+identity-separating signal from this graph.
+\end{compactitem}
+
+These negative results are contributions in their own right because they
+identify not only which alternatives failed,
+but also where their limitations arise.
+Chapter~\ref{chap_5} develops the corresponding mechanistic
+explanations,
+allowing future work to distinguish directions that are unlikely to
+benefit from further parameter tuning from those that may remain viable
+if the identified structural limitation is removed.
+
+\subsection{Infrastructure contribution: reproducibility chain}
+\label{sec_conc_contrib_repro}
+
+A further contribution of the work is the reproducibility of the
+experimental record.
+Every reported result in Chapter~\ref{chap_4} is linked to a Weights \&
+Biases run in the \texttt{multiperson-pose-grouping} project.
+Each run records the training configuration,
+source-code snapshot,
+training metrics,
+and final checkpoint,
+providing a direct trace from the numbers reported in the thesis to the
+experiment that produced them.
+
+The four Bayesian sweeps (architecture,
+loss,
+hyperbolic configuration,
+and COCO fine-tuning) are likewise retained under their respective
+sweep identifiers.
+This makes it possible to recover both the selected configurations and
+the alternatives against which they were evaluated.
+For the final PG-GAT configuration,
+the principal architecture,
+loss,
+and fine-tuning choices are therefore supported by explicit searches
+over their specified operating ranges rather than being reported solely
+as inherited or manually selected values.
+
+This experimental record strengthens the interpretation of the results
+in two ways.
+First, it makes the progression from the baseline through the
+ablations and sweeps to the final \texttt{meng-headline} checkpoint
+traceable.
+Second, it distinguishes hyperparameters that were selected because
+they produced the strongest measured result from those retained because
+the corresponding sweep found no meaningful improvement over the
+existing setting.
+The contribution is therefore not a new modelling mechanism,
+but a reproducible and auditable experimental basis for the technical
+conclusions drawn in this work.

@@ -1,0 +1,31 @@
+\section{Hypothesis}
+\label{sec_intro_hypothesis}
+
+The investigation is organised around a single composite hypothesis.
+
+\begin{quote}
+    \emph{Multi-person pose grouping is fundamentally an embedding-quality problem rather than a grouping-algorithm problem.
+    A skeleton-aware graph attention network trained on synthetic data and fine-tuned 
+    on real images can produce per-keypoint embeddings on which a simple unconstrained clustering algorithm
+    recovers person identities at quality competitive with an end-to-end joint-trained alternative,
+    while supporting autonomous person-count estimation that requires no oracle at inference 
+    and a modular composition with any keypoint detector.}
+\end{quote}
+
+This hypothesis has three distinct parts: a methodological, an architectural and an operational claim.
+
+\begin{itemize}
+    \item \textbf{Methodological claim:} The binding constraint on bottom-up pose grouping is the embeddings rather
+    than the algorithm that operates on them. 
+    \item \textbf{Architectural claim:} Skeleton-aware graph attention network (GAT) embeddings
+    (trained on synthetic data then fine-tuned) are the structural realisation of the methodological claim.
+    \item \textbf{Operational claim:} The same embeddings would allow the grouping to be deployed 
+    using arbitrary detectors and without an oracle at inference.
+\end{itemize}
+
+The three clauses are testable on their own and each decomposes into the specific research questions in the next section.
+Chapter~\ref{chap_6} discusses each clause and states which parts of the hypothesis the experimental
+evidence of Chapter~\ref{chap_4} supports, and with what caveats.
+The research questions are then the instruments by which each clause is interrogated.
+Success or failure on any single question neither confirms nor refutes the hypothesis on its own, but
+together, the seven questions span its testable surface.

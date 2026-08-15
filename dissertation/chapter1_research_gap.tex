@@ -1,4 +1,21 @@
 \section{Research Gap}
 \label{sec_intro_gap}
 
-Existing grouping methods (associative embeddings in HigherHRNet, part-affinity fields in OpenPose, HGG, CenterGroup) are tightly coupled to their host detectors and trained jointly with them. A \emph{modular} grouping module that operates on any detector's keypoint output is largely unstudied. This is the gap this work addresses.
+The grouping mechanisms of established bottom-up methods are tightly coupled to their host detectors.
+Part-affinity fields~\cite{cao2017openpose, kreiss2019pifpaf} share a backbone with the heatmap head;
+associative-embedding tags~\cite{newell2017associative, cheng2020higherhrnet}
+are calibrated to the feature scale of the network they are trained with;
+centre-offset methods~\cite{geng2021dekr, braso2021centergroup} fold grouping into a backbone-specific regression head;
+and end-to-end set-prediction methods~\cite{shi2022petr, yang2023edpose}
+never expose a per-keypoint representation at all.
+In all these cases, swapping the detector after training is not supported.
+
+A \emph{modular} grouping module is one that takes detected keypoints from any 
+detector, runs a separable algorithm and returns per-keypoint person identities. Such modules are fairly unstudied.
+The closest graph-based precedents are HGG~\cite{jin2020hgg} and GEC~\cite{maher2025gec}.
+HGG is trained jointly with its detector and is therefore not modular;
+GEC is detector-independent but uses a per-edge binary classification rather than a per-keypoint embedding.
+No prior work, in this modular setting, trains a detector-independent 
+graph-neural-network embedding for multi-person 
+keypoint grouping, or addresses autonomous person-count estimation as part of the same pipeline.
+This is the research gap the present work addresses; the supporting literature is reviewed in full in Chapter~\ref{chap_2}.

@@ -10,14 +10,19 @@
 \documentclass[12250211]{diss_thesis}
 
 %% EDIT: Replace the following with your information.
-\renewcommand{\dtthetitleeng}{Skeleton-Aware Graph Embeddings for Multi-Person Pose Grouping}
-\renewcommand{\dtthetitleafr}{TITEL}
+\renewcommand{\dtthetitleeng}{Detector-Independent Multi-Person Pose Grouping with Skeleton-Aware Graph Attention Embeddings}
+%\renewcommand{\dtthetitleafr}{TITEL} % Afrikaans title not used (macro never rendered by the class)
 \renewcommand{\dtthecandidatename}{Dean Spencer Mills}
-\renewcommand{\dtthedate}{January 2025}
-\renewcommand{\dtthesupervisor}{Prof. R. P. Feynman}
+\renewcommand{\dtthedate}{August 2026}
+\renewcommand{\dtthesupervisor}{Prof. H. Grobler}
 
 %% Additional packages (cls already loads booktabs, subcaption, graphicx).
 \usepackage{float} % [H] float placement
+\usepackage{longtable} % page-breaking tables (abbreviations / symbols lists)
+
+%% Department style guide: table captions and cell entries must be >= 11 pt.
+%% Use \tablesize inside every table environment instead of \footnotesize.
+\newcommand{\tablesize}{\fontsize{11}{13.2}\selectfont}
 
 \begin{document}
 
@@ -28,8 +33,8 @@
 \input{abbrev}
 \input{symbols}
 \tableofcontents
-\listoffigures \textcolor{red}{[THE LIST OF FIGURES IS OPTIONAL]} % remove \textcolor{red}{[OPTIONAL]}
-\listoftables \textcolor{red}{[THE LIST OF TABLES IS OPTIONAL]} % remove \textcolor{red}{[OPTIONAL]}
+\listoftables
+\listoffigures
 \updatechaptername
 \newpage
 

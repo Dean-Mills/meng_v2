@@ -1,96 +1,216 @@
 \section{Hyperbolic PG-GAT}
 \label{sec_res_hyperbolic}
 
-This section reports the results for the hyperbolic PG-GAT variant of Section~\ref{sec_meth_hyperbolic}.
-Three single-run measurements and one Bayesian sweep are reported,
-collectively testing the two pre-registered hypotheses fixed in Section~\ref{sec_meth_hyperbolic_hypotheses}:
-H1, that hyperbolic embedding matches or beats Euclidean at the same output dimension,
-and H2, that hyperbolic embedding matches Euclidean at a substantially smaller output dimension.
-The collected evidence supports H2 only in the synthetic-only regime;
-once COCO fine-tuning is applied, the dim-$32$ advantage does not persist
-and the variant is reported honestly as an efficiency trade rather than a quality win.
+This section reports the results of the hyperbolic PG-GAT variant
+described in Section~\ref{sec_meth_hyperbolic}.
+Three individual configurations and a Bayesian hyperparameter sweep
+are evaluated against the two hypotheses defined in
+Section~\ref{sec_meth_hyperbolic_hypotheses}.
+H1 tests whether a hyperbolic embedding can match or exceed
+the Euclidean PG-GAT at the same output dimension,
+while H2 tests whether comparable grouping performance can be retained
+at a substantially smaller embedding dimension.
+
+The results provide no evidence in support of H1.
+H2 is supported only in the synthetic-only setting,
+where the lower-dimensional hyperbolic representation remains competitive
+with the Euclidean model.
+This advantage does not persist after COCO fine-tuning.
+The hyperbolic variant is therefore treated as an efficiency trade-off
+rather than an improvement in grouping quality -
+it provides evidence that the embedding dimension can be reduced
+under some conditions
+but does not replace the Euclidean PG-GAT used for the headline results.
 
 \subsection{Setup}
 \label{sec_res_hyperbolic_setup}
 
-Three single-run configurations are reported.
-H1 trains a hyperbolic PG-GAT at the matched Euclidean output dimension $d = 128$;
-H2 trains a hyperbolic PG-GAT at the reduced output dimension $d = 32$ ($4\times$ smaller);
-Option~B fine-tunes the H2 checkpoint on COCO for 20 epochs using the legacy fine-tune recipe of Section~\ref{sec_res_coco_ft}.
-All three use the Lorentz-model output projection and the hyperbolic contrastive loss of Section~\ref{sec_meth_hyperbolic_loss},
-with the tangent-scale $\tau$ initialised at $1/\sqrt{d}$ and the margin $\gamma_{\mathbb{H}} = 2.0$.
-A complementary 8-run Bayesian sweep is reported separately
-to defend the choice of $d$ against the architecture-sweep search space of Section~\ref{sec_res_pggat_sweep}.
+Three single-run configurations are used to test the two hypotheses.
+For H1, the hyperbolic PG-GAT is trained with output dimension
+$d=128$,
+matching the Euclidean configuration used for the controlled comparison.
+For H2, the output dimension is reduced to $d=32$,
+giving a four-fold reduction in embedding dimensionality.
+A third configuration, denoted Option~B,
+starts from the $d=32$ H2 checkpoint and fine-tunes it on COCO
+for 20 epochs using the legacy fine-tuning recipe of
+Section~\ref{sec_res_coco_ft}.
+This tests whether any efficiency advantage observed at the smaller
+dimension survives adaptation to the real-data distribution.
+
+All three configurations use the Lorentz-model output projection
+and hyperbolic contrastive objective described in
+Section~\ref{sec_meth_hyperbolic_loss}.
+The tangent-scale parameter $\tau$ is initialised to $1/\sqrt{d}$,
+and the geodesic contrastive margin is fixed at $\gamma_{\mathbb{H}}=2.0$.
+These settings are held constant so that the primary experimental
+variable is the embedding dimension
+rather than the geometry-specific training parameters.
+
+In addition to the three targeted runs,
+an eight-run Bayesian sweep is used to test the sensitivity
+of the hyperbolic model to output dimension and the associated
+architecture parameters.
+The sweep is reported separately below
+and provides broader evidence for the dimension comparison than the two
+hypothesis-driven single runs alone.
 
 \subsection{Headline numbers}
 \label{sec_res_hyperbolic_numbers}
 
 \begin{table}[H]
 \centering
-\footnotesize
-\begin{tabular}{lccl}
+\tablesize
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.34\linewidth}ccccl}
 \toprule
-Configuration & Synth val PGA & COCO val PGA (kNN, GT kp) & W\&B run \\
+Configuration
+& $d$
+& Synth val
+& COCO val
+& COCO E2E
+& W\&B run \\
 \midrule
-PG-GAT Euclidean ($d=128$, ablation row)               & 0.8896 & 0.8868    & \texttt{r5ekg0zl} \\
-PG-GAT Euclidean (\texttt{champion-arch}, $d=256$)     & 0.9634 & 0.9010    & \texttt{08d0ffde} \\
-PG-GAT Euclidean (\texttt{meng-headline}, COCO ft)     & 0.9634 & 0.9715    & \texttt{b5noyg7t} \\
+PG-GAT Euclidean (ablation)
+    & 128 & 0.8896 & 0.8868 & --- & \texttt{r5ekg0zl} \\
+PG-GAT Euclidean (\texttt{champion-arch})
+    & 256 & 0.9634 & 0.9010 & 0.9005 & \texttt{08d0ffde} \\
+PG-GAT Euclidean (\texttt{meng-headline}, COCO ft)
+    & 256 & 0.9634 & 0.9715 & 0.9591 & \texttt{b5noyg7t} \\
 \midrule
-H1: Hyperbolic, $d = 128$, synth-only                  & 0.8773 & [Phase C] & \texttt{aox7h3di} \\
-H2: Hyperbolic, $d = 32$, synth-only                   & 0.8856 & [Phase C] & \texttt{g45tdxi5} \\
-Option~B: Hyperbolic, $d = 32$, COCO fine-tuned        & 0.8900 & 0.9399    & \texttt{lragtfzu} \\
-Hyperbolic sweep winner (\texttt{champion-hyperbolic}) & 0.8795 & 0.8876    & \texttt{ua4wdb3p} \\
+H1: Hyperbolic, synthetic only
+    & 128 & 0.8773 & 0.8919 & --- & \texttt{aox7h3di} \\
+H2: Hyperbolic, synthetic only
+    & 32 & 0.8856 & 0.8969 & --- & \texttt{g45tdxi5} \\
+Option~B: Hyperbolic, COCO fine-tuned
+    & 32 & 0.8900 & 0.9399 & 0.9336 & \texttt{lragtfzu} \\
+Hyperbolic sweep winner (\texttt{champion-hyperbolic})
+    & --- & 0.8795 & 0.8876 & --- & \texttt{ua4wdb3p} \\
 \bottomrule
 \end{tabular}
-\caption{Hyperbolic PG-GAT against the Euclidean Reference points.
-The hyperbolic sweep winner is reported alongside the single-run ablations
-as the broader defensibility evidence for the dimension choice.
-None of the hyperbolic configurations beat the Euclidean fine-tuned headline ($0.9715$);
-the dim-$32$ row matches the dim-$128$ Euclidean ablation row at $4\times$ smaller embedding,
-which is the efficiency-trade result.}
+\caption{Hyperbolic PG-GAT results against the corresponding Euclidean
+reference configurations. All columns report PGA; COCO val is $k$-means on
+ground-truth keypoints and COCO E2E uses HigherHRNet detections. H1 compares hyperbolic and Euclidean
+embeddings at $d=128$, while H2 tests whether useful grouping
+performance can be retained after reducing the embedding dimension to
+$d=32$. The $d=32$ synthetic-only model remains close to the
+$d=128$ Euclidean ablation on synthetic validation and exceeds it on
+zero-shot COCO ($0.8969$ versus $0.8868$), despite using a
+four-times-smaller embedding. After COCO fine-tuning, however, the
+$d=32$ hyperbolic model reaches $0.9399$ COCO PGA and $0.9336$
+end-to-end PGA, below the corresponding Euclidean headline results of
+$0.9715$ and $0.9591$. The hyperbolic result is therefore treated as an
+embedding-efficiency trade-off rather than an improvement in final
+grouping quality.}
 \label{tab:hyperbolic_headline}
 \end{table}
 
 \subsection{Interpretation}
 \label{sec_res_hyperbolic_discussion}
 
-The hyperbolic configurations populate the table cleanly:
-H2 (dim-32) is the strongest of the three single-run hyperbolic configurations on synthetic validation;
-H1 (dim-128) is the weakest;
-Option~B (dim-32 with COCO fine-tuning) is the strongest hyperbolic configuration overall.
+The individual hyperbolic configurations show a consistent pattern.
+Among the two synthetic-only hypothesis tests,
+the reduced-dimension H2 configuration performs better than H1,
+while the COCO-fine-tuned Option~B configuration gives the strongest
+absolute COCO result of the hyperbolic experiments.
 
-\paragraph{1. H2 supports the efficiency hypothesis; H1 does not support the quality hypothesis.}
-H1 (dim-128, $0.8773$) is below the Euclidean ablation row at the same architecture ($0.8896$),
-which contradicts the quality-hypothesis H1.
-H2 (dim-32, $0.8856$) is within seed-noise of the Euclidean ablation row,
-which supports the efficiency-hypothesis H2:
-a $4\times$ smaller hyperbolic embedding matches the larger Euclidean one on the synthetic distribution.
+\textbf{1. H2 provides evidence for the efficiency hypothesis, while
+H1 does not support the quality hypothesis:}
+At the matched output dimension of $d=128$,
+H1 reaches a synthetic-validation PGA of $0.8773$,
+compared with $0.8896$ for the Euclidean ablation under the
+corresponding architecture.
+The hyperbolic representation therefore provides no improvement
+at matched dimension,
+and H1 is not supported by this experiment.
 
-\paragraph{2. The efficiency advantage does not survive COCO fine-tuning.}
-Option~B fine-tunes H2 on COCO and reaches $0.8900$ synth val,
-which is above the H2 starting point but still well below the Euclidean fine-tune sweep winner ($0.9634$, \texttt{meng-headline}).
-The Euclidean fine-tune effect is large ($\sim 0.06$, Section~\ref{sec_res_coco_ft});
-the hyperbolic fine-tune effect at dim-$32$ is small ($\sim 0.004$).
-The asymmetry is the load-bearing finding here:
-the smaller hyperbolic embedding has less representational headroom to absorb the COCO distribution,
-and the fine-tune lift is correspondingly smaller.
-The dim-$32$ hyperbolic advantage at synthetic-only does not translate into a competitive COCO-fine-tuned result.
+Reducing the hyperbolic output dimension to $d=32$ produces a
+synthetic-validation PGA of $0.8856$,
+only $0.0040$ below the $d=128$ Euclidean reference.
+On zero-shot COCO the same configuration reaches $0.8969$,
+compared with $0.8868$ for the Euclidean reference.
+Although repeated-seed experiments were not performed to establish
+statistical equivalence,
+the result shows that reducing the embedding dimension by a factor
+of four does not produce a corresponding loss in grouping performance
+in the synthetic-only experiment.
+H2 is therefore supported as an efficiency result
+rather than as evidence of superior absolute accuracy.
 
-\paragraph{3. The hyperbolic sweep confirms the picture.}
-The 8-run Bayesian sweep over hyperbolic output dimension, depth, and hidden dimension (Section~\ref{sec_meth_evaluation_sweeps}, sweep id \texttt{qpggbsdn})
-selects a configuration whose synth val PGA is $0.8795$,
-which is consistent with the single-run H1 result and below the dim-$32$ single-run H2 result.
-Hyperbolic embedding does not produce a configuration that beats the matched Euclidean ablation row in the sweep,
-which rules out the possibility that the H1 failure was specific to the matched-dimension choice.
-The sweep also surfaces a more nuanced finding:
-the synth-to-COCO transfer gap at the hyperbolic sweep winner is approximately $4\times$ smaller than at the matched Euclidean configuration,
-which is a separate efficiency-style observation about transfer robustness rather than absolute quality.
+\textbf{2. The reduced-dimension advantage does not persist after
+COCO fine-tuning:}
+Option~B fine-tunes the $d=32$ H2 checkpoint on COCO and reaches
+$0.9399$ COCO validation PGA,
+an improvement of $0.0430$ over the H2 zero-shot result of $0.8969$.
+The Euclidean headline model improves from $0.9010$ before fine-tuning
+to $0.9715$ afterwards,
+a gain of $0.0705$.
+The final hyperbolic result therefore remains $0.0316$ below the
+fine-tuned Euclidean headline.
 
-\paragraph{4. Honest framing: efficiency, not quality.}
-The headline summary of this section is therefore:
-hyperbolic PG-GAT at dim-$32$ matches the Euclidean ablation row at dim-$128$ in the synthetic-only regime,
-which is an efficiency advantage of $4\times$ smaller embeddings;
-after COCO fine-tuning, the Euclidean configuration takes the lead by $\sim 0.08$ COCO val PGA;
-the hyperbolic variant is therefore not a competing answer to the headline question
-but a documented efficiency observation that may be useful in deployment regimes that prioritise embedding size over absolute COCO PGA.
-The discussion of why hyperbolic does not win at the full architecture is the subject of Section~\ref{sec_disc_hyperbolic}.
+The important observation is that the lower-dimensional hyperbolic
+model benefits from COCO adaptation,
+but not enough to retain its competitive position once both approaches
+are fine-tuned.
+One possible explanation is that the $32$-dimensional representation
+provides less capacity for adaptation than the $256$-dimensional
+Euclidean headline model,
+although the present experiments do not isolate embedding dimension
+from geometry sufficiently to establish this as the cause.
+The result nevertheless shows that the synthetic-only efficiency
+finding does not translate into a competitive fine-tuned COCO result.
+
+\textbf{3. The hyperbolic sweep does not identify a stronger
+configuration:}
+An eight-run Bayesian sweep over hyperbolic output dimension,
+network depth,
+and hidden dimension was conducted under sweep identifier
+\texttt{qpggbsdn}.
+The selected configuration reaches a synthetic-validation PGA of
+$0.8795$ and a zero-shot COCO PGA of $0.8876$.
+Its synthetic result is below both the matched Euclidean ablation
+($0.8896$) and the targeted $d=32$ H2 run ($0.8856$).
+
+None of the configurations sampled by the sweep exceeds the matched
+Euclidean reference on synthetic validation.
+The H1 result is therefore not simply contradicted by one manually
+selected hyperbolic configuration -
+a broader search over dimension,
+depth,
+and width also fails to identify an accuracy advantage within the tested
+search space.
+
+The sweep does, however, show relatively stable transfer.
+Its selected configuration changes from $0.8795$ on synthetic validation
+to $0.8876$ on zero-shot COCO,
+while the matched Euclidean ablation changes from $0.8896$ to $0.8868$.
+This does not establish that hyperbolic embeddings are generally more
+robust to domain shift,
+but it provides some evidence that their main limitation in these
+experiments is absolute grouping quality
+rather than a pronounced synthetic-to-COCO degradation.
+
+\textbf{4. The useful result is efficiency rather than higher
+accuracy:}
+The hyperbolic experiments therefore support a narrower conclusion than
+the original quality hypothesis.
+A $d=32$ hyperbolic embedding reaches $0.8856$ synthetic-validation PGA
+and $0.8969$ zero-shot COCO PGA,
+compared with $0.8896$ and $0.8868$, respectively,
+for the $d=128$ Euclidean ablation.
+This is achieved with a four-times-smaller embedding representation.
+
+After COCO fine-tuning, however,
+the comparison favours the Euclidean model -
+the hyperbolic Option~B configuration reaches $0.9399$ compared with
+$0.9715$ for the Euclidean headline,
+a difference of $0.0316$.
+The hyperbolic variant is therefore not used as the final grouping model.
+Its contribution is instead an efficiency observation -
+in the synthetic-only setting,
+a substantially smaller hyperbolic embedding retains competitive
+grouping performance.
+This may be useful in settings where embedding storage or downstream
+processing cost matters more than maximising COCO PGA.
+Section~\ref{sec_disc_transfer_hyperbolic} returns to the possible
+reasons why this advantage does not extend to the fully fine-tuned
+configuration.
