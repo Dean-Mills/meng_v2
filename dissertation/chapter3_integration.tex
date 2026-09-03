@@ -25,6 +25,23 @@ and maps each keypoint to an identity-discriminative embedding.
 The number of people is then estimated from the learned representation,
 allowing $k$-means to recover the final per-person partition
 without access to the ground-truth $K$.
+Figure~\ref{fig:e2e_interface} shows this arrangement.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{figures/e2e_interface.pdf}
+    \caption[The detector-independent interface of the end-to-end pipeline.]{The detector-independent interface of the end-to-end pipeline.
+    Each of the three detectors evaluated in Chapter~\ref{chap_4} supplies keypoints -
+    their native person assignments are discarded,
+    and only keypoint coordinates, visibility flags, and joint types cross the interface (dashed line)
+    into the frozen PG-GAT network.
+    The frozen K-head predicts $\hat{K}$ from the embeddings and $k$-means produces the partition.
+    Ground truth enters only for evaluation -
+    detections are matched to annotations by Hungarian assignment at $10$ pixels,
+    and PGA is computed on the matched set for both the PG-GAT partition
+    and the detector's retained native assignment.}
+    \label{fig:e2e_interface}
+\end{figure}
 
 This separation is central to the detector-independent claim
 of the method.
