@@ -24,7 +24,19 @@
 %% Use \tablesize inside every table environment instead of \footnotesize.
 \newcommand{\tablesize}{\fontsize{11}{13.2}\selectfont}
 
+%% IEEEtran.bst control entry: "et al." after the first author when a work has more than six authors
+%% (department guide 3.14.7). \bstctlcite is normally provided by IEEEtran.cls; defined here for diss_thesis.cls.
+\makeatletter
+\def\bstctlcite{\@ifnextchar[{\@bstctlcite}{\@bstctlcite[@auxout]}}
+\def\@bstctlcite[#1]#2{\@bsphack
+  \@for\@citeb:=#2\do{%
+    \edef\@citeb{\expandafter\@firstofone\@citeb}%
+    \if@filesw\immediate\write\csname #1\endcsname{\string\citation{\@citeb}}\fi}%
+  \@esphack}
+\makeatother
+
 \begin{document}
+\bstctlcite{IEEEexample:BSTcontrol}
 
 %% ---[ FRONT MATTER ]-------------------------------------------------------
 

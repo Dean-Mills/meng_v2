@@ -1,3 +1,10 @@
+@IEEEtranBSTCTL{IEEEexample:BSTcontrol,
+  CTLuse_forced_etal       = "yes",
+  CTLmax_names_forced_etal = "6",
+  CTLnames_show_etal       = "1",
+  CTLdash_repeated_names   = "no"
+}
+
 % ─────────────────────────────────────────────────────────────────────────────
 % Foundations
 % ─────────────────────────────────────────────────────────────────────────────
@@ -26,6 +33,7 @@
   title={Neural Message Passing for Quantum Chemistry},
   author={Gilmer, Justin and Schoenholz, Samuel S. and Riley, Patrick F. and Vinyals, Oriol and Dahl, George E.},
   booktitle={International Conference on Machine Learning (ICML)},
+  pages={1263--1272},
   year={2017}
 }
 
@@ -33,6 +41,7 @@
   title={Inductive Representation Learning on Large Graphs},
   author={Hamilton, William L. and Ying, Rex and Leskovec, Jure},
   booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
+  volume={30},
   year={2017}
 }
 
@@ -58,7 +67,7 @@
   title={Realtime Multi-Person {2D} Pose Estimation Using Part Affinity Fields},
   author={Cao, Zhe and Simon, Tomas and Wei, Shih-En and Sheikh, Yaser},
   booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
-  pages={7291--7299},
+  pages={1302--1310},
   year={2017},
   doi={10.1109/CVPR.2017.143}
 }
@@ -67,14 +76,15 @@
   title={Associative Embedding: End-to-End Learning for Joint Detection and Grouping},
   author={Newell, Alejandro and Huang, Zhiao and Deng, Jia},
   booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
+  volume={30},
   year={2017}
 }
 
 @inproceedings{sun2019hrnet,
   title={Deep High-Resolution Representation Learning for Human Pose Estimation},
   author={Sun, Ke and Xiao, Bin and Liu, Dong and Wang, Jingdong},
-  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
-  pages={5693--5703},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={5686--5696},
   year={2019},
   doi={10.1109/CVPR.2019.00584}
 }
@@ -82,7 +92,7 @@
 @inproceedings{cheng2020higherhrnet,
   title={{HigherHRNet}: Scale-Aware Representation Learning for Bottom-Up Human Pose Estimation},
   author={Cheng, Bowen and Xiao, Bin and Wang, Jingdong and Shi, Honghui and Huang, Thomas S. and Zhang, Lei},
-  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   pages={5385--5394},
   year={2020},
   doi={10.1109/CVPR42600.2020.00543}
@@ -91,7 +101,7 @@
 @inproceedings{geng2021dekr,
   title={Bottom-Up Human Pose Estimation Via Disentangled Keypoint Regression},
   author={Geng, Zigang and Sun, Ke and Xiao, Bin and Zhang, Zhaoxiang and Wang, Jingdong},
-  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   pages={14671--14681},
   year={2021},
   doi={10.1109/CVPR46437.2021.01444}
@@ -105,9 +115,9 @@
 }
 
 @inproceedings{liu2023grouppose,
-  title={Group Pose: A Simple Baseline for End-to-End Multi-Person Pose Estimation},
+  title={{Group Pose}: A Simple Baseline for End-to-End Multi-Person Pose Estimation},
   author={Liu, Huan and Chen, Qiang and Tan, Zichang and Liu, Jiang-Jiang and Wang, Jian and Su, Xiangbo and Li, Xiaolong and Yao, Kun and Han, Junyu and Ding, Errui and Zhao, Yao and Wang, Jingdong},
-  booktitle={IEEE International Conference on Computer Vision (ICCV)},
+  booktitle={IEEE/CVF International Conference on Computer Vision (ICCV)},
   pages={14983--14992},
   year={2023},
   doi={10.1109/ICCV51070.2023.01380}
@@ -121,6 +131,7 @@
   title={Differentiable Hierarchical Graph Grouping for Multi-Person Pose Estimation},
   author={Jin, Sheng and Liu, Wentao and Xie, Enze and Wang, Wenhai and Qian, Chen and Ouyang, Wanli and Luo, Ping},
   booktitle={European Conference on Computer Vision (ECCV)},
+  pages={718--734},
   year={2020},
   doi={10.1007/978-3-030-58571-6_42}
 }
@@ -128,8 +139,8 @@
 @inproceedings{braso2021centergroup,
   title={The Center of Attention: Center-Keypoint Grouping via Attention for Multi-Person Pose Estimation},
   author={Bras{\'o}, Guillem and Kister, Nikita and Leal-Taix{\'e}, Laura},
-  booktitle={IEEE International Conference on Computer Vision (ICCV)},
-  pages={11853--11863},
+  booktitle={IEEE/CVF International Conference on Computer Vision (ICCV)},
+  pages={11833--11843},
   year={2021},
   doi={10.1109/ICCV48922.2021.01164}
 }
@@ -141,7 +152,6 @@
   volume={136},
   pages={109232},
   year={2023},
-  publisher={Elsevier},
   doi={10.1016/j.patcog.2022.109232}
 }
 
@@ -211,6 +221,8 @@
   title={Object-Centric Learning with Slot Attention},
   author={Locatello, Francesco and Weissenborn, Dirk and Unterthiner, Thomas and Mahendran, Aravindh and Heigold, Georg and Uszkoreit, Jakob and Dosovitskiy, Alexey and Kipf, Thomas},
   booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
+  pages={11525--11538},
+  volume={33},
   year={2020}
 }
 
@@ -221,7 +233,8 @@
 @inproceedings{yang2019face,
   title={Learning to Cluster Faces on an Affinity Graph},
   author={Yang, Lei and Zhan, Xiaohang and Chen, Dapeng and Yan, Junjie and Loy, Chen Change and Lin, Dahua},
-  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={2293--2301},
   year={2019},
   doi={10.1109/CVPR.2019.00240}
 }
@@ -229,7 +242,7 @@
 @inproceedings{yang2020gcnve,
   title={Learning to Cluster Faces via Confidence and Connectivity Estimation},
   author={Yang, Lei and Chen, Dapeng and Zhan, Xiaohang and Zhao, Rui and Loy, Chen Change and Lin, Dahua},
-  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   pages={13366--13375},
   year={2020},
   doi={10.1109/CVPR42600.2020.01338}
@@ -300,7 +313,7 @@
 
 @article{vonluxburg2007spectral,
   title={A Tutorial on Spectral Clustering},
-  author={Von Luxburg, Ulrike},
+  author={von Luxburg, Ulrike},
   journal={Statistics and Computing},
   volume={17},
   number={4},
@@ -359,11 +372,12 @@
   publisher={Elsevier}
 }
 
-@article{liu2020gastnet,
+@inproceedings{liu2020gastnet,
   title={A Graph Attention Spatio-temporal Convolutional Network for {3D} Human Pose Estimation in Video},
-  author={Liu, Junfa and Rojas, Juan and Liang, Zhijun and Li, Yihui and Guan, Yisheng},
-  journal={arXiv preprint arXiv:2003.14179},
-  year={2020}
+  author={Liu, Junfa and Rojas, Juan and Li, Yihui and Liang, Zhijun and Guan, Yisheng and Xi, Ning and Zhu, Haifei},
+  pages={3374--3380},
+  booktitle={IEEE International Conference on Robotics and Automation (ICRA)},
+  year={2021}
 }
 
 % ─────────────────────────────────────────────────────────────────────────────
@@ -371,9 +385,9 @@
 % ─────────────────────────────────────────────────────────────────────────────
 
 @inproceedings{toshev2014deeppose,
-  title={DeepPose: Human pose estimation via deep neural networks},
+  title={{DeepPose}: Human pose estimation via deep neural networks},
   author={Toshev, Alexander and Szegedy, Christian},
-  booktitle={Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition},
+  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
   pages={1653--1660},
   year={2014},
   doi={10.1109/CVPR.2014.214}
@@ -382,7 +396,7 @@
 @inproceedings{wei2016cpm,
   title={Convolutional pose machines},
   author={Wei, Shih-En and Ramakrishna, Varun and Kanade, Takeo and Sheikh, Yaser},
-  booktitle={Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition},
+  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
   pages={4724--4732},
   year={2016},
   doi={10.1109/CVPR.2016.511}
@@ -391,18 +405,17 @@
 @inproceedings{newell2016hourglass,
   title={Stacked hourglass networks for human pose estimation},
   author={Newell, Alejandro and Yang, Kaiyu and Deng, Jia},
-  booktitle={European Conference on Computer Vision},
+  booktitle={European Conference on Computer Vision (ECCV)},
   pages={483--499},
   year={2016},
-  organization={Springer},
   doi={10.1007/978-3-319-46484-8_29}
 }
 
 @inproceedings{xiao2018simplebaselines,
   title={Simple baselines for human pose estimation and tracking},
   author={Xiao, Bin and Wu, Haiping and Wei, Yichen},
-  booktitle={European Conference on Computer Vision},
-  pages={466--481},
+  booktitle={European Conference on Computer Vision (ECCV)},
+  pages={472--487},
   year={2018},
   doi={10.1007/978-3-030-01231-1_29}
 }
@@ -414,8 +427,8 @@
 @inproceedings{he2017maskrcnn,
   title={Mask {R-CNN}},
   author={He, Kaiming and Gkioxari, Georgia and Doll{\'a}r, Piotr and Girshick, Ross},
-  booktitle={Proceedings of the IEEE International Conference on Computer Vision},
-  pages={2961--2969},
+  booktitle={IEEE International Conference on Computer Vision (ICCV)},
+  pages={2980--2988},
   year={2017},
   doi={10.1109/ICCV.2017.322}
 }
@@ -423,8 +436,8 @@
 @inproceedings{fang2017rmpe,
   title={{RMPE}: Regional multi-person pose estimation},
   author={Fang, Hao-Shu and Xie, Shuqin and Tai, Yu-Wing and Lu, Cewu},
-  booktitle={Proceedings of the IEEE International Conference on Computer Vision},
-  pages={2334--2343},
+  booktitle={IEEE International Conference on Computer Vision (ICCV)},
+  pages={2353--2362},
   year={2017},
   doi={10.1109/ICCV.2017.256}
 }
@@ -436,8 +449,8 @@
 @inproceedings{kreiss2019pifpaf,
   title={{PifPaf}: Composite fields for human pose estimation},
   author={Kreiss, Sven and Bertoni, Lorenzo and Alahi, Alexandre},
-  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
-  pages={11977--11986},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={11969--11978},
   year={2019},
   doi={10.1109/CVPR.2019.01225}
 }
@@ -449,7 +462,7 @@
 @inproceedings{xu2022vitpose,
   title={{ViTPose}: Simple vision transformer baselines for human pose estimation},
   author={Xu, Yufei and Zhang, Jing and Zhang, Qiming and Tao, Dacheng},
-  booktitle={Advances in Neural Information Processing Systems},
+  booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
   volume={35},
   pages={38571--38584},
   year={2022}
@@ -462,15 +475,15 @@
   volume={46},
   number={2},
   pages={1212--1230},
-  year={2023},
+  year={2024},
   doi={10.1109/TPAMI.2023.3330016}
 }
 
 @inproceedings{li2021tokenpose,
   title={{TokenPose}: Learning keypoint tokens for human pose estimation},
   author={Li, Yanjie and Zhang, Shoukui and Wang, Zhicheng and Yang, Sen and Yang, Wankou and Xia, Shu-Tao and Zhou, Erjin},
-  booktitle={Proceedings of the IEEE/CVF International Conference on Computer Vision},
-  pages={11313--11322},
+  booktitle={IEEE/CVF International Conference on Computer Vision (ICCV)},
+  pages={11293--11302},
   year={2021},
   doi={10.1109/ICCV48922.2021.01112}
 }
@@ -478,7 +491,7 @@
 @inproceedings{yuan2021hrformer,
   title={{HRFormer}: High-resolution transformer for dense prediction},
   author={Yuan, Yuhui and Fu, Rao and Huang, Lang and Lin, Weihong and Zhang, Chao and Chen, Xilin and Wang, Jingdong},
-  booktitle={Advances in Neural Information Processing Systems},
+  booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
   volume={34},
   pages={7281--7293},
   year={2021}
@@ -487,8 +500,8 @@
 @inproceedings{shi2022petr,
   title={End-to-end multi-person pose estimation with transformers},
   author={Shi, Dahu and Wei, Xing and Li, Liangqi and Ren, Ye and Tan, Wenming},
-  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
-  pages={11069--11078},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={11059--11068},
   year={2022},
   doi={10.1109/CVPR52688.2022.01079}
 }
@@ -496,7 +509,7 @@
 @inproceedings{xiao2022querypose,
   title={{QueryPose}: Sparse multi-person pose regression via spatial-aware part-level query},
   author={Xiao, Yabo and Su, Kai and Wang, Xiaojuan and Yu, Dongdong and Jin, Lei and He, Mingshu and Yuan, Zehuan},
-  booktitle={Advances in Neural Information Processing Systems},
+  booktitle={Advances in Neural Information Processing Systems (NeurIPS)},
   volume={35},
   pages={12464--12477},
   year={2022}
@@ -509,8 +522,8 @@
 @inproceedings{sun2018integral,
   title={Integral human pose regression},
   author={Sun, Xiao and Xiao, Bin and Wei, Fangyin and Liang, Shuang and Wei, Yichen},
-  booktitle={European Conference on Computer Vision},
-  pages={529--545},
+  booktitle={European Conference on Computer Vision (ECCV)},
+  pages={536--553},
   year={2018},
   doi={10.1007/978-3-030-01231-1_33}
 }
@@ -519,15 +532,14 @@
   title={Numerical coordinate regression with convolutional neural networks},
   author={Nibali, Aiden and He, Zhen and Morgan, Stuart and Prendergast, Luke},
   journal={arXiv preprint arXiv:1801.07372},
-  year={2018},
-  note={arXiv preprint, not peer-reviewed}
+  year={2018}
 }
 
 @inproceedings{li2021rle,
   title={Human pose regression with residual log-likelihood estimation},
   author={Li, Jiefeng and Bian, Siyuan and Zeng, Ailing and Wang, Can and Pang, Bo and Liu, Wentao and Lu, Cewu},
-  booktitle={Proceedings of the IEEE/CVF International Conference on Computer Vision},
-  pages={11025--11034},
+  booktitle={IEEE/CVF International Conference on Computer Vision (ICCV)},
+  pages={11005--11014},
   year={2021},
   doi={10.1109/ICCV48922.2021.01084}
 }
@@ -535,7 +547,7 @@
 @inproceedings{li2022simcc,
   title={{SimCC}: A simple coordinate classification perspective for human pose estimation},
   author={Li, Yanjie and Yang, Sen and Liu, Peidong and Zhang, Shoukui and Wang, Yunxiao and Wang, Zhicheng and Yang, Wankou and Xia, Shu-Tao},
-  booktitle={European Conference on Computer Vision},
+  booktitle={European Conference on Computer Vision (ECCV)},
   pages={89--106},
   year={2022},
   doi={10.1007/978-3-031-20068-7_6}
@@ -545,14 +557,13 @@
   title={{RTMPose}: Real-time multi-person pose estimation based on {MMPose}},
   author={Jiang, Tao and Lu, Peng and Zhang, Li and Ma, Ningsheng and Han, Rui and Lyu, Chengqi and Li, Yining and Chen, Kai},
   journal={arXiv preprint arXiv:2303.07399},
-  year={2023},
-  note={arXiv tech report from OpenMMLab}
+  year={2023}
 }
 
 @inproceedings{lu2024rtmo,
   title={{RTMO}: Towards high-performance one-stage real-time multi-person pose estimation},
   author={Lu, Peng and Jiang, Tao and Li, Yining and Li, Xiangtai and Chen, Kai and Yang, Wenming},
-  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   pages={1491--1500},
   year={2024},
   doi={10.1109/CVPR52733.2024.00148}
@@ -562,8 +573,7 @@
   title={{RTMW}: Real-time multi-person {2D} and {3D} whole-body pose estimation},
   author={Jiang, Tao and Xie, Xinchen and Li, Yining},
   journal={arXiv preprint arXiv:2407.08634},
-  year={2024},
-  note={arXiv tech report from OpenMMLab}
+  year={2024}
 }
 
 @inproceedings{yang2023dwpose,
@@ -589,7 +599,7 @@
 @inproceedings{yang2024xpose,
   title={{X-Pose}: Detecting any keypoints},
   author={Yang, Jie and Zeng, Ailing and Zhang, Ruimao and Zhang, Lei},
-  booktitle={European Conference on Computer Vision},
+  booktitle={European Conference on Computer Vision (ECCV)},
   pages={249--268},
   year={2024},
   doi={10.1007/978-3-031-72952-2_15}
@@ -598,7 +608,7 @@
 @inproceedings{geng2023pct,
   title={Human pose as compositional tokens},
   author={Geng, Zigang and Wang, Chunyu and Wei, Yixuan and Liu, Ze and Li, Houqiang and Hu, Han},
-  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   pages={660--671},
   year={2023},
   doi={10.1109/CVPR52729.2023.00071}
@@ -611,7 +621,7 @@
 @inproceedings{andriluka2014mpii,
   title={{2D} human pose estimation: New benchmark and state of the art analysis},
   author={Andriluka, Mykhaylo and Pishchulin, Leonid and Gehler, Peter and Schiele, Bernt},
-  booktitle={Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition},
+  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
   pages={3686--3693},
   year={2014},
   doi={10.1109/CVPR.2014.471}
@@ -620,7 +630,7 @@
 @inproceedings{andriluka2018posetrack,
   title={{PoseTrack}: A benchmark for human pose estimation and tracking},
   author={Andriluka, Mykhaylo and Iqbal, Umar and Insafutdinov, Eldar and Pishchulin, Leonid and Milan, Anton and Gall, Juergen and Schiele, Bernt},
-  booktitle={Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   pages={5167--5176},
   year={2018},
   doi={10.1109/CVPR.2018.00542}
@@ -629,8 +639,8 @@
 @inproceedings{li2019crowdpose,
   title={{CrowdPose}: Efficient crowded scenes pose estimation and a new benchmark},
   author={Li, Jiefeng and Wang, Can and Zhu, Hao and Mao, Yihuan and Fang, Hao-Shu and Lu, Cewu},
-  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
-  pages={10863--10872},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={10855--10864},
   year={2019},
   doi={10.1109/CVPR.2019.01112}
 }
@@ -638,7 +648,7 @@
 @inproceedings{zhang2019pose2seg,
   title={{Pose2Seg}: Detection free human instance segmentation},
   author={Zhang, Song-Hai and Li, Ruilong and Dong, Xin and Rosin, Paul and Cai, Zixi and Han, Xi and Yang, Dingcheng and Huang, Haozhi and Hu, Shi-Min},
-  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   pages={889--898},
   year={2019},
   doi={10.1109/CVPR.2019.00098}
@@ -649,7 +659,7 @@
 % ─────────────────────────────────────────────────────────────────────────────
 
 @inproceedings{xiu2018poseflow,
-  title={Pose flow: Efficient online pose tracking},
+  title={{Pose Flow}: Efficient online pose tracking},
   author={Xiu, Yuliang and Li, Jiefeng and Wang, Haoyu and Fang, Yinghong and Lu, Cewu},
   booktitle={British Machine Vision Conference (BMVC)},
   pages={53},
@@ -659,7 +669,7 @@
 @inproceedings{ning2020lighttrack,
   title={{LightTrack}: A generic framework for online top-down human pose tracking},
   author={Ning, Guanghan and Pei, Jian and Huang, Heng},
-  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW)},
   pages={4456--4465},
   year={2020},
   doi={10.1109/CVPRW50498.2020.00525}
@@ -697,7 +707,7 @@
 @inproceedings{arthur2007kmeanspp,
   title={k-means++: The Advantages of Careful Seeding},
   author={Arthur, David and Vassilvitskii, Sergei},
-  booktitle={Proceedings of the Eighteenth Annual ACM-SIAM Symposium on Discrete Algorithms (SODA)},
+  booktitle={ACM-SIAM Symposium on Discrete Algorithms (SODA)},
   pages={1027--1035},
   year={2007}
 }
@@ -712,15 +722,15 @@
 @misc{blender,
   title={Blender --- a {3D} modelling and rendering package},
   author={{Blender Online Community}},
-  organization={Blender Foundation},
   howpublished={\url{http://www.blender.org}},
+  note={Software},
   year={2024}
 }
 
 @inproceedings{cho2014gru,
   title={Learning Phrase Representations using {RNN} Encoder-Decoder for Statistical Machine Translation},
   author={Cho, Kyunghyun and van Merri{\"e}nboer, Bart and Gulcehre, Caglar and Bahdanau, Dzmitry and Bougares, Fethi and Schwenk, Holger and Bengio, Yoshua},
-  booktitle={Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing (EMNLP)},
+  booktitle={Conference on Empirical Methods in Natural Language Processing (EMNLP)},
   pages={1724--1734},
   year={2014},
   doi={10.3115/v1/D14-1179}
@@ -795,14 +805,14 @@
   title={Learning Continuous Hierarchies in the {L}orentz Model of Hyperbolic Geometry},
   author={Nickel, Maximilian and Kiela, Douwe},
   booktitle={International Conference on Machine Learning (ICML)},
-  pages={3776--3785},
+  pages={3779--3788},
   year={2018}
 }
 
 @inproceedings{sandler2018mobilenetv2,
   title={{MobileNetV2}: Inverted Residuals and Linear Bottlenecks},
   author={Sandler, Mark and Howard, Andrew and Zhu, Menglong and Zhmoginov, Andrey and Chen, Liang-Chieh},
-  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   pages={4510--4520},
   year={2018},
   doi={10.1109/CVPR.2018.00474}
@@ -814,6 +824,7 @@
   journal={Journal of Machine Learning Research},
   volume={12},
   pages={2825--2830},
+  number={85},
   year={2011}
 }
 
@@ -823,6 +834,7 @@
   journal={Journal of Machine Learning Research},
   volume={9},
   pages={2579--2605},
+  number={86},
   year={2008}
 }
 
@@ -839,7 +851,7 @@
 @inproceedings{sarkar2011treeembed,
   title={Low Distortion {Delaunay} Embedding of Trees in Hyperbolic Plane},
   author={Sarkar, Rik},
-  booktitle={Graph Drawing (GD)},
+  booktitle={International Symposium on Graph Drawing (GD)},
   pages={355--366},
   year={2011},
   doi={10.1007/978-3-642-25878-7_34}
@@ -869,7 +881,7 @@
 @inproceedings{macqueen1967kmeans,
   title={Some Methods for Classification and Analysis of Multivariate Observations},
   author={MacQueen, James},
-  booktitle={Proceedings of the Fifth Berkeley Symposium on Mathematical Statistics and Probability},
+  booktitle={Fifth Berkeley Symposium on Mathematical Statistics and Probability},
   volume={1},
   pages={281--297},
   year={1967}
@@ -892,7 +904,7 @@
   title={{PersonLab}: Person Pose Estimation and Instance Segmentation with a Bottom-Up, Part-Based, Geometric Embedding Model},
   author={Papandreou, George and Zhu, Tyler and Chen, Liang-Chieh and Gidaris, Spyros and Tompson, Jonathan and Murphy, Kevin},
   booktitle={European Conference on Computer Vision (ECCV)},
-  pages={269--286},
+  pages={282--299},
   year={2018},
   doi={10.1007/978-3-030-01264-9_17}
 }
@@ -926,6 +938,7 @@
   author={Hadsell, Raia and Chopra, Sumit and LeCun, Yann},
   booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
   pages={1735--1742},
+  volume={2},
   year={2006},
   doi={10.1109/CVPR.2006.100}
 }
@@ -933,7 +946,7 @@
 @inproceedings{yan2018stgcn,
   title={Spatial Temporal Graph Convolutional Networks for Skeleton-Based Action Recognition},
   author={Yan, Sijie and Xiong, Yuanjun and Lin, Dahua},
-  booktitle={AAAI Conference on Artificial Intelligence},
+  booktitle={AAAI Conference on Artificial Intelligence (AAAI)},
   pages={7444--7452},
   year={2018},
   doi={10.1609/aaai.v32i1.12328}
@@ -942,8 +955,8 @@
 @inproceedings{shi2019twostreamadaptive,
   title={Two-Stream Adaptive Graph Convolutional Networks for Skeleton-Based Action Recognition},
   author={Shi, Lei and Zhang, Yifan and Cheng, Jian and Lu, Hanqing},
-  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
-  pages={12026--12035},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={12018--12027},
   year={2019},
   doi={10.1109/CVPR.2019.01230}
 }
@@ -951,8 +964,8 @@
 @inproceedings{zhao2019semanticgcn,
   title={Semantic Graph Convolutional Networks for {3D} Human Pose Regression},
   author={Zhao, Long and Peng, Xi and Tian, Yu and Kapadia, Mubbasir and Metaxas, Dimitris N.},
-  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
-  pages={3425--3435},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={3420--3430},
   year={2019},
   doi={10.1109/CVPR.2019.00354}
 }
@@ -960,8 +973,8 @@
 @inproceedings{doosti2020hopenet,
   title={{HOPE-Net}: A Graph-Based Model for Hand-Object Pose Estimation},
   author={Doosti, Bardia and Naha, Shujon and Mirbagheri, Majid and Crandall, David J.},
-  booktitle={IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
-  pages={6608--6617},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages={6607--6616},
   year={2020},
   doi={10.1109/CVPR42600.2020.00664}
 }
@@ -986,7 +999,7 @@
 @inproceedings{carion2020detr,
   title={End-to-end object detection with transformers},
   author={Carion, Nicolas and Massa, Francisco and Synnaeve, Gabriel and Usunier, Nicolas and Kirillov, Alexander and Zagoruyko, Sergey},
-  booktitle={Proceedings of the European Conference on Computer Vision},
+  booktitle={European Conference on Computer Vision (ECCV)},
   pages={213--229},
   year={2020},
   doi={10.1007/978-3-030-58452-8_13}
