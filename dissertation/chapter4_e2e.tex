@@ -183,6 +183,21 @@ The K head itself achieves $76.1\%$ exact-count accuracy on the COCO
 validation set,
 rising to $91.9\%$ when predictions within one person of the target
 are counted.
+Figure~\ref{fig:k_confusion} shows the full distribution of predicted against annotated counts.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.64\linewidth]{figures/k_confusion.pdf}
+    \caption[Predicted against annotated person count for the K head on HigherHRNet detections.]{Predicted person count $\hat{K}$ from the frozen K head against the annotated count $K$
+    on the $2{,}165$ scored HigherHRNet scenes.
+    Counts of eight or more are pooled into the last row and column.
+    Mass below the diagonal is under-counting.
+    The matrix comes from a re-run of the pipeline that reproduces the reported aggregates
+    to within $0.0003$ PGA;
+    two scenes receive a different count than in the logged run,
+    which is why the exact-count rate reads $76.0\%$ here against $76.1\%$ in the text.}
+    \label{fig:k_confusion}
+\end{figure}
 
 At first sight, a predicted cluster count outperforming the
 ground-truth count appears counter-intuitive.
@@ -218,6 +233,26 @@ using ground-truth information at inference.
 Its PGA of $0.9644$ leaves a difference of $0.0203$ to HigherHRNet's
 native AE grouping on the same evaluation protocol
 and is the final autonomous result of the experimental investigation.
+Figure~\ref{fig:e2e_examples} shows the three groupings on four scored scenes.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.97\linewidth]{figures/e2e_examples.pdf}
+    \caption[Four scored COCO scenes under the three end-to-end groupings.]{Four scored COCO \texttt{val2017} scenes under the end-to-end protocol:
+    (a) HigherHRNet's native AE grouping,
+    (b) PG-GAT with $k$-means at the annotated $K$,
+    and (c) PG-GAT with the K head's $\hat{K}$.
+    Only the detections matched to ground truth are drawn,
+    coloured by the person their cluster is assigned to under Hungarian matching,
+    so a joint in another person's colour is a grouping error -
+    the PGA in each title is the per-scene value.
+    From the top: five people grouped correctly by all three;
+    a grouping error at the correct count;
+    a third annotated person with no matched detections,
+    so the annotated $K$ splits a person while the K head's $\hat{K}=2$ does not;
+    and an under-count that merges two people.}
+    \label{fig:e2e_examples}
+\end{figure}
 
 \subsection{Relationship between PGA and AP@OKS}
 \label{sec_res_e2e_ap}

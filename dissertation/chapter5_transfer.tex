@@ -30,6 +30,21 @@ These experiments alter different parts of the pipeline,
 but each exposes the same underlying difficulty -
 a representation that is useful on the synthetic distribution is not
 necessarily the representation that transfers best to real keypoint data.
+Figure~\ref{fig:transfer_scatter} shows the pattern across every configuration in
+Chapter~\ref{chap_4} that reports both numbers.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\linewidth]{figures/transfer_scatter.pdf}
+    \caption[Synthetic-validation against COCO-validation PGA for every configuration reporting both.]{Synthetic-validation PGA against COCO-validation PGA
+    (ground-truth keypoints, $k$-means) for the 27 configurations of Chapter~\ref{chap_4} that report both.
+    Points below the dashed diagonal lose accuracy in transfer;
+    the vertical distance to the diagonal is the transfer gap.
+    Arrows join the three synthetic-only models to their COCO fine-tuned versions.
+    Values are the Chapter~\ref{chap_4} table cells -
+    TriGAT is scored on $2{,}180$ scenes, every other configuration on $2{,}307$.}
+    \label{fig:transfer_scatter}
+\end{figure}
 
 The evidence therefore suggests that synthetic validation should be
 treated primarily as a controlled environment for developing and

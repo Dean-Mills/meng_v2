@@ -434,10 +434,281 @@ def fig_context_example():
     print("wrote context_example.pdf")
 
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Figure: synthetic-to-real transfer scatter (Chapter 5, Section 5.2)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fig_transfer_scatter():
+    """Synthetic-validation PGA vs COCO-validation PGA for every configuration
+    reported in Chapter 4 that has both numbers (27 runs). Values are the
+    Chapter 4 table cells (docs/results.md canonical); W&B run ids in comments.
+    COCO = k-means on ground-truth keypoints, 2,307 scenes (TriGAT: 2,180).
+    """
+    # family, label, synth val, COCO val, fine-tuned?, annotate?
+    pts = [
+        ("Standard GAT", "depth on",            0.9990, 0.8366, False, "depth on"),          # su8rmvti
+        ("Standard GAT", "depth off (baseline)", 0.8783, 0.8841, False, "baseline"),         # jkd1ln4a
+        ("Learned head", "DEC",                 0.8608, 0.8798, False, "DEC"),               # 5q0p9it9
+        ("Learned head", "slot attention",      0.9025, 0.8254, False, "slot attention"),    # 2kq3i8yv
+        ("Learned head", "graph partitioning",  0.9714, 0.8366, False, "graph partitioning"),# s3qr04xm
+        ("PG-GAT (synthetic only)", "type-pair only", 0.8825, 0.8819, False, None),          # 8peqkcyh
+        ("PG-GAT (synthetic only)", "pos-enc only",   0.8825, 0.8884, False, None),          # ffl2tde3
+        ("PG-GAT (synthetic only)", "repulsion only", 0.8834, 0.8785, False, None),          # gfqkbqnw
+        ("PG-GAT (synthetic only)", "all three, 2-layer", 0.8896, 0.8868, False, "PG-GAT, 2-layer"),  # r5ekg0zl
+        ("PG-GAT (synthetic only)", "architecture-sweep winner", 0.9634, 0.9010, False, "sweep winner"),  # 08d0ffde
+        ("Hyperbolic PG-GAT", "H1, d=128",      0.8773, 0.8919, False, None),                # aox7h3di
+        ("Hyperbolic PG-GAT", "H2, d=32",       0.8856, 0.8969, False, "hyperbolic d=32"),   # g45tdxi5
+        ("Hyperbolic PG-GAT", "sweep winner",   0.8795, 0.8876, False, None),                # ua4wdb3p
+        ("TriGAT", "triplets",                  0.8740, 0.8564, False, "TriGAT"),            # y0tw6vc9
+        ("COCO fine-tuned", "legacy 20-epoch",  0.9178, 0.9565, True,  "20-epoch fine-tune"),# ugzbgepn
+        ("COCO fine-tuned", "headline (fine-tune sweep)", 0.9634, 0.9715, True, "headline"), # b5noyg7t
+        ("COCO fine-tuned", "hyperbolic Option B", 0.8900, 0.9399, True, "hyperbolic, fine-tuned"),  # lragtfzu
+    ]
+    sadmon = [  # vanilla, v1, v1 clamped, v1 lambda=1, v1 fixed sigma, v1 no-spectral, v2a-d
+        (0.7879, 0.8657), (0.7872, 0.8658), (0.7918, 0.8649), (0.7892, 0.8628), (0.7769, 0.8642),
+        (0.7889, 0.8684), (0.7849, 0.8622), (0.7925, 0.8677), (0.7934, 0.8660), (0.7910, 0.8652),
+    ]
+    style = {
+        "Standard GAT":            dict(color="0.25", marker="s"),
+        "Learned head":            dict(color="#d68910", marker="^"),
+        "SA-DMoN (10 variants)":   dict(color="#5b9bd5", marker="o"),
+        "PG-GAT (synthetic only)": dict(color="#c23b3b", marker="o"),
+        "Hyperbolic PG-GAT":       dict(color="#7d3c98", marker="D"),
+        "TriGAT":                  dict(color="#3c8a4e", marker="v"),
+        "COCO fine-tuned":         dict(color="#c23b3b", marker="*"),
+    }
+
+    fig, ax = plt.subplots(figsize=(6.4, 5.0))
+    lo, hi = 0.76, 1.005
+    ax.plot([lo, hi], [lo, hi], "--", color="0.6", lw=1.0, zorder=1)
+    ax.text(0.836, 0.8385, "COCO = synthetic", fontsize=8.5, color="0.45",
+            rotation=40, ha="left", va="bottom", rotation_mode="anchor")
+
+    sx, sy = zip(*sadmon)
+    ax.scatter(sx, sy, s=22, zorder=3, label="SA-DMoN (10 variants)", **style["SA-DMoN (10 variants)"])
+    ax.annotate("SA-DMoN ×10", (float(np.mean(sx)), float(np.mean(sy))), textcoords="offset points",
+                xytext=(-6, 14), fontsize=8.5, ha="center")
+
+    seen = set()
+    for fam, name, x, y, ft, ann in pts:
+        st = style[fam]
+        kw = dict(color=st["color"], marker=st["marker"], zorder=4,
+                  s=110 if ft else 40, edgecolors="white" if ft else "none", linewidths=0.6)
+        ax.scatter([x], [y], label=fam if fam not in seen else None, **kw)
+        seen.add(fam)
+        if ann:
+            off = {
+                "depth on": (-6, -12), "baseline": (8, -11), "DEC": (-8, -11),
+                "slot attention": (0, -12), "graph partitioning": (-8, 5),
+                "PG-GAT, 2-layer": (8, 4), "sweep winner": (8, -4),
+                "hyperbolic d=32": (8, 4), "TriGAT": (8, -4),
+                "20-epoch fine-tune": (8, 4), "headline": (8, 2), "hyperbolic, fine-tuned": (8, -3),
+            }.get(ann, (7, 3))
+            ha = "right" if off[0] < 0 else ("center" if off[0] == 0 else "left")
+            ax.annotate(ann, (x, y), textcoords="offset points", xytext=off, fontsize=8.5, ha=ha)
+
+    # fine-tuning arrows: synthetic-only parent -> fine-tuned child
+    for (x0, y0), (x1, y1) in [((0.8896, 0.8868), (0.9178, 0.9565)),
+                               ((0.9634, 0.9010), (0.9634, 0.9715)),
+                               ((0.8856, 0.8969), (0.8900, 0.9399))]:
+        ax.annotate("", xy=(x1, y1), xytext=(x0, y0),
+                    arrowprops=dict(arrowstyle="-|>", color="0.5", lw=0.9,
+                                    shrinkA=5, shrinkB=7, mutation_scale=9))
+    ax.text(0.9675, 0.934, "COCO\nfine-tuning", fontsize=8.5, color="0.4", ha="left", va="center")
+
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(0.815, 0.985)
+    ax.set_xlabel("synthetic validation PGA")
+    ax.set_ylabel("COCO validation PGA (ground-truth keypoints, $k$-means)")
+    ax.legend(loc="upper left", fontsize=8.5, frameon=False, handletextpad=0.4)
+    ax.grid(True, color="0.92", lw=0.6)
+    fig.savefig(FIGDIR / "transfer_scatter.pdf")
+    plt.close(fig)
+    print("wrote transfer_scatter.pdf")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Figures from the per-image end-to-end dump (code_v3/eval_e2e_per_image.py)
+# ─────────────────────────────────────────────────────────────────────────────
+
+import os
+E2E_DIR = Path(os.environ.get("E2E_DIR", "outputs/e2e_per_image"))
+PERSON_COLOURS = ["#2b5fa3", "#c23b3b", "#3c8a4e", "#d68910", "#7d3c98", "#17a2b8",
+                  "#8b4513", "#e83e8c", "#6c757d", "#20c997"]
+
+
+def _load_e2e_records():
+    return [json.loads(l) for l in open(E2E_DIR / "per_image.jsonl")]
+
+
+def _panel_labels_to_colours(labels, gt_person):
+    """Map cluster labels to ground-truth person indices by Hungarian matching so the
+    same person keeps the same colour across panels; surplus clusters get new colours.
+    Returns (label -> colour index, PGA of this labelling)."""
+    from scipy.optimize import linear_sum_assignment
+    L, P = np.unique(labels), np.unique(gt_person)
+    C = np.array([[np.sum((labels == l) & (gt_person == p)) for p in P] for l in L], dtype=float)
+    r, c = linear_sum_assignment(-C)
+    lab2col = {int(L[i]): int(c_i) for i, c_i in zip(r, c)}
+    nxt = len(P)
+    for l in L:
+        if int(l) not in lab2col:
+            lab2col[int(l)] = nxt
+            nxt += 1
+    return lab2col, float(C[r, c].sum() / len(labels))
+
+
+def _draw_grouping(ax, img, pos, types, labels, gt_person, title, crop):
+    lab2col, pga = _panel_labels_to_colours(labels, gt_person)
+    ax.imshow(img)
+    x0, y0, x1, y1 = crop
+    ax.set_xlim(x0, x1)
+    ax.set_ylim(y1, y0)
+    ax.axis("off")
+    for l in np.unique(labels):
+        col = PERSON_COLOURS[lab2col[int(l)] % len(PERSON_COLOURS)]
+        m = labels == l
+        lookup = {int(t): p for t, p in zip(types[m], pos[m])}
+        for u, v in COCO_SKELETON:
+            if u in lookup and v in lookup:
+                ax.plot([lookup[u][0], lookup[v][0]], [lookup[u][1], lookup[v][1]], "-",
+                        color=col, lw=1.4, alpha=0.9, zorder=2)
+        ax.plot(pos[m, 0], pos[m, 1], "o", color=col, ms=3.6, mec="white", mew=0.6,
+                linestyle="none", zorder=3)
+    ax.set_title(f"{title}, PGA {pga:.2f}", fontsize=8.5, pad=2)
+    return pga
+
+
+def fig_e2e_examples(image_ids=None, out_name="e2e_examples.pdf"):
+    """Rows = COCO val scenes, columns = (a) HigherHRNet native AE grouping,
+    (b) PG-GAT + k-means with oracle K, (c) PG-GAT + k-means with the K-head's K.
+    Only the detections matched to ground truth (the scored set) are drawn, coloured by
+    the ground-truth person their cluster was assigned to; a joint in another person's
+    colour is a grouping error. Reads outputs/e2e_per_image/arrays/<id>.npz."""
+    from PIL import Image  # noqa: E402
+    recs = {r["image_id"]: r for r in _load_e2e_records()}
+    if image_ids is None:
+        image_ids = E2E_EXAMPLE_IDS
+    scenes = []
+    for img_id in image_ids:
+        a = np.load(E2E_DIR / "arrays" / f"{img_id}.npz", allow_pickle=True)
+        img = Image.open(COCO_DIR / "val2017" / str(a["file_name"])).convert("RGB")
+        m = a["matched_idx"]
+        pos = a["det_pos"][m]
+        lo, hi = pos.min(axis=0), pos.max(axis=0)
+        w, h = hi - lo
+        padx, pady = 0.10 * w + 12, 0.10 * h + 12
+        crop = (max(0, lo[0] - padx), max(0, lo[1] - pady),
+                min(img.width, hi[0] + padx), min(img.height, hi[1] + pady))
+        scenes.append((img_id, a, img, crop))
+    # panel width is fixed by the text width; each row's height follows its crop's aspect
+    panel_w = (6.1 - 0.25) / 3
+    heights = [panel_w * (c[3] - c[1]) / (c[2] - c[0]) for _, _, _, c in scenes]
+    title_h = 0.22
+    fig_h = sum(heights) + title_h * len(scenes) + 0.05
+    fig = plt.figure(figsize=(6.1, fig_h))
+    gs = fig.add_gridspec(len(scenes), 3, height_ratios=[h + title_h for h in heights],
+                          left=0.035, right=0.995, top=1 - 0.02 / fig_h, bottom=0.02 / fig_h,
+                          wspace=0.03, hspace=0.06)
+    for r, (img_id, a, img, crop) in enumerate(scenes):
+        rec = recs[img_id]
+        m = a["matched_idx"]
+        pos, types, gt_person = a["det_pos"][m], a["det_types"][m], a["gt_person"]
+        panels = [
+            (a["ae_ids"][m], "(a) HigherHRNet AE"),
+            (a["labels_oracle"], f"(b) PG-GAT, oracle $K={rec['K_gt']}$"),
+            (a["labels_pred"], f"(c) PG-GAT, $\\hat{{K}}={rec['K_pred']}$"),
+        ]
+        for c, (labels, title) in enumerate(panels):
+            ax = fig.add_subplot(gs[r, c])
+            _draw_grouping(ax, img, pos, types, np.asarray(labels), gt_person, title, crop)
+            if c == 0:
+                ax.text(-0.02, 0.5, f"COCO {img_id}", transform=ax.transAxes, rotation=90,
+                        fontsize=8.5, ha="right", va="center", color="0.35")
+    fig.savefig(FIGDIR / out_name)
+    plt.close(fig)
+    print(f"wrote {out_name} for images {list(image_ids)}")
+
+
+# Scenes chosen 2026-09-03 from the per-image dump (2-5 annotated people, >=20 scored detections):
+#   281759  five people, all three groupings perfect (crowded success)
+#   576031  K-head correct (K=3), PG-GAT misassigns joints at oracle K while AE is perfect
+#           (a grouping error, not a count error)
+#   305309  third annotated person barely detected: oracle K=3 splits a person (0.71),
+#           the K-head's K=2 is perfect (under-count that helps)
+#   547886  K-head under-counts (K=3 -> 2), merging two people (1.00 -> 0.65; under-count that hurts)
+# select_e2e_examples() reproduces the shortlist these were taken from.
+E2E_EXAMPLE_IDS = [281759, 576031, 305309, 547886]
+
+
+def select_e2e_examples(recs):
+    """Pick three scored scenes with 2-5 people: a crowded success (all three perfect),
+    a modularity-cost case (AE perfect, PG-GAT oracle-K clearly worse), and a case where the
+    K-head's under-count beats oracle K (the effective-person-count mechanism)."""
+    ok = [r for r in recs.values() if r["pga_pred"] is not None and 2 <= r["K_gt"] <= 5 and r["n_matched"] >= 20]
+    success = sorted([r for r in ok if r["pga_ae"] == 1 and r["pga_oracle"] == 1 and r["pga_pred"] == 1 and r["K_gt"] >= 3],
+                     key=lambda r: -r["n_matched"])
+    cost = sorted([r for r in ok if r["pga_ae"] >= 0.98 and r["pga_oracle"] <= 0.85],
+                  key=lambda r: r["pga_oracle"] - r["pga_ae"])
+    predk = sorted([r for r in ok if r["K_pred"] < r["K_gt"] and r["pga_pred"] - r["pga_oracle"] >= 0.10],
+                   key=lambda r: -(r["pga_pred"] - r["pga_oracle"]))
+    picks = []
+    for cand in (success, cost, predk):
+        for r in cand:
+            if r["image_id"] not in picks:
+                picks.append(r["image_id"])
+                break
+    return picks
+
+
+def fig_k_confusion(out_name="k_confusion.pdf", kmax=8):
+    """Confusion matrix of the K-head's predicted person count against the annotated count
+    on HigherHRNet detections (the scored oracle-K set). Counts >= kmax are pooled."""
+    recs = [r for r in _load_e2e_records() if r["pga_oracle"] is not None and r["K_pred"] is not None]
+    kg_raw = np.array([r["K_gt"] for r in recs])
+    kp_raw = np.array([r["K_pred"] for r in recs])
+    exact = float(np.mean(kg_raw == kp_raw))            # on the raw counts (matches Ch4)
+    off1 = float(np.mean(np.abs(kg_raw - kp_raw) <= 1))
+    kg, kp = np.minimum(kg_raw, kmax), np.minimum(kp_raw, kmax)  # pooled only for display
+    M = np.zeros((kmax, kmax), dtype=int)
+    for g, p in zip(kg, kp):
+        M[g - 1, p - 1] += 1
+    fig, ax = plt.subplots(figsize=(3.9, 3.5))
+    ax.imshow(M, cmap="Blues", vmin=0, vmax=max(M.max(), 1))
+    for i in range(kmax):
+        for j in range(kmax):
+            if M[i, j]:
+                ax.text(j, i, str(M[i, j]), ha="center", va="center", fontsize=8,
+                        color="white" if M[i, j] > 0.55 * M.max() else "black")
+    ticks = [str(k) for k in range(1, kmax)] + [f"{kmax}+"]
+    ax.set_xticks(range(kmax)); ax.set_xticklabels(ticks)
+    ax.set_yticks(range(kmax)); ax.set_yticklabels(ticks)
+    ax.set_xlabel("predicted person count $\\hat{K}$")
+    ax.set_ylabel("annotated person count $K$")
+    ax.set_title(f"exact {exact:.1%}, within one {off1:.1%} ($n={len(recs)}$)", fontsize=9)
+    for s in ("top", "right"):
+        ax.spines[s].set_visible(True)
+    ax.tick_params(length=0)
+    fig.savefig(FIGDIR / out_name)
+    plt.close(fig)
+    print(f"wrote {out_name}: exact {exact:.4f} off1 {off1:.4f} n {len(recs)} mean pred {kp_raw.mean():.3f} gt {kg_raw.mean():.3f}")
+
+
+FIGURES = {
+    "predk_recall": fig_predk_recall,
+    "skeleton_graph": fig_skeleton_graph,
+    "synth_examples": fig_synth_examples,
+    "arch_sweep": fig_arch_sweep,
+    "ft_sweep": fig_ft_sweep,
+    "context_example": fig_context_example,
+    "transfer_scatter": fig_transfer_scatter,
+    "e2e_examples": fig_e2e_examples,
+    "k_confusion": fig_k_confusion,
+}
+
 if __name__ == "__main__":
-    fig_predk_recall()
-    fig_skeleton_graph()
-    fig_synth_examples()
-    fig_arch_sweep()
-    fig_ft_sweep()
-    fig_context_example()
+    # No arguments: regenerate everything. Otherwise only the named figures.
+    for name in (sys.argv[1:] or list(FIGURES)):
+        FIGURES[name]()
