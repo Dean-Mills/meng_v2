@@ -634,13 +634,14 @@ def fig_e2e_examples(image_ids=None, out_name="e2e_examples.pdf"):
 
 # Scenes chosen 2026-09-03 from the per-image dump (2-5 annotated people, >=20 scored detections):
 #   281759  five people, all three groupings perfect (crowded success)
-#   576031  K-head correct (K=3), PG-GAT misassigns joints at oracle K while AE is perfect
-#           (a grouping error, not a count error)
+#   480021  K-head correct (K=4), PG-GAT misassigns joints at oracle K (0.89) while AE is perfect
+#           (a grouping error, not a count error). Replaced 576031 (same criterion, near-square crop)
+#           on 2026-09-03 because the four-row figure plus caption overflowed the page by 58 pt.
 #   305309  third annotated person barely detected: oracle K=3 splits a person (0.71),
 #           the K-head's K=2 is perfect (under-count that helps)
 #   547886  K-head under-counts (K=3 -> 2), merging two people (1.00 -> 0.65; under-count that hurts)
 # select_e2e_examples() reproduces the shortlist these were taken from.
-E2E_EXAMPLE_IDS = [281759, 576031, 305309, 547886]
+E2E_EXAMPLE_IDS = [281759, 480021, 305309, 547886]
 
 
 def select_e2e_examples(recs):

@@ -30,16 +30,17 @@ Figure~\ref{fig:e2e_interface} shows this arrangement.
 \begin{figure}[H]
     \centering
     \includegraphics[width=\linewidth]{figures/e2e_interface.pdf}
-    \caption[The detector-independent interface of the end-to-end pipeline.]{The detector-independent interface of the end-to-end pipeline.
-    Each of the three detectors evaluated in Chapter~\ref{chap_4} supplies keypoints -
-    their native person assignments are discarded,
-    and only keypoint coordinates, visibility flags, and joint types cross the interface (dashed line)
-    into the frozen PG-GAT network.
-    The frozen K-head predicts $\hat{K}$ from the embeddings and $k$-means produces the partition.
-    Ground truth enters only for evaluation -
-    detections are matched to annotations by Hungarian assignment at $10$ pixels,
-    and PGA is computed on the matched set for both the PG-GAT partition
-    and the detector's retained native assignment.}
+    \caption[Detector-independent interface of the end-to-end pipeline.]{Detector-independent interface of the end-to-end evaluation pipeline.
+    Each of the three detectors evaluated in Chapter~\ref{chap_4} produces a set of keypoint detections.
+    The detector's native person assignments are excluded from the PG-GAT input,
+    and only the keypoint coordinates, visibility flags, and joint types
+    cross the detector-independent interface indicated by the dashed line.
+    The frozen PG-GAT network produces a per-keypoint embedding,
+    from which the frozen K-head estimates the person count $\hat{K}$ and $k$-means produces the final partition.
+    Ground-truth annotations are used only during evaluation:
+    detections are matched to ground-truth keypoints using Hungarian assignment with a $10$-pixel threshold,
+    and PGA is computed over the matched detections for both the PG-GAT grouping
+    and the detector's retained native grouping.}
     \label{fig:e2e_interface}
 \end{figure}
 
@@ -278,7 +279,7 @@ is therefore preserved,
 while the lightweight head learns only the scene-level mapping
 required to estimate $K$.
 
-The resulting K head contains $35{,}009$ trainable
+The resulting K-head contains $35{,}009$ trainable
 parameters and converges in under one minute on the synthetic training
 split.
 Its prediction accuracy is reported separately in
@@ -292,7 +293,7 @@ Because COCO differs substantially from the synthetic dataset
 in keypoint visibility,
 missing detections,
 and person-density statistics,
-the COCO K head is trained on embeddings produced from COCO samples
+the COCO K-head is trained on embeddings produced from COCO samples
 rather than reusing the synthetic-trained count head.
 PG-GAT itself remains frozen during this stage.
 The adaptation therefore changes only the lightweight count estimator

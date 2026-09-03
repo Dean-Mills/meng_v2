@@ -21,7 +21,7 @@ of Section~\ref{sec_meth_kestimation}.
 The latter therefore represents the complete operational pipeline -
 HigherHRNet detects the keypoints,
 PG-GAT embeds them,
-the K head estimates the number of people,
+the K-head estimates the number of people,
 and $k$-means produces the final grouping without using ground-truth
 information at inference.
 
@@ -169,17 +169,17 @@ than HigherHRNet.
 \textbf{3. The autonomous pipeline slightly exceeds the oracle-$K$
 diagnostic:}
 Replacing the ground-truth value of $K$ with the prediction from the
-frozen-backbone K head produces the fully autonomous configuration.
+frozen-backbone K-head produces the fully autonomous configuration.
 HigherHRNet supplies the keypoint candidates,
 PG-GAT embeds them,
-the K head estimates the cluster count,
+the K-head estimates the cluster count,
 and $k$-means produces the final partition.
 No ground-truth quantity is required by this sequence at inference.
 
 The autonomous configuration reaches an end-to-end PGA of $0.9644$,
 which is $0.0053$ higher than the $0.9591$ obtained when $k$-means is
 given the annotation-level person count.
-The K head itself achieves $76.1\%$ exact-count accuracy on the COCO
+The K-head itself achieves $76.1\%$ exact-count accuracy on the COCO
 validation set,
 rising to $91.9\%$ when predictions within one person of the target
 are counted.
@@ -188,14 +188,15 @@ Figure~\ref{fig:k_confusion} shows the full distribution of predicted against an
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.64\linewidth]{figures/k_confusion.pdf}
-    \caption[Predicted against annotated person count for the K head on HigherHRNet detections.]{Predicted person count $\hat{K}$ from the frozen K head against the annotated count $K$
-    on the $2{,}165$ scored HigherHRNet scenes.
-    Counts of eight or more are pooled into the last row and column.
-    Mass below the diagonal is under-counting.
-    The matrix comes from a re-run of the pipeline that reproduces the reported aggregates
-    to within $0.0003$ PGA;
-    two scenes receive a different count than in the logged run,
-    which is why the exact-count rate reads $76.0\%$ here against $76.1\%$ in the text.}
+    \caption[Predicted against annotated person count for the K-head on HigherHRNet detections.]{Confusion matrix of the predicted person count $\hat{K}$ against the annotated count $K$
+    for the $2{,}165$ scored HigherHRNet scenes.
+    Counts of eight or more are pooled into the final row and column,
+    and entries below the diagonal correspond to under-counting.
+    The matrix is generated from a re-run of the evaluation pipeline
+    that reproduces the reported aggregate PGA to within $0.0003$.
+    Two fewer scenes match the annotated count than in the logged run,
+    so the exact-count rate reads $76.0\%$ here against the reported $76.1\%$,
+    and the within-one rate $92.1\%$ against $91.9\%$.}
     \label{fig:k_confusion}
 \end{figure}
 
@@ -217,7 +218,7 @@ annotation-level $K$ can exceed the number of people that are
 meaningfully represented by the detected keypoints in some scenes.
 In such cases, forcing $k$-means to use the annotation-level count may
 split otherwise coherent detected groups.
-The K head instead predicts from the detected embeddings
+The K-head instead predicts from the detected embeddings
 and can therefore produce a count that is better aligned with the
 observed graph.
 Confirming this mechanism directly would require comparing $\hat{K}$
@@ -234,23 +235,25 @@ Its PGA of $0.9644$ leaves a difference of $0.0203$ to HigherHRNet's
 native AE grouping on the same evaluation protocol
 and is the final autonomous result of the experimental investigation.
 Figure~\ref{fig:e2e_examples} shows the three groupings on four scored scenes.
+The first scene has five people and is grouped correctly by all three.
+The second is a grouping error at the correct count -
+PG-GAT misassigns joints across two people while the K-head returns the annotated count.
+In the third, one of the three annotated people has no matched detections,
+so the annotated $K$ splits a represented person while the K-head's $\hat{K}=2$ does not.
+In the fourth, the K-head under-counts and merges two people.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.97\linewidth]{figures/e2e_examples.pdf}
-    \caption[Four scored COCO scenes under the three end-to-end groupings.]{Four scored COCO \texttt{val2017} scenes under the end-to-end protocol:
+    \caption[Four scored COCO scenes under the three end-to-end grouping configurations.]{Four scored COCO \texttt{val2017} scenes under the end-to-end evaluation protocol:
     (a) HigherHRNet's native AE grouping,
-    (b) PG-GAT with $k$-means at the annotated $K$,
-    and (c) PG-GAT with the K head's $\hat{K}$.
-    Only the detections matched to ground truth are drawn,
-    coloured by the person their cluster is assigned to under Hungarian matching,
-    so a joint in another person's colour is a grouping error -
-    the PGA in each title is the per-scene value.
-    From the top: five people grouped correctly by all three;
-    a grouping error at the correct count;
-    a third annotated person with no matched detections,
-    so the annotated $K$ splits a person while the K head's $\hat{K}=2$ does not;
-    and an under-count that merges two people.}
+    (b) PG-GAT with $k$-means using the annotated person count $K$,
+    and (c) PG-GAT with $k$-means using the K-head prediction $\hat{K}$.
+    Only detections matched to ground-truth keypoints are shown.
+    Detections are coloured according to the ground-truth person
+    to which their predicted cluster is assigned by Hungarian matching;
+    a keypoint that does not share its person's colour therefore indicates a grouping error.
+    The PGA reported in each panel title is the corresponding per-scene value.}
     \label{fig:e2e_examples}
 \end{figure}
 
@@ -325,7 +328,7 @@ pose-estimation systems.
 
 This section reports the detector-swap experiment of
 Section~\ref{sec_meth_integration_swap}.
-The same frozen \texttt{meng-headline} checkpoint and frozen K head
+The same frozen \texttt{meng-headline} checkpoint and frozen K-head
 are applied zero-shot to detections from two additional pose detectors
 belonging to different architectural families.
 Neither detector contributed training examples to PG-GAT
@@ -353,7 +356,7 @@ matched-detection subset. The PG-GAT columns discard these assignments,
 pool the detected keypoints,
 and re-group them using the same frozen \texttt{meng-headline} checkpoint,
 with $K$ either taken from the ground truth or predicted by the frozen
-K head. Gap is the difference between native grouping and autonomous
+K-head. Gap is the difference between native grouping and autonomous
 predicted-$K$ PG-GAT. The matched subsets contain $2{,}165$,
 $2{,}196$, and $2{,}121$ scored images for HigherHRNet,
 YOLO11x-pose, and RTMO-L respectively.
@@ -378,7 +381,7 @@ their keypoints.
 
 This result provides the direct empirical test of the detector-swap
 claim introduced in Section~\ref{sec_meth_integration_swap}.
-PG-GAT and the K head are unchanged between all three evaluations
+PG-GAT and the K-head are unchanged between all three evaluations
 and operate only on the pooled keypoint coordinates,
 joint types,
 and associated input features.
@@ -427,7 +430,7 @@ HigherHRNet experiment.
 If some annotated people are only weakly represented among the surviving
 detections, forcing $k$-means to use the annotation-level $K$ can
 introduce unnecessary clusters and split otherwise coherent detected groups.
-The K head, which predicts from the observed embeddings, can instead
+The K-head, which predicts from the observed embeddings, can instead
 return a count closer to the number of people represented strongly
 enough to support grouping.
 

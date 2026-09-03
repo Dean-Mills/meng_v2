@@ -36,13 +36,17 @@ Chapter~\ref{chap_4} that reports both numbers.
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.92\linewidth]{figures/transfer_scatter.pdf}
-    \caption[Synthetic-validation against COCO-validation PGA for every configuration reporting both.]{Synthetic-validation PGA against COCO-validation PGA
-    (ground-truth keypoints, $k$-means) for the 27 configurations of Chapter~\ref{chap_4} that report both.
-    Points below the dashed diagonal lose accuracy in transfer;
-    the vertical distance to the diagonal is the transfer gap.
-    Arrows join the three synthetic-only models to their COCO fine-tuned versions.
-    Values are the Chapter~\ref{chap_4} table cells -
-    TriGAT is scored on $2{,}180$ scenes, every other configuration on $2{,}307$.}
+    \caption[Synthetic-validation against COCO-validation PGA across the evaluated configurations.]{Synthetic-validation PGA against COCO-validation PGA
+    using ground-truth keypoints and $k$-means
+    for the 27 configurations in Chapter~\ref{chap_4} that report both metrics.
+    The dashed diagonal represents equal performance on the two datasets;
+    points below it perform worse on COCO than on the synthetic validation set,
+    with the vertical distance from the diagonal indicating the transfer gap.
+    Arrows connect the three synthetic-only models to their corresponding COCO fine-tuned versions,
+    showing the change produced by real-data adaptation.
+    Values are taken directly from the results reported in Chapter~\ref{chap_4}.
+    TriGAT is evaluated on the $2{,}180$ scenes containing valid triplets,
+    while all other configurations are evaluated on $2{,}307$ scenes.}
     \label{fig:transfer_scatter}
 \end{figure}
 
