@@ -165,7 +165,7 @@ This difference does not affect the zero-shot PG-GAT protocol,
 but it is treated as a qualification when the native-grouping results
 are compared in Section~\ref{sec_res_e2e_swap}.
 
-\subsection{Pose Grouping Accuracy on detected keypoints}
+\subsection{Pose grouping accuracy on detected keypoints}
 \label{sec_meth_integration_e2e_metric}
 
 The end-to-end protocol computes PGA according to
@@ -209,7 +209,7 @@ embeddings.
 An affinity matrix is constructed using an RBF kernel on pairwise
 embedding distances,
 from which the graph Laplacian and its ordered eigenvalues are computed.
-The predicted cluster count is taken from the largest consecutive eigengap.
+The predicted cluster count is taken from the largest consecutive eigengap~\cite{vonluxburg2007spectral}.
 In practice,
 the contrastive PG-GAT embeddings exhibit a dominant first spectral gap
 corresponding approximately to the distinction between one connected
@@ -321,7 +321,7 @@ when no oracle information is available.
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.95\linewidth]{figures/autonomous_pipeline.pdf}
-    \caption{The autonomous end-to-end pose-grouping pipeline.
+    \caption[The autonomous end-to-end pose-grouping pipeline.]{The autonomous end-to-end pose-grouping pipeline.
     HigherHRNet detects candidate keypoints and assigns each a joint
     type.
     The frozen PG-GAT network embeds the resulting detection set,

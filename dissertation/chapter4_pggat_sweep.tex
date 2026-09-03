@@ -74,7 +74,7 @@ Axis & Search space \\
 \texttt{dropout}               & $\{0.0, 0.1, 0.2\}$ \\
 \bottomrule
 \end{tabular}
-\caption{Search space for the PG-GAT architecture sweep. The ranges
+\caption[Search space for the PG-GAT architecture sweep.]{Search space for the PG-GAT architecture sweep. The ranges
 cover compact configurations through to the largest models that remain
 feasible at batch size $4$ on the experimental hardware.}
 \label{tab:arch_sweep_space}
@@ -130,7 +130,7 @@ and the plots should not be interpreted as balanced factorial ablations.
 \begin{figure}[H]
     \centering
     \includegraphics[width=\linewidth]{figures/arch_sweep.pdf}
-    \caption{Architecture-sweep outcomes for sweep \texttt{wg95w0k0}.
+    \caption[Architecture-sweep outcomes for sweep \texttt{wg95w0k0}.]{Architecture-sweep outcomes for sweep \texttt{wg95w0k0}.
     The best synthetic-validation PGA reached by each of the 32
     Bayesian-sampled runs is plotted against the six architecture
     parameters, with the winning configuration
@@ -161,7 +161,7 @@ Source run                     & \texttt{08d0ffde} \\
 W\&B alias                     & \texttt{champion-arch} \\
 \bottomrule
 \end{tabular}
-\caption{Winning configuration from the PG-GAT architecture sweep.
+\caption[Winning configuration from the PG-GAT architecture sweep.]{Winning configuration from the PG-GAT architecture sweep.
 This architecture is retained for the subsequent PG-GAT experiments,
 including the COCO fine-tuning sweep of Section~\ref{sec_res_coco_ft}
 and the final headline evaluation.}

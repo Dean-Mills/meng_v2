@@ -19,7 +19,7 @@
 \end{center}
 
 \begin{tabular}{p{3cm}p{11cm}}
-  \dtthestudyleaderdesignationeng:  & Prof H. Grobler \\
+  \dtthestudyleaderdesignationeng:  & Mr H. Grobler \\
   Department:                        & \eeceeng      \\
   University:                        & \upeng        \\
   Degree:                            & \dtthedegreedesignationeng \\
@@ -45,7 +45,8 @@ and produce per-keypoint embeddings from which person identities are recovered u
 The resulting grouping network does not require access to the detector's feature maps
 and can therefore be applied to keypoints produced by different detector architectures.
 
-PG-GAT extends GATv2 with three modifications derived from the human skeleton structure:
+PG-GAT extends GATv2 (graph attention network, version 2)
+with three modifications derived from the human skeleton structure:
 a type-pair attention bias that distinguishes different categories of keypoint edges,
 skeleton-relative position encoding that exposes geometric relationships to the attention mechanism,
 and same-type repulsion heads that provide dedicated capacity
@@ -66,7 +67,7 @@ The same frozen PG-GAT and person-count estimator
 are then applied zero-shot to YOLO11x-pose and RTMO-L detections.
 The autonomous pipeline trails their native grouping by $0.0210$ and $0.0220$ PGA respectively,
 showing that the cost remains approximately $0.02$ across three different detector families.
-A small K-estimation head trained on the frozen PG-GAT embeddings
+A small person-count ($K$) estimation head trained on the frozen PG-GAT embeddings
 achieves $76.1\%$ exact and $91.9\%$ off-by-one person-count accuracy on COCO validation detections.
 Using its predicted $K$ raises end-to-end PGA from $0.9591$ with ground-truth $K$ to $0.9644$.
 Further experiments show that this behaviour is associated with detection incompleteness:

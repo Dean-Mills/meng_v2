@@ -87,7 +87,7 @@ in Figure~\ref{fig:pggat_architecture}.
 \begin{figure}[H]
     \centering
     \includegraphics[width=\linewidth]{figures/pggat_architecture.pdf}
-    \caption{The PG-GAT architecture.
+    \caption[The PG-GAT architecture.]{The PG-GAT architecture.
     Input node features contain the keypoint position,
     visibility flag,
     and a learned joint-type embedding.
@@ -101,10 +101,7 @@ in Figure~\ref{fig:pggat_architecture}.
     and a same-type indicator (blue).
     Modification~3 separates the multi-head attention
     into a standard sub-layer operating over the full neighbourhood
-    and a repulsion sub-layer restricted to same-type edges (green).
-    Each modification can be enabled independently,
-    allowing the ablations in Chapter~\ref{chap_4}
-    to measure its contribution to the final embedding.}
+    and a repulsion sub-layer restricted to same-type edges (green).}
     \label{fig:pggat_architecture}
 \end{figure}
 

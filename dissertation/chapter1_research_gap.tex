@@ -12,7 +12,8 @@ In all these cases, swapping the detector after training is not supported.
 
 A \emph{modular} grouping module is one that takes detected keypoints from any 
 detector, runs a separable algorithm and returns per-keypoint person identities. Such modules are fairly unstudied.
-The closest graph-based precedents are HGG~\cite{jin2020hgg} and GEC~\cite{maher2025gec}.
+The closest graph-based precedents are hierarchical graph grouping (HGG)~\cite{jin2020hgg}
+and graph edge classification (GEC)~\cite{maher2025gec}.
 HGG is trained jointly with its detector and is therefore not modular;
 GEC is detector-independent but uses a per-edge binary classification rather than a per-keypoint embedding.
 No prior work, in this modular setting, trains a detector-independent 

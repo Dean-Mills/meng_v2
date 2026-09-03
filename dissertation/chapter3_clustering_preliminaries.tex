@@ -129,9 +129,10 @@ Attention is then calculated using a softmax across the slots:
 \begin{equation}
     A_{ji}
     = \frac{\exp\bigl(\mathbf{q}_j^{\top}\mathbf{k}_i / \sqrt{d}\bigr)}
-           {\sum_{j'} \exp\bigl(\mathbf{q}_{j'}^{\top}\mathbf{k}_i / \sqrt{d}\bigr)}.
+           {\sum_{j'} \exp\bigl(\mathbf{q}_{j'}^{\top}\mathbf{k}_i / \sqrt{d}\bigr)},
     \label{eq:slotattn_attention}
 \end{equation}
+where $d$ is the dimension of the slot and feature vectors.
 Unlike standard attention,
 where the softmax is commonly applied across the input features,
 Slot Attention normalises across the competing slots -

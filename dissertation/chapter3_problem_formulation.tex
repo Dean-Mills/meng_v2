@@ -35,7 +35,7 @@ Consider an image containing $K$ people.
 The detector produces $N$ keypoint detections, collected into the set
 \begin{equation}
     \mathcal{X}
-    = \{(\mathbf{p}_i, t_i, v_i)\}_{i=1}^{N},
+    = \bigl\{(\mathbf{p}_i, t_i, v_i)\bigr\}_{i=1}^{N},
 \end{equation}
 where $\mathbf{p}_i \in [0,1]^2$ is the normalised image-plane position of detection $i$,
 $t_i \in \mathcal{T} = \{1,\dots,T\}$ is its joint type,
@@ -126,7 +126,7 @@ are designed specifically to make use of this observed joint-type information.
 \begin{figure}[H]
     \centering
     \includegraphics[width=\linewidth]{figures/skeleton_graph.pdf}
-    \caption{The COCO 17-joint skeleton (a)
+    \caption[The COCO 17-joint skeleton (a) and a representative $k$NN graph with $k = 8$ on a two-person synthetic scene (b).]{The COCO 17-joint skeleton (a)
     and a representative $k$NN graph with $k = 8$ on a two-person synthetic scene (b).
     Nodes represent joint detections.
     Skeleton edges in (a) represent anatomical connections, while the

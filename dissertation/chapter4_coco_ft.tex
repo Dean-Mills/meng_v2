@@ -95,7 +95,7 @@ HigherHRNet AE (reference)
     & --- & --- & 0.9847 & --- \\
 \bottomrule
 \end{tabular}
-\caption{Effect of COCO fine-tuning on the architecture-sweep-selected
+\caption[Effect of COCO fine-tuning on the architecture-sweep-selected PG-GAT.]{Effect of COCO fine-tuning on the architecture-sweep-selected
 PG-GAT. All columns report PGA; COCO val is $k$-means on ground-truth keypoints
 and COCO E2E uses HigherHRNet detections. The synthetic-only \texttt{champion-arch} checkpoint provides
 the pre-adaptation reference. All COCO fine-tuned configurations improve
@@ -190,7 +190,7 @@ narrowly chosen fine-tuning configuration.
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.72\linewidth]{figures/ft_sweep.pdf}
-    \caption{Fine-tuning sweep outcomes for sweep \texttt{i9vpg4t1}
+    \caption[Fine-tuning sweep outcomes for sweep \texttt{i9vpg4t1} across 12 Bayesian-sampled configurations.]{Fine-tuning sweep outcomes for sweep \texttt{i9vpg4t1}
     across 12 Bayesian-sampled configurations. Synthetic-validation PGA
     after COCO fine-tuning is plotted against the initial fine-tuning
     learning rate, with epoch count indicated by colour. The selected

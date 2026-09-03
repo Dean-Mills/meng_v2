@@ -25,6 +25,10 @@ a joint is stored in the form $[x,y,z,v]$,
 where $(x,y)$ gives its image-plane position,
 $z$ is the Euclidean distance from the camera to the joint in metres,
 and $v \in \{0,1,2\}$ gives its visibility state.
+Camera pose, lighting, person placement, and joint visibility are varied by the synthetic generator -
+exact joint depth is also available from the generated 3D scene,
+although this feature is removed from the final input representation
+as described in Section~\ref{sec_meth_data_depth}.
 
 Visibility is determined using a Blender raycast against the scene geometry -
 this allows a joint that is present but occluded by another person or an object
@@ -50,15 +54,10 @@ for use when calculating dataset statistics.
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.85\linewidth]{figures/synth_examples.pdf}
-    \caption{Representative scenes from the synthetic dataset for
+    \caption[Representative scenes from the synthetic dataset for person counts $K \in \{2,3,4,5\}$.]{Representative scenes from the synthetic dataset for
     person counts $K \in \{2,3,4,5\}$. Each panel shows a rendered
     Blender image with the seventeen ground-truth keypoints overlaid
-    and colour-coded by person identity. Camera pose, lighting, person
-    placement, and joint visibility are varied by the synthetic
-    generator - exact joint depth is also available from the generated
-    3D scene, although this feature is removed from the final input
-    representation as described in
-    Section~\ref{sec_meth_data_depth}.}
+    and colour-coded by person identity.}
     \label{fig:synth_examples}
 \end{figure}
 

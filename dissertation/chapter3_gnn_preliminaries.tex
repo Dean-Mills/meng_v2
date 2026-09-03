@@ -16,7 +16,7 @@ Finally, the section introduces GATv2,
 which addresses a limitation of the original GAT formulation
 and provides the attention mechanism used throughout the experiments in this chapter.
 
-\subsection{The Message-Passing Framework}
+\subsection{The message-passing framework}
 \label{sec_meth_mp}
 
 Let $\mathcal{G} = (\mathcal{V}, \mathcal{E})$ denote an undirected graph
@@ -69,7 +69,7 @@ For the relatively small skeleton graphs considered here,
 where joints are separated by only a few hops,
 this also limits the amount of network depth required.
 
-\subsection{Graph Convolutional Networks (GCN)}
+\subsection{Graph convolutional networks (GCN)}
 \label{sec_meth_gcn}
 
 The GCN architecture introduced by~\cite{kipf2017gcn}
@@ -107,7 +107,7 @@ rather than assigning weights based only on graph degree -
 the attention-based aggregation described next
 provides a way to make each neighbour's contribution dependent on the features being processed.
 
-\subsection{Graph Attention Networks (GAT and GATv2)}
+\subsection{Graph attention networks (GAT and GATv2)}
 \label{sec_meth_gat}
 
 GAT~\cite{velickovic2018gat} replaces the fixed normalisation used by GCN in Equation~\eqref{eq:gcn_adjacency}

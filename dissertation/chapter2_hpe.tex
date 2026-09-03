@@ -8,7 +8,7 @@ This is a large domain, so the work is restricted to 2D and multi-person.
 In this context the goal is to find per-image keypoints
 for an unknown number of people without the use of temporal context
 or 3D reconstruction.
-The following three useful surveys provide a reader with considerable background and scope:
+The following three useful surveys provide considerable background and scope:
 Chen et al.~\cite{chen2022hpesurvey} cover monocular HPE end-to-end,
 Zheng et al.~\cite{zheng2023hpesurvey} provide a more recent
 deep-learning-focused survey, and Andriluka et al.~\cite{andriluka2014mpii}
@@ -40,7 +40,7 @@ gold-standard backbone for most top-down systems and for the bottom-up
 HigherHRNet variant~\cite{cheng2020higherhrnet} discussed in
 Section~\ref{sec_lit_grouping}.
 
-\subsection{Top-Down Approaches}
+\subsection{Top-down approaches}
 \label{sec_lit_hpe_topdown}
 
 Top-down systems handle multi-person HPE by
@@ -59,7 +59,7 @@ Secondly, the performance of these methods is limited by the quality of the pers
 any incorrectly detected or missed bounding boxes will lead to missed or incorrectly grouped keypoints,
 with no opportunity for the pose estimator to recover from these errors.
 
-\subsection{Bottom-Up Approaches}
+\subsection{Bottom-up approaches}
 \label{sec_lit_hpe_bottomup}
 
 Bottom-up methods work in reverse.
@@ -71,7 +71,7 @@ Grouping, being a critical step (specifically for this work), is reviewed furthe
 The exception to this is end-to-end transformer methods (Section~\ref{sec_lit_hpe_transformer}),
 which do not require a separate grouping stage and are discussed separately.
 
-\subsection{Transformer-Based Approaches}
+\subsection{Transformer-based approaches}
 \label{sec_lit_hpe_transformer}
 
 The transformer architecture has been applied to HPE in two distinct ways:
@@ -117,17 +117,18 @@ and GroupPose simplifying the architecture to allow keypoints of the same person
 both reaching competitive performance on the COCO benchmark without any
 post-hoc grouping step.
 
-\subsection{Heatmap and Regression Trends}
+\subsection{Heatmap and regression trends}
 \label{sec_lit_hpe_regression}
 
 A long-standing issue in regression-based pose estimation is the non-differentiability of the argmax operator
 which maps continuous outputs to discrete keypoint coordinates.
 Sun et al.~\cite{sun2018integral} addressed this with integral pose regression,
-introducing a differentiable soft-argmax that bridged heatmap and regression paradigms.
-DSNT~\cite{nibali2018dsnt} later formalised the same idea as a normalised spatial-coordinate layer.
+introducing a differentiable soft-argmax that bridged the heatmap and regression paradigms.
+The differentiable spatial-to-numerical transform (DSNT)~\cite{nibali2018dsnt}
+later formalised the same idea as a normalised spatial-coordinate layer.
 
 RLE~\cite{li2021rle} offered a more direct probabilistic treatment,
-done by modelling residuals between predicted and ground-truth coordinates with a flow-based density
+obtained by modelling residuals between predicted and ground-truth coordinates with a flow-based density,
 and it was the first regression method to exceed heatmap accuracy on COCO.
 SimCC~\cite{li2022simcc} took a different route,
 reframing coordinate prediction as two-axis classification,
@@ -142,7 +143,7 @@ For this context, the specific paradigm is not critical.
 The grouping module proposed in Chapter~\ref{chap_3} operates on per-keypoint coordinates
 and is indifferent to whether those coordinates came from a heatmap or a regressor.
 
-\subsection{Foundation Models for Pose Estimation}
+\subsection{Foundation models for pose estimation}
 \label{sec_lit_hpe_foundation}
 
 Recent work has also moved human pose backbones towards foundation-model scale.
@@ -155,7 +156,7 @@ across pose estimation, segmentation, depth, and surface normal prediction.
 A similar move towards promptable and dataset-unified methods can be seen in X-Pose~\cite{yang2024xpose},
 which detects arbitrary keypoint categories based on either a textual or visual prompt
 across thirteen datasets.
-PCT~\cite{geng2023pct} takes another approach
+PCT~\cite{geng2023pct} takes a different approach
 using discrete codebook tokens to represent poses and improve robustness to occlusion.
 
 These foundation-model approaches are relevant here mainly as context rather than direct points of comparison.
@@ -205,7 +206,7 @@ The grouping baselines discussed in this chapter are, however,
 reported using AP@OKS in their original publications,
 and the relationship between the two metrics is discussed further in Chapter~\ref{chap_4}.
 
-\subsection{Pose Tracking}
+\subsection{Pose tracking}
 \label{sec_lit_hpe_tracking}
 
 Multi-person 2D pose tracking extends per-image HPE by associating people across multiple frames.
@@ -224,7 +225,7 @@ The per-image grouping module developed in Chapter~\ref{chap_3} can therefore be
 before temporal association,
 with standard ReID methods handling the subsequent tracking step.
 
-\subsection{Position of the Present Work}
+\subsection{Position of the present work}
 \label{sec_lit_hpe_position}
 
 The HPE literature has converged on a relatively small set of strong single-image detection backbones,
@@ -252,7 +253,7 @@ since the keypoints are already associated through the pose query that produced 
 As a result, replacing the detector after training is impossible,
 and grouping methods are often tied to the detector and grouping head used by the original architecture.
 
-In comparison, the literature on \emph{modular} grouping is much smaller.
+In comparison, the literature on \emph{modular} grouping is sparse.
 Here, modular grouping refers to methods that accept detected keypoints from any upstream detector,
 perform grouping as a separate stage,
 and return a person identity for each keypoint.

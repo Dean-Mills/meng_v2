@@ -71,13 +71,16 @@
 %% bottom-row arrows: knn feeds both feature constructors; both concat into the encoder
 \draw[arr] (knn.east) -- ++(3mm,0) |- (cat.west);
 \draw[arr] (knn.east) -- ++(3mm,0) |- (geo.west);
-\draw[arr] (cat.east) -- ++(2mm,0) |- (edgecat);
-\draw[arr] (geo.east) -- ++(2mm,0) |- (edgecat);
+%% single junction so only one arrowhead meets the concat circle
+\coordinate (ej) at ($(geo.east |- edgecat) + (2mm,0)$);
+\draw[semithick, black!75] (cat.east) -- ++(2mm,0) |- (ej);
+\draw[semithick, black!75] (geo.east) -- ++(2mm,0) |- (ej);
+\draw[arr] (ej) -- (edgecat);
 \draw[arr] (edgecat) -- (enc);
 
 %% edge features enter the attention of every GAT layer
-\draw[arr] (enc.east) -| (gatbox.south)
-  node[pos=0.85, right=2pt, align=left, font=\small]{additive attention bias\\ (every layer)};
+\draw[arr] (enc.north) -- (gatbox.south -| enc.north)
+  node[pos=0.5, right=2pt, align=left, font=\small]{additive attention bias\\ (every layer)};
 
 %% Modification 3 tag on the repulsion sub-layer (below the dashed container)
 \node[modtag, green!45!black, anchor=north west] at ($(gatbox.south west)+(1mm,-1.5mm)$) {Modification 3};
