@@ -1,0 +1,33 @@
+\section{Chapter Summary}
+\label{sec_meth_summary}
+
+This chapter set out the problem and every method the experiments evaluate, in the order the investigation followed.
+Section~\ref{sec_meth_problem} formulated grouping as the partition of $N$ typed keypoint detections into $K$ people,
+scored by pose grouping accuracy (PGA) under Hungarian matching,
+with a $k$NN graph over keypoint coordinates as the input representation.
+Section~\ref{sec_meth_data} described the data pipeline -
+Blender scenes with the person count sampled uniformly from one to five,
+the COCO adapter that presents real annotations in the same form,
+and the removal of the depth channel after the diagnostic of Section~\ref{sec_meth_data_depth}.
+Section~\ref{sec_meth_baseline} defined the baseline that every later method must clear:
+a standard GATv2 trained with a contrastive loss and read out with $k$-means.
+
+The methods then followed the two sides of the hypothesis.
+On the read-out side,
+Section~\ref{sec_meth_learned_heads} introduced three learned grouping heads
+and Section~\ref{sec_meth_sadmon} ten modularity-based SA-DMoN configurations,
+each testing whether a stronger grouping algorithm can improve on $k$-means over the same embeddings.
+On the embedding side,
+Section~\ref{sec_meth_pggat} introduced PG-GAT and its three skeleton-aware modifications to the attention mechanism -
+type-pair attention bias, skeleton-relative position encoding, and same-type repulsion heads -
+and Sections~\ref{sec_meth_v2} to~\ref{sec_meth_trigat} described the three variants that stress that design:
+visual-feature augmentation, a hyperbolic embedding space, and a triplet-based graph primitive.
+Section~\ref{sec_meth_integration} closed the inference loop with the frozen HigherHRNet detector,
+the $10$-pixel matching protocol,
+the frozen-backbone K-head,
+the autonomous pipeline,
+and the detector-swap protocol for YOLO11x-pose and RTMO-L.
+Section~\ref{sec_meth_evaluation} fixed the three evaluation settings,
+the run-identification layer that ties every reported number to a logged run,
+and the four Bayesian sweeps through which the PG-GAT configuration is selected.
+Chapter~\ref{chap_4} reports the results in the same order.

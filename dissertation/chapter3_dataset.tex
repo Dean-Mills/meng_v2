@@ -16,6 +16,23 @@ so that the headline results use the same final input representation.
 \subsection{Synthetic generator}
 \label{sec_meth_data_synth}
 
+Synthetic data is used for the initial training because the grouping module never sees the image.
+Its input is a set of keypoint coordinates, joint types, and visibility flags (Section~\ref{sec_meth_problem_io}),
+so a rendered scene is as valid a training example as a photograph -
+what has to be realistic is the geometry of the keypoints, not their appearance.
+A generated scene also supplies labels that annotation cannot:
+every keypoint's position, person identity, and visibility follow directly from the 3D scene,
+and a joint hidden behind another person is recorded as present but occluded rather than missing.
+The number of people, the camera, the lighting, and the placement of the people are all under direct control,
+which gives a balanced person-count distribution
+where nearly half of the real images contain a single person.
+Synthetic training therefore serves as a controlled environment in which design changes can be compared
+without the variation introduced by a real detector,
+and as the source of the initial person-separation representation that COCO fine-tuning later adapts.
+It is not a substitute for real data -
+Section~\ref{sec_disc_transfer} shows that synthetic performance does not reliably predict COCO performance,
+which is why COCO fine-tuning is part of the training procedure.
+
 The synthetic dataset is generated using Blender~\cite{blender}.
 A configurable number of mannequin meshes is placed into each 3D scene,
 with the camera position, viewing angle, and lighting varied procedurally between scenes.
@@ -41,6 +58,12 @@ The final synthetic dataset contains $400$ training scenes, $100$ validation sce
 The number of people in each scene is sampled uniformly from $K \in \{1,2,3,4,5\}$ -
 this ensures that the K-estimation model is trained
 across the full range of person counts that it is expected to predict at inference time.
+The upper limit of five covers the bulk of the target distribution:
+$87.5\%$ of the COCO val2017 images with keypoint annotations contain five people or fewer,
+and the mean annotated count on the scenes scored end-to-end in Chapter~\ref{chap_4} is $2.74$.
+The remaining crowded scenes fall outside the trained range -
+the effect on the K-estimation head is visible in the lower rows of Figure~\ref{fig:k_confusion}
+and is taken up as future work in Section~\ref{sec_conc_future_krange}.
 It also gives the grouping models examples with different levels of crowding
 rather than concentrating the training data around a single person count -
 representative scenes are shown in Figure~\ref{fig:synth_examples}.

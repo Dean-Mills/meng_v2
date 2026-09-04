@@ -1,0 +1,38 @@
+\section{Chapter Summary}
+\label{sec_res_summary}
+
+The results followed the order of Chapter~\ref{chap_3}.
+The depth-off baseline of Section~\ref{sec_res_baseline} reached $0.8783$ synthetic-validation PGA and $0.8841$ on COCO,
+and it was not beaten from the read-out side:
+none of the three learned heads of Section~\ref{sec_res_learned_heads}
+and none of the ten SA-DMoN configurations of Section~\ref{sec_res_sadmon}
+improved on $k$-means over the same embeddings once COCO transfer was considered.
+On the embedding side,
+the full PG-GAT of Section~\ref{sec_res_pggat_ablations} gained $0.0113$ synthetic-validation PGA over the baseline,
+more than any single modification,
+while the individual margins stayed close to the run-to-run variation of the metric.
+The architecture sweep of Section~\ref{sec_res_pggat_sweep} raised synthetic-validation PGA to $0.9634$,
+a gain of $0.0738$,
+and the loss sweep found no configuration above the inherited defaults.
+
+COCO fine-tuning in Section~\ref{sec_res_coco_ft} produced the largest single lift,
+from $0.9010$ to $0.9715$ COCO-validation PGA.
+The same checkpoint reached $0.9591$ end-to-end PGA on HigherHRNet detections in Section~\ref{sec_res_e2e},
+against $0.9847$ for HigherHRNet's native associative-embedding grouping -
+a detector-independence gap of $0.0256$.
+Replacing the annotated person count with the K-head's prediction raised the end-to-end result to $0.9644$,
+with the head exact in $76.1\%$ of scenes and within one person in $91.9\%$,
+and the same frozen pipeline trailed the native grouping of HigherHRNet, YOLO11x-pose, and RTMO-L
+by $0.0203$, $0.0210$, and $0.0220$ PGA in Section~\ref{sec_res_e2e_swap}.
+The three variants were negative results:
+the hyperbolic embedding of Section~\ref{sec_res_hyperbolic}
+did not keep its synthetic-only advantage after fine-tuning,
+TriGAT in Section~\ref{sec_res_trigat} lost more in its voting stage than it gained from the richer primitive,
+and the visual features of Section~\ref{sec_res_v2} did not improve on the position-and-type-only model.
+Section~\ref{sec_res_model_size} set the $333{,}552$ PG-GAT parameters
+against the approximately $561$ of the AE tag head,
+so the contribution is the separation of grouping from detection rather than parameter efficiency.
+Chapter~\ref{chap_5} reads these results across three themes:
+the embedding as the lever,
+what survives the synthetic-to-real shift,
+and the cost of modularity together with the behaviour of the autonomous pipeline.

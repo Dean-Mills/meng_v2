@@ -44,6 +44,17 @@ is developed to operate directly on detected keypoint coordinates
 and produce per-keypoint embeddings from which person identities are recovered using $k$-means.
 The resulting grouping network does not require access to the detector's feature maps
 and can therefore be applied to keypoints produced by different detector architectures.
+Replacing the detector in a jointly trained grouping pipeline generally requires
+the grouping mechanism to be retrained with it.
+The modular design removes this dependency,
+allowing the same trained grouping network to be reused when the upstream detector changes.
+This separation comes with a measurable accuracy cost relative to each detector's native grouping,
+which can be quantified rather than assumed.
+It also allows grouping performance to be evaluated independently of detector performance,
+making it possible to isolate the grouping problem
+and determine whether the embedding or the final grouping algorithm is the main performance constraint.
+The trade-off is most relevant where the grouping stage needs to be developed, reused, or replaced
+independently of the detector.
 
 PG-GAT extends GATv2 (graph attention network, version 2)
 with three modifications derived from the human skeleton structure:
@@ -51,7 +62,7 @@ a type-pair attention bias that distinguishes different categories of keypoint e
 skeleton-relative position encoding that exposes geometric relationships to the attention mechanism,
 and same-type repulsion heads that provide dedicated capacity
 for separating corresponding joints belonging to different people.
-In isolation the individual modifications give margins within seed noise,
+In isolation the individual modifications produce small gains that are close to the run-to-run variation of the metric,
 while their combination performs best under matched architecture and training conditions.
 The final architecture is selected through a 32-run Bayesian sweep over six architectural parameters,
 and a separate 24-run loss sweep confirms that the inherited contrastive-loss settings are already near-optimal.
@@ -61,7 +72,10 @@ with the fine-tuning configuration selected through a further 12-run Bayesian sw
 The resulting model reaches $0.9715$ pose grouping accuracy (PGA) on COCO validation
 using ground-truth keypoints
 and $0.9591$ end-to-end PGA using HigherHRNet-W32-512 detections.
-HigherHRNet's native associative-embedding grouping reaches $0.9847$ on the same matched detections,
+HigherHRNet is chosen deliberately as the reference:
+its native associative-embedding grouping is learned jointly with the detector,
+so the comparison measures what is lost by separating grouping from detection.
+That grouping reaches $0.9847$ on the same matched detections,
 giving a measured detector-independence cost of $0.0256$ PGA.
 The same frozen PG-GAT and person-count estimator
 are then applied zero-shot to YOLO11x-pose and RTMO-L detections.

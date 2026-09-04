@@ -350,9 +350,8 @@ output dimension,
 joint-type embedding dimension,
 and dropout)
 are selected through a 32-run Bayesian sweep.
-The search space spans relatively small configurations
-through to the practical memory limit at batch size 4
-on the experimental hardware.
+The search space ranges from compact configurations
+to the largest models that remain feasible at batch size 4 on the experimental hardware.
 Synthetic validation PGA from Equation~\eqref{eq:pga}
 is used as the selection metric.
 
@@ -453,9 +452,8 @@ The angle at the central joint provides a rotation-invariant description
 of local articulation that is not explicitly available
 to the standard single-joint representation.
 
-The experiments in Chapter~\ref{chap_4} show that none of these three
-extensions provides a clear improvement over the defended PG-GAT
-configuration.
+The experiments in Chapter~\ref{chap_4} show that none of these three extensions
+provides a clear improvement over the corresponding PG-GAT configuration.
 Their methodologies are nevertheless included here because each tests
 a distinct assumption of the main design,
 and the results provide evidence for retaining the simpler PG-GAT

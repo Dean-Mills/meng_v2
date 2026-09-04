@@ -128,6 +128,24 @@ A controlled within-detector sweep would determine its shape and could
 identify the recall range at which predicting the effective person count
 becomes preferable to using the annotation-level count.
 
+\subsection{Person-count range of the synthetic generator}
+\label{sec_conc_future_krange}
+
+The synthetic generator samples the number of people uniformly from one to five
+(Section~\ref{sec_meth_data_synth}),
+and the K-head is trained on that range.
+This covers $87.5\%$ of the COCO val2017 images with keypoint annotations,
+but the remaining crowded scenes lie outside the range the head has seen.
+On the HigherHRNet scenes scored in Section~\ref{sec_res_e2e} with six or more annotated people,
+the head returns the annotated count in $22.9\%$ of cases and under-counts by $1.35$ people on average,
+compared with $83.6\%$ exact within the trained range.
+Extending the generator to larger and more crowded scenes,
+retraining the K-head on the wider range,
+and evaluating on the crowded tail of COCO would show whether the under-counting is a range limitation
+or a property of the pooled-embedding count estimator itself.
+The grouping network would be evaluated on the same scenes,
+since crowding also increases the number of same-type keypoints in close proximity.
+
 \subsection{Multi-seed variance characterisation}
 \label{sec_conc_future_seeds}
 

@@ -215,3 +215,4 @@ dissertation/references/*.pdf
 code_v3/yolo11x-pose.pt
 code_v3/*.pt
 code_v3/*.pth
+dissertation/build_agent/

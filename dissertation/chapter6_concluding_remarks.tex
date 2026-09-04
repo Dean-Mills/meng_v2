@@ -1,0 +1,20 @@
+\section{Concluding Remarks}
+\label{sec_conc_remarks}
+
+The composite hypothesis of Section~\ref{sec_intro_hypothesis} is supported across all three clauses,
+subject to the qualifications set out in Section~\ref{sec_conc_verdict}.
+The experiments show that the quality of the per-keypoint embedding,
+rather than the complexity of the grouping algorithm, is the main constraint on grouping performance.
+PG-GAT demonstrates that a skeleton-aware graph attention network can learn such an embedding through
+synthetic pre-training followed by COCO fine-tuning,
+although its performance remains below the jointly trained reference and the claim of competitive performance
+is therefore qualitative.
+The same representation also supports autonomous person-count estimation and reuse across multiple detectors,
+with the detector-swap experiments providing stronger evidence for the third clause than originally required
+by the hypothesis.
+The resulting contribution is a grouping module that can be developed, evaluated,
+and replaced independently of the detector,
+at a measured cost of approximately $0.02$ PGA relative to native grouping across the three detector families tested.
+Across the wider investigation, one result remained consistent:
+improvements to the per-keypoint embedding produced larger gains in grouping quality than changes to the
+grouping algorithm applied to it.

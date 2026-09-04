@@ -4,7 +4,8 @@
 Human pose estimation (HPE) is the problem of localising a fixed set of
 anatomical keypoints - such as the seventeen joints of the COCO
 skeleton~\cite{lin2014coco} - on every person present in a given image.
-This is a large domain, so the work is restricted to 2D and multi-person.
+Given the breadth of the domain, this work is restricted 
+to 2D, multi-person estimation.
 In this context the goal is to find per-image keypoints
 for an unknown number of people without the use of temporal context
 or 3D reconstruction.
@@ -107,7 +108,7 @@ apply the DETR~\cite{carion2020detr} set-prediction paradigm to human keypoints:
 a fixed pool of pose queries cross-attends to image features,
 and each query learns to predict a complete per-person skeleton (one shot).
 The predictions form an unordered set with no fixed pairing to the ground-truth people,
-so Hungarian matching at training time assigns each ground-truth person to one of the queries.
+and Hungarian matching at training time assigns each ground-truth person to one of the queries.
 Here the binding between keypoints and person is the query identity.
 QueryPose~\cite{xiao2022querypose} sparsified the attention pattern by
 splitting each pose query into part-level sub-queries.
@@ -225,7 +226,7 @@ The per-image grouping module developed in Chapter~\ref{chap_3} can therefore be
 before temporal association,
 with standard ReID methods handling the subsequent tracking step.
 
-\subsection{Position of the present work}
+\subsection{Position of this work within the HPE landscape}
 \label{sec_lit_hpe_position}
 
 The HPE literature has converged on a relatively small set of strong single-image detection backbones,

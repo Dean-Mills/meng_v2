@@ -10,7 +10,7 @@ defines the bottom-up methods starting from the smallest unit available (a joint
 up towards a person. This allows the runtime to be approximately constant in the number of people
 but means that the grouping decision itself becomes difficult. 
 
-\begin{figure}[H]
+\begin{figure}[t]
     \centering
     \includegraphics[width=\linewidth]{figures/context_example.pdf}
     \caption[Multi-person keypoints from COCO \texttt{val2017} (image 482800), drawn from the ground-truth annotations.]{Multi-person keypoints from COCO \texttt{val2017} (image 482800), drawn from 
@@ -23,11 +23,11 @@ but means that the grouping decision itself becomes difficult.
     \label{fig:context_example}
 \end{figure}
 
-In this context multi-person pose estimation is then two things: keypoint detection and keypoint
+Multi-person pose estimation therefore reduces to two tasks: keypoint detection and keypoint
 grouping. The detection stage is well studied with potential solutions including high-resolution 
 convolutional backbones~\cite{sun2019hrnet, cheng2020higherhrnet}, transformer estimators~\cite{xu2022vitpose},
-and human-centric foundation models~\cite{khirodkar2024sapiens} which 
-have pushed per-keypoint localisation accuracy on the COCO benchmark toward saturation. Residual errors
+and human-centric foundation models~\cite{khirodkar2024sapiens} which have raised per-keypoint localisation 
+accuracy on the COCO benchmark to the point where further gains are small. Residual errors
 of modern bottom-up pipelines happen downstream of detection in deciding which person each 
 detected keypoint belongs to. This decision is quite difficult for
 a number of structural reasons:
