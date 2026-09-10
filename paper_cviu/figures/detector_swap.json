@@ -1,0 +1,36 @@
+{
+ "img_id": 281759,
+ "K_gt": 5,
+ "conf_threshold": 0.1,
+ "checkpoint": "outputs/pg_gat_finetune_sweep/3362f752/best.pt",
+ "k_head": "outputs/k_head_meng_headline_coco/a636b1c4/best.pt",
+ "rows": [
+  {
+   "name": "HigherHRNet-W32-512\n(heatmaps + AE)",
+   "n_det": 80,
+   "n_matched": 73,
+   "n_native": 5,
+   "K_pred": 5,
+   "pga_native": 1.0,
+   "pga_pg": 1.0
+  },
+  {
+   "name": "YOLO11x-pose\n(single-stage regression)",
+   "n_det": 81,
+   "n_matched": 75,
+   "n_native": 5,
+   "K_pred": 5,
+   "pga_native": 1.0,
+   "pga_pg": 1.0
+  },
+  {
+   "name": "RTMO-L\n(one-stage bottom-up)",
+   "n_det": 82,
+   "n_matched": 74,
+   "n_native": 5,
+   "K_pred": 5,
+   "pga_native": 1.0,
+   "pga_pg": 1.0
+  }
+ ]
+}

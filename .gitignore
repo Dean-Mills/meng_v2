@@ -225,3 +225,4 @@ dissertation/build_agent/
 /paper_cviu/*.synctex.gz
 /paper_cviu/*.fdb_latexmk
 /paper_cviu/*.fls
+/paper_cviu/figures/src/build_agent/
