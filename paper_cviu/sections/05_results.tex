@@ -1,0 +1,23 @@
+% SECTION 5 - Results. Target 4 pp. Sources: chapter4_* (baseline, learned_heads, sa_dmon, pggat_ablations, pggat_sweep, coco_ft, e2e, hyperbolic, trigat, v2) + results.md AP@OKS section.
+% Exemplar pattern: tables with named references; ablation may precede the main table; efficiency subsection common (parameter counts here).
+% Every number: docs/paper_cviu_guide.md section 3 / dissertation_revision_guide.md section 4.
+\section{Results}
+\label{sec:results}
+\subsection{Grouping heads against the k-means read-out}
+\label{sec:results_heads}
+% [SEED pending] - tab:heads: baseline 0.8783/0.8841; DEC, slot, partition; SA-DMoN range 0.7769-0.7934.
+\subsection{PG-GAT ablation and sweeps}
+\label{sec:results_ablation}
+% [SEED pending] - tab:ablation (four rows + baseline); arch sweep -> 0.9634; loss sweep 0.9617.
+\subsection{COCO fine-tuning}
+\label{sec:results_finetune}
+% [SEED pending] - tab:finetune (0.9010 -> 0.9715; E2E 0.9005 -> 0.9591; multi-person 0.9472).
+\subsection{End-to-end grouping and detector swap}
+\label{sec:results_e2e}
+% [SEED pending] - tab:swap (three detectors: recall, native, oracle K, predicted K, gap); fig:examples; fig:predk; K-head 76.1 % / 91.9 %; sign flip -0.0066.
+\subsection{System-level AP@OKS}
+\label{sec:results_ap}
+% [NEW - no dissertation text] - tab:ap (native full 0.583 / pooled 0.540 / PG-GAT autonomous 0.492 / annotation K 0.483 / K = detector count 0.484); threshold sensitivity; crowd split 0.029 vs 0.076; protocol caveats (unmatched detections now in the graph; no flip).
+\subsection{Negative results on PG-GAT variants}
+\label{sec:results_variants}
+% [SEED pending] - tab:variants: hyperbolic Option B 0.9399 (-0.0316 vs headline); TriGAT 0.8740/0.8564; v2 0.9670/0.9682 (+2.2M params).

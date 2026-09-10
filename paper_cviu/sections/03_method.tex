@@ -1,0 +1,20 @@
+% SECTION 3 - Method. Target 3 pp. Sources: chapter3_problem_formulation (3.3), chapter3_pg_gat (3.8), chapter3_baseline (loss, 3.5), chapter3_integration (3.12).
+% Exemplar pattern: overview figure at or before the first method subsection; numbered equations; training/loss last.
+% Figures: fig:pipeline (e2e_interface, figure*), fig:pggat (pggat_architecture, figure*).
+\section{Method}
+\label{sec:method}
+\subsection{Problem formulation and pipeline}
+\label{sec:method_problem}
+% [SEED pending] - block diagram FIRST (fig:pipeline), then the interface: coordinates, visibility, joint types only.
+\subsection{Graph construction}
+\label{sec:method_graph}
+% [SEED pending] - node features; directed kNN graph, k = 16 for the headline (derived from the 256-d embedding); four edge categories.
+\subsection{PG-GAT}
+\label{sec:method_pggat}
+% [SEED pending] - fig:pggat; Modification 1 type-pair attention bias (eq), 2 skeleton-relative position encoding (eq), 3 same-type repulsion heads (eq).
+\subsection{Training}
+\label{sec:method_training}
+% [SEED pending] - contrastive loss (eq, GATOnlyLoss form), synthetic pre-training then COCO fine-tune, the three sweeps (arch 32, loss 24, fine-tune 12).
+\subsection{Read-out and person count}
+\label{sec:method_readout}
+% [SEED pending] - k-means with k = K on L2-normalised embeddings; K-head brief (frozen-backbone MLP, mean+max pool + n/17, L1; D5 = brief treatment).

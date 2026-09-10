@@ -220,3 +220,8 @@ dissertation/build_agent/
 # journal paper (2026-09-09): track the source, not the downloaded exemplar PDFs or agent builds
 /paper_cviu/exemplars/*.pdf
 /paper_cviu/build_agent/
+/paper_cviu/main.pdf
+/paper_cviu/*.spl
+/paper_cviu/*.synctex.gz
+/paper_cviu/*.fdb_latexmk
+/paper_cviu/*.fls

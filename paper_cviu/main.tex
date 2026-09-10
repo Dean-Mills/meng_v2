@@ -1,0 +1,62 @@
+%% PG-GAT journal paper - Computer Vision and Image Understanding (Elsevier)
+%% Template: CVIU bundle (paper_cviu/template/cviu), class options as shipped (D7):
+%%   \documentclass[times,twocolumn,final,authoryear]{elsarticle} + ycviu.sty, model2-names.bst
+%% Working agreement and decision log: docs/paper_cviu_guide.md. Sentence-per-line source.
+%% Agent builds go to build_agent/ (see build.sh); never build in this directory.
+\documentclass[times,twocolumn,final,authoryear]{elsarticle}
+\usepackage{ycviu}
+
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{xcolor}
+
+\journal{Computer Vision and Image Understanding}
+
+\begin{document}
+
+\begin{frontmatter}
+
+%% WORKING TITLE - Dean decides (dissertation title tension: "skeleton-aware" vs the action-recognition collision, guide section 9).
+\title{Detector-independent multi-person pose grouping with a skeleton-aware graph attention network}
+
+\author[1]{Dean \snm{Mills}\corref{cor1}}
+\cortext[cor1]{Corresponding author.}
+\ead{deansmills@gmail.com}
+%% Co-author(s): Dean decides (supervisor Mr H. Grobler?).
+\address[1]{Department of Electrical, Electronic and Computer Engineering, University of Pretoria, Pretoria, South Africa}
+
+%% Journal-set dates; leave commented until acceptance.
+%\received{}
+%\finalform{}
+%\accepted{}
+%\availableonline{}
+%\communicated{}
+
+\begin{abstract}
+\input{sections/00_abstract}
+\end{abstract}
+
+\begin{keyword}
+%% Keyword count not stated by the Guide; the dissertation summary lists twelve, trimmed here to the MEng scope.
+\KWD Multi-person pose grouping\sep Bottom-up pose estimation\sep Graph attention network\sep Detector independence\sep Synthetic-to-real transfer\sep Contrastive learning
+\end{keyword}
+
+\end{frontmatter}
+
+\input{sections/01_introduction}
+\input{sections/02_related_work}
+\input{sections/03_method}
+\input{sections/04_setup}
+\input{sections/05_results}
+\input{sections/06_discussion}
+\input{sections/07_limitations}
+\input{sections/08_conclusion}
+\input{sections/09_backmatter}
+
+%% Bibliography: the dissertation's verified file (2026-09-03) via the symlink diss_thesis.bib (TeX Live blocks ".." paths), reused as-is for now.
+%% A paper-specific subset with DOIs (paper.bib) replaces it once the cited set is settled (guide section 5, item 2).
+\bibliographystyle{model2-names}
+\bibliography{diss_thesis}
+
+\end{document}

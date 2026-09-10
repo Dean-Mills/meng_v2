@@ -1,0 +1,16 @@
+% SECTION 4 - Experimental setup. Target 1.5 pp. Sources: chapter3_dataset (3.4), chapter3_integration (3.12), chapter3_evaluation (3.13), chapter4_e2e 4.9.4 (PGA vs AP).
+% Exemplar pattern: datasets and protocol -> metric definition in its own subsection with an equation -> implementation.
+\section{Experimental setup}
+\label{sec:setup}
+\subsection{Datasets}
+\label{sec:setup_data}
+% [SEED pending] - synthetic (why synthetic; K <= 5 motivation: 87.5 % of COCO val keypoint images have <= 5 people), COCO train2017/val2017, evaluation-set sizes (2,307 / 1,248 / 2,258 candidates / 2,165 scored).
+\subsection{Detectors and the joint-trained reference}
+\label{sec:setup_detectors}
+% [SEED pending] - HigherHRNet-W32-512 deliberately chosen (AE = joint-trained reference); YOLO11x-pose, RTMO-L (body7 caveat); zero-shot swap protocol.
+\subsection{Metric}
+\label{sec:setup_metric}
+% [SEED pending] - PGA equation; 10 px per-joint-type Hungarian matching; graph built from matched detections in the PGA protocol (state it); relation to AP@OKS and why PGA is primary.
+\subsection{Implementation}
+\label{sec:setup_impl}
+% [SEED pending] - optimiser, schedule, k-means n_init = 10, hardware, W&B provenance.
