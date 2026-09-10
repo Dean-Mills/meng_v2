@@ -1,0 +1,32 @@
+{
+  "img_id": "554328",
+  "K": 3,
+  "n_nodes": 34,
+  "proj": "tsne",
+  "checkpoints": [
+    {
+      "label": "Standard GAT",
+      "path": "outputs/train_knn_no_depth/4ca258c4/best.pt",
+      "coco_val_pga": 0.8841,
+      "run": "jkd1ln4a",
+      "scene_pga": 0.8823529411764706,
+      "misassigned": 4
+    },
+    {
+      "label": "PG-GAT, synthetic only",
+      "path": "outputs/pg_gat_arch_sweep/08d0ffde/best.pt",
+      "coco_val_pga": 0.901,
+      "run": "08d0ffde",
+      "scene_pga": 0.9117647058823529,
+      "misassigned": 3
+    },
+    {
+      "label": "PG-GAT, COCO fine-tuned",
+      "path": "outputs/pg_gat_finetune_sweep/3362f752/best.pt",
+      "coco_val_pga": 0.9715,
+      "run": "b5noyg7t",
+      "scene_pga": 1.0,
+      "misassigned": 0
+    }
+  ]
+}
