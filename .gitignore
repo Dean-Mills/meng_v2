@@ -216,3 +216,7 @@ code_v3/yolo11x-pose.pt
 code_v3/*.pt
 code_v3/*.pth
 dissertation/build_agent/
+
+# journal paper (2026-09-09): track the source, not the downloaded exemplar PDFs or agent builds
+/paper_cviu/exemplars/*.pdf
+/paper_cviu/build_agent/
