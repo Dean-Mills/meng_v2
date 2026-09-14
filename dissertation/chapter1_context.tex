@@ -2,19 +2,19 @@
 \label{sec_intro_context}
 
 Multi-person pose estimation is the task of identifying and locating a fixed set of anatomical keypoints -
-the seventeen joints of the COCO skeleton~\cite{lin2014coco} - on every person present in an image. The 
+the seventeen joints of the COCO skeleton~\cite{lin2014coco} - on every person present in an image. The
 bottom-up family of methods breaks the task up into two distinct stages: a detector first identifies
 every keypoint in the image (regardless of which person it belongs to) and then the grouping stage
 assigns each detected keypoint to a person (Figure~\ref{fig:context_example}). This separation of concerns is what
-defines the bottom-up methods starting from the smallest unit available (a joint) and working 
+defines the bottom-up methods starting from the smallest unit available (a joint) and working
 up towards a person. This allows the runtime to be approximately constant in the number of people
-but means that the grouping decision itself becomes difficult. 
+but means that the grouping decision itself becomes difficult.
 
 \begin{figure}[t]
     \centering
     \includegraphics[width=\linewidth]{figures/context_example.pdf}
-    \caption[Multi-person keypoints from COCO \texttt{val2017} (image 482800), drawn from the ground-truth annotations.]{Multi-person keypoints from COCO \texttt{val2017} (image 482800), drawn from 
-    the ground-truth annotations. In (a) every keypoint carries a joint type but no person identity, 
+    \caption[Multi-person keypoints from COCO \texttt{val2017} (image 482800), drawn from the ground-truth annotations.]{Multi-person keypoints from COCO \texttt{val2017} (image 482800), drawn from
+    the ground-truth annotations. In (a) every keypoint carries a joint type but no person identity,
     which is what the grouping stage is given;
     the circled section shows the right eyes of two different people, 33 pixels apart.
     In (b) the same keypoints are coloured by the person they belong to and joined by the COCO skeleton,
@@ -24,11 +24,11 @@ but means that the grouping decision itself becomes difficult.
 \end{figure}
 
 Multi-person pose estimation therefore reduces to two tasks: keypoint detection and keypoint
-grouping. The detection stage is well studied with potential solutions including high-resolution 
+grouping. The detection stage is well studied with potential solutions including high-resolution
 convolutional backbones~\cite{sun2019hrnet, cheng2020higherhrnet}, transformer estimators~\cite{xu2022vitpose},
-and human-centric foundation models~\cite{khirodkar2024sapiens} which have raised per-keypoint localisation 
+and human-centric foundation models~\cite{khirodkar2024sapiens} which have raised per-keypoint localisation
 accuracy on the COCO benchmark to the point where further gains are small. Residual errors
-of modern bottom-up pipelines happen downstream of detection in deciding which person each 
+of modern bottom-up pipelines happen downstream of detection in deciding which person each
 detected keypoint belongs to. This decision is quite difficult for
 a number of structural reasons:
 
@@ -44,11 +44,38 @@ In established bottom-up methods, this grouping decision is produced by a mechan
 that is trained jointly with the keypoint detector. Part-affinity fields~\cite{cao2017openpose},
 associative-embedding tags~\cite{newell2017associative, cheng2020higherhrnet},
 centre-offset regression~\cite{geng2021dekr},
-and end-to-end set prediction~\cite{shi2022petr} all couple the grouping method 
-to a particular estimation backbone. This coupling buys accuracy 
-at the cost of reusability - a grouping mechanism trained with respect to one detector 
+and end-to-end set prediction~\cite{shi2022petr} all couple the grouping method
+to a particular estimation backbone. This coupling buys accuracy
+at the cost of reusability - a grouping mechanism trained with respect to one detector
 cannot be detached and applied to the output of another one. This work studies the alternative:
 a grouping module that consumes arbitrary detector-emitted keypoints and types.
 This work measures the grouping accuracy lost by that separation,
 relative to a jointly trained mechanism on the same detections,
 and whether the reuse of one grouping network across detectors justifies that loss.
+
+Figure~\ref{fig:concept_modular} contrasts the two arrangements.
+In the joint-trained case,
+the grouping head is coupled to the detector through its internal features and training procedure.
+In the modular design proposed here,
+only detected keypoints cross the interface between the detector and the grouping stage.
+The same trained grouping network (PG-GAT) and person-count head (K-head)
+can therefore be used unchanged with each of the three detectors evaluated in this
+work.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{figures/concept_modular.pdf}
+    \caption[Joint-trained grouping compared with the modular grouping pipeline of this work.]{Joint-trained grouping compared with the modular grouping pipeline developed in this work.
+    (a) In established bottom-up methods,
+    the grouping head is trained jointly with the keypoint detector and operates on detector-specific features,
+    coupling the grouping mechanism to that detector.
+    (b) The modular pipeline instead exposes a keypoint-only interface shared by all three evaluated detectors.
+    PG-GAT embeds the detected keypoints, the K-head estimates the number of people $\hat{K}$,
+    and $k$-means partitions the embeddings into person groups.
+    PG-GAT and the K-head are trained once and remain frozen when the upstream detector is changed.
+    The insets show COCO \texttt{val2017} image 281759 using pooled HigherHRNet detections before grouping (grey) and
+    after grouping by the modular pipeline (coloured by person).
+    Red blocks denote components trained in this work and frozen at inference,
+    blue blocks denote external pre-trained detectors, and grey blocks contain no learned parameters.}
+    \label{fig:concept_modular}
+\end{figure}

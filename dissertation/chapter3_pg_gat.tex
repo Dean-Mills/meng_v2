@@ -119,7 +119,7 @@ exclusive categories according to the joint types $(t_i,t_j)$:
         that the nodes should be separated.
 
     \item \textsc{Skeletal-Neighbour} - $(t_i,t_j)$ forms a directly
-        connected pair in the COCO skeleton graph,
+        connected pair in the skeleton of Figure~\ref{fig:skeleton_graph}(a),
         such as a shoulder and elbow.
         These edges provide a strong structural cue because
         anatomically adjacent joints from the same person tend to have
@@ -150,6 +150,9 @@ $\phi_{\text{edge}}$,
 The resulting feature is supplied to the GATv2 layer through the
 \texttt{edge\_dim} mechanism of the PyTorch Geometric
 \texttt{GATv2Conv} implementation~\cite{fey2019pyg}.
+\texttt{GATv2Conv} also appends a self-loop to every node before the attention is computed (the library default),
+so each node attends to itself in addition to its $k$NN neighbours -
+the edge set of Section~\ref{sec_meth_problem_graph} itself carries no self-loops.
 This introduces a learned edge-dependent contribution
 to the attention pre-activation,
 which can be written as
@@ -204,7 +207,7 @@ to each edge:
 
     \item the skeleton hop distance $d_{\text{hop}}(t_i,t_j)$, defined
         as the shortest-path distance between joint types $t_i$ and
-        $t_j$ on the COCO skeleton graph and normalised to $[0,1]$;
+        $t_j$ on the skeleton of Figure~\ref{fig:skeleton_graph}(a) and normalised to $[0,1]$;
 
     \item a same-type indicator
         $\mathbb{1}[t_i=t_j]\in\{0,1\}$.
@@ -254,6 +257,27 @@ so similar image-plane proximity does not carry the same grouping evidence.
 The attention mechanism can use this distinction
 when deciding how strongly information should pass
 between the two nodes.
+
+The skeleton table used to define both the edge categories and
+the hop distance contains the 16 edges shown in Figure~\ref{fig:skeleton_graph}(a).
+It omits the ear-shoulder and eye-eye connections present in the COCO annotation format,
+leaving the five head joints as a separate chain with no path to the torso. As a result,
+every head-body pair is assigned to the cross-body category, and its hop distance takes the
+maximum value of $8$ before normalisation. Figure~\ref{fig:edge_categories} illustrates the resulting
+edge categories and hop distances from a single anchor joint.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{figures/edge_categories.pdf}
+    \caption[PG-GAT edge categories and skeleton hop distance from one anchor joint.]{The four PG-GAT edge categories and the skeleton hop distance from the left shoulder of person A.
+    Edges from the anchor are coloured by category:
+    skeletal neighbour (green), same limb (blue), cross-body (grey), and same type (red).
+    The number at each body joint of person A gives its hop distance from the anchor on the 16-edge skeleton.
+    Because the head joints have no path to the torso in this skeleton definition,
+    their hop distance is assigned the maximum value of $8$.
+    Both the edge categories and hop distances are generated directly from the tables used by the model.}
+    \label{fig:edge_categories}
+\end{figure}
 
 \subsection{Modification~3: same-type repulsion heads}
 \label{sec_meth_pggat_repulsion}

@@ -448,3 +448,24 @@ detections in each scene.
 The present result is therefore evidence consistent with the
 effective-person-count explanation
 rather than a causal isolation of that mechanism.
+
+Figure~\ref{fig:detector_swap} shows the detector swap on a single scene containing
+five heavily overlapping skiers. Despite the differences in the detected keypoint sets,
+the same frozen PG-GAT and K-head predict the annotated
+count of five for all three detectors. The remaining grouping errors are small and occur
+at different keypoints for each detector.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.875\linewidth]{figures/detector_swap.pdf}
+    \caption[One scene under the detector swap for all three evaluated detectors.]{One scene (COCO \texttt{val2017} image 470779, five annotated people) under the detector-swap evaluation.
+    Rows correspond to the three detectors, while columns show
+    (a) the pooled keypoints after discarding the detector's person identities,
+    (b) the detector's native grouping,
+    and (c) the grouping produced by the frozen PG-GAT using the K-head prediction $\hat{K}$.
+    Drawing conventions follow Figure~\ref{fig:e2e_examples}:
+    only matched detections are shown, coloured by the ground-truth person to which their cluster is assigned.
+    The PG-GAT graph is constructed from these matched detections ($59$, $66$, and $70$ keypoints),
+    consistent with the evaluation in Table~\ref{tab:e2e_detector_swap}.}
+    \label{fig:detector_swap}
+\end{figure}

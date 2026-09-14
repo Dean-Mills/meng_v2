@@ -311,6 +311,50 @@ The dedicated head therefore gives the network a separate pathway
 in which the contrastive objective can act on the subset of
 relationships most directly associated with cross-person discrimination.
 
+The learned attention coefficients provide a direct view of how the two models
+weight their graph edges. Figure~\ref{fig:attention_edges} compares
+the standard GAT baseline with the headline PG-GAT on the $1{,}248$ multi-person
+COCO validation scenes using ground-truth keypoints. Each edge is labelled by its PG-GAT
+category and by whether the two keypoints belong to the same person. Since the models
+use different neighbourhood sizes ($k=8$ for the baseline and $k=16$ for PG-GAT), the observed attention
+shares are compared with the shares expected under uniform attention. In the PG-GAT standard heads,
+same-type edges receive an attention share of $0.000$
+compared with a uniform share of $0.041$, while skeletal-neighbour edges receive
+$0.292$ compared with $0.173$. Same-person edges account for $0.856$ of the non-self
+attention against a uniform share of $0.553$. This preference also increases with depth,
+from $0.74$ in the first layer to $0.90$ and $0.93$ in the second and third layers. The baseline
+remains closer to its uniform distribution, assigning $0.765$ of its non-self attention to same-person
+edges against a uniform share of $0.717$. The dedicated repulsion head, whose
+neighbourhood contains only same-type edges and the self-loop, assigns $0.675$ of its attention
+to the self-loop against a uniform share of $0.589$, leaving $0.325$ for same-type edges
+compared with their uniform share of $0.411$. It therefore gives
+less attention than uniform weighting to corresponding joints from other people within its
+restricted neighbourhood. These attention shares do not establish how much each modification contributes
+to the final PGA, but their behaviour is consistent with the intended design:
+same-type edges are suppressed in the standard heads, while skeletal-neighbour and
+same-person relationships receive greater attention, with the same-person preference
+becoming stronger in the deeper layers.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{figures/attention_edges.pdf}
+    \caption[Distribution of GATv2 attention across edge categories and person identities.]{GATv2 attention
+    measured on the $1{,}248$ multi-person COCO \texttt{val2017} scenes using ground-truth keypoints.
+    (a) Share of attention mass by edge category for the standard GAT baseline and the PG-GAT standard
+    heads, averaged across layers and heads.
+    Black markers show the corresponding share under uniform attention, given by the fraction of
+    edges belonging to each category.
+    The self-loop is added to each node by \texttt{GATv2Conv}.
+    (b) Per-layer share of non-self attention assigned to same-person edges, compared with the
+    corresponding uniform share.
+    (c) The two highest-attention incoming edges for each keypoint in the final PG-GAT layer on
+    COCO image 482800 (the scene shown in Figure~\ref{fig:context_example}), coloured by edge category
+    and drawn with width proportional to their attention coefficient.
+    Attention coefficients are recorded by wrapping the attention layers during inference without
+    modifying either trained model.}
+    \label{fig:attention_edges}
+\end{figure}
+
 The isolation results are consistent with these three mechanisms being
 complementary.
 Type-pair attention contributes categorical edge structure,
