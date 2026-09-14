@@ -48,5 +48,7 @@ and end-to-end set prediction~\cite{shi2022petr} all couple the grouping method
 to a particular estimation backbone. This coupling buys accuracy 
 at the cost of reusability - a grouping mechanism trained with respect to one detector 
 cannot be detached and applied to the output of another one. This work studies the alternative:
-a grouping module that consumes arbitrary detector-emitted keypoints and types. The question is 
-what that costs in accuracy and whether the modularity is worth it.
+a grouping module that consumes arbitrary detector-emitted keypoints and types.
+This work measures the grouping accuracy lost by that separation,
+relative to a jointly trained mechanism on the same detections,
+and whether the reuse of one grouping network across detectors justifies that loss.
