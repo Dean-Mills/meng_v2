@@ -26,7 +26,17 @@ rather than a complete pose-estimation system of the same size.
 
 \begin{table}[H]
 \centering
-\footnotesize
+\caption[Parameter counts of the principal learned components used in the evaluation.]{Parameter counts of the principal learned components used in
+the evaluation. PG-GAT is a small grouping module relative to the full
+HigherHRNet detector, but it is not smaller than HigherHRNet's native
+grouping mechanism: the AE tag head contains only approximately
+$561$ parameters, making the \texttt{meng-headline} PG-GAT roughly
+$600\times$ larger as a standalone grouping component. Complete-system
+comparisons must also include the upstream detector required by PG-GAT.
+The MobileNetV2 parameters apply only to the PG-GAT v2 visual-feature
+variant and are frozen during its training.}
+\label{tab:model_size_accounting}
+\tablesize
 \begin{tabular}{lr}
 \toprule
 Component & Parameter count \\
@@ -48,16 +58,6 @@ HigherHRNet-W32 (complete detector)
     & 28{,}645{,}331 \\
 \bottomrule
 \end{tabular}
-\caption[Parameter counts of the principal learned components used in the evaluation.]{Parameter counts of the principal learned components used in
-the evaluation. PG-GAT is a small grouping module relative to the full
-HigherHRNet detector, but it is not smaller than HigherHRNet's native
-grouping mechanism: the AE tag head contains only approximately
-$561$ parameters, making the \texttt{meng-headline} PG-GAT roughly
-$600\times$ larger as a standalone grouping component. Complete-system
-comparisons must also include the upstream detector required by PG-GAT.
-The MobileNetV2 parameters apply only to the PG-GAT v2 visual-feature
-variant and are frozen during its training.}
-\label{tab:model_size_accounting}
 \end{table}
 
 \subsection{Correcting an early framing}

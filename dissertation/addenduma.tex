@@ -19,7 +19,10 @@ The run identifier doubles as the on-disk output directory name under \texttt{ou
 
 \begin{table}[H]
 \centering
-\footnotesize
+\caption[The four Bayesian sweeps that defend every PG-GAT hyperparameter, with their W\&B sweep identifiers and winning runs.]{The four Bayesian sweeps that defend every PG-GAT hyperparameter,
+with their W\&B sweep identifiers and winning runs.}
+\label{tab:appendix_sweeps}
+\tablesize
 \begin{tabular}{llcl}
 \toprule
 Sweep & Sweep ID & Runs & Winner (run) \\
@@ -30,17 +33,15 @@ Hyperbolic dimension   & \texttt{qpggbsdn} & 8  & \texttt{champion-hyperbolic} (
 Fine-tune recipe       & \texttt{i9vpg4t1} & 12 & \texttt{meng-headline} (\texttt{b5noyg7t}) \\
 \bottomrule
 \end{tabular}
-\caption[The four Bayesian sweeps that defend every PG-GAT hyperparameter, with their W\&B sweep identifiers and winning runs.]{The four Bayesian sweeps that defend every PG-GAT hyperparameter,
-with their W\&B sweep identifiers and winning runs.}
-\label{tab:appendix_sweeps}
 \end{table}
 
 \section{Training runs}
 \label{appendix_repro_runs}
 
 {
-\footnotesize
-\begin{longtable}{llll}
+\tablesize
+\setlength{\tabcolsep}{3.5pt}
+\begin{longtable}{@{}llll@{}}
 \caption[W\&B run identifiers for every training run cited in Chapter~4.]{W\&B run identifiers for every training run cited in Chapter~4.}
 \label{tab:appendix_runs} \\
 \toprule

@@ -60,6 +60,21 @@ hypothesis-driven single runs alone.
 
 \begin{table}[H]
 \centering
+\caption[Hyperbolic PG-GAT results against the Euclidean reference configurations.]{Hyperbolic PG-GAT results against the corresponding Euclidean
+reference configurations. All columns report PGA; COCO val is $k$-means on
+ground-truth keypoints and COCO E2E uses HigherHRNet detections. H1 compares hyperbolic and Euclidean
+embeddings at $d=128$, while H2 tests whether useful grouping
+performance can be retained after reducing the embedding dimension to
+$d=32$. The $d=32$ synthetic-only model remains close to the
+$d=128$ Euclidean ablation on synthetic validation and exceeds it on
+zero-shot COCO ($0.8969$ versus $0.8868$), despite using a
+four-times-smaller embedding. After COCO fine-tuning, however, the
+$d=32$ hyperbolic model reaches $0.9399$ COCO PGA and $0.9336$
+end-to-end PGA, below the corresponding Euclidean headline results of
+$0.9715$ and $0.9591$. The hyperbolic result is therefore treated as an
+embedding-efficiency trade-off rather than an improvement in final
+grouping quality.}
+\label{tab:hyperbolic_headline}
 \tablesize
 \begin{tabular}{>{\raggedright\arraybackslash}p{0.34\linewidth}ccccl}
 \toprule
@@ -87,21 +102,6 @@ Hyperbolic sweep winner (\texttt{champion-hyperbolic})
     & --- & 0.8795 & 0.8876 & --- & \texttt{ua4wdb3p} \\
 \bottomrule
 \end{tabular}
-\caption[Hyperbolic PG-GAT results against the Euclidean reference configurations.]{Hyperbolic PG-GAT results against the corresponding Euclidean
-reference configurations. All columns report PGA; COCO val is $k$-means on
-ground-truth keypoints and COCO E2E uses HigherHRNet detections. H1 compares hyperbolic and Euclidean
-embeddings at $d=128$, while H2 tests whether useful grouping
-performance can be retained after reducing the embedding dimension to
-$d=32$. The $d=32$ synthetic-only model remains close to the
-$d=128$ Euclidean ablation on synthetic validation and exceeds it on
-zero-shot COCO ($0.8969$ versus $0.8868$), despite using a
-four-times-smaller embedding. After COCO fine-tuning, however, the
-$d=32$ hyperbolic model reaches $0.9399$ COCO PGA and $0.9336$
-end-to-end PGA, below the corresponding Euclidean headline results of
-$0.9715$ and $0.9591$. The hyperbolic result is therefore treated as an
-embedding-efficiency trade-off rather than an improvement in final
-grouping quality.}
-\label{tab:hyperbolic_headline}
 \end{table}
 
 \subsection{Interpretation}

@@ -55,19 +55,6 @@ before PGA is computed.
 
 \begin{table}[H]
 \centering
-\footnotesize
-\begin{tabular}{lccl}
-\toprule
-Configuration & Synth val PGA & COCO val PGA ($k$-means, GT kp) & W\&B run \\
-\midrule
-PG-GAT (synthetic only, ablation row)
-    & 0.8896 & 0.8868 & \texttt{r5ekg0zl} \\
-TriGAT
-    & 0.8740 & 0.8564 & \texttt{y0tw6vc9} \\
-$\Delta$ vs PG-GAT
-    & $-0.0156$ & $-0.0304$ & --- \\
-\bottomrule
-\end{tabular}
 \caption[TriGAT compared with the synthetic-only PG-GAT ablation configuration under a matched 50-epoch training budget.]{TriGAT compared with the synthetic-only PG-GAT ablation
 configuration under the same 50-epoch training budget. TriGAT is
 $0.0156$ lower on synthetic validation and $0.0304$ lower in the
@@ -78,6 +65,19 @@ on the full $2{,}307$-scene ground-truth-keypoint set. The COCO
 difference should therefore be interpreted as indicative rather than
 as a strictly matched-set measurement.}
 \label{tab:trigat_headline}
+\tablesize
+\begin{tabular}{lccl}
+\toprule
+Configuration & Synth val PGA & COCO val PGA & W\&B run \\
+\midrule
+PG-GAT (synthetic only, ablation row)
+    & 0.8896 & 0.8868 & \texttt{r5ekg0zl} \\
+TriGAT
+    & 0.8740 & 0.8564 & \texttt{y0tw6vc9} \\
+$\Delta$ vs PG-GAT
+    & $-0.0156$ & $-0.0304$ & --- \\
+\bottomrule
+\end{tabular}
 \end{table}
 
 \subsection{Interpretation}

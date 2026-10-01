@@ -72,6 +72,17 @@ pre-training stage.
 
 \begin{table}[H]
 \centering
+\caption[Effect of COCO fine-tuning on the architecture-sweep-selected PG-GAT.]{Effect of COCO fine-tuning on the architecture-sweep-selected
+PG-GAT. All columns report PGA; COCO val is $k$-means on ground-truth keypoints
+and COCO E2E uses HigherHRNet detections. The synthetic-only \texttt{champion-arch} checkpoint provides
+the pre-adaptation reference. All COCO fine-tuned configurations improve
+substantially on its COCO performance, with the Bayesian sweep winner
+(\texttt{meng-headline}) reaching $0.9715$ PGA using ground-truth
+keypoints and $0.9591$ in the HigherHRNet-based end-to-end evaluation.
+HigherHRNet's native associative-embedding grouping reaches $0.9847$ on
+the same end-to-end protocol and is included as the detector-specific
+reference.}
+\label{tab:coco_ft_headline}
 \tablesize
 \begin{tabular}{>{\raggedright\arraybackslash}p{0.34\linewidth}cccl}
 \toprule
@@ -95,17 +106,6 @@ HigherHRNet AE (reference)
     & --- & --- & 0.9847 & --- \\
 \bottomrule
 \end{tabular}
-\caption[Effect of COCO fine-tuning on the architecture-sweep-selected PG-GAT.]{Effect of COCO fine-tuning on the architecture-sweep-selected
-PG-GAT. All columns report PGA; COCO val is $k$-means on ground-truth keypoints
-and COCO E2E uses HigherHRNet detections. The synthetic-only \texttt{champion-arch} checkpoint provides
-the pre-adaptation reference. All COCO fine-tuned configurations improve
-substantially on its COCO performance, with the Bayesian sweep winner
-(\texttt{meng-headline}) reaching $0.9715$ PGA using ground-truth
-keypoints and $0.9591$ in the HigherHRNet-based end-to-end evaluation.
-HigherHRNet's native associative-embedding grouping reaches $0.9847$ on
-the same end-to-end protocol and is included as the detector-specific
-reference.}
-\label{tab:coco_ft_headline}
 \end{table}
 
 \subsection{Interpretation}

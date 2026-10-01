@@ -61,7 +61,11 @@ in the \texttt{multiperson-pose-grouping} project.
 
 \begin{table}[H]
 \centering
-\footnotesize
+\caption[Search space for the PG-GAT architecture sweep.]{Search space for the PG-GAT architecture sweep. The ranges
+cover compact configurations through to the largest models that remain
+feasible at batch size $4$ on the experimental hardware.}
+\label{tab:arch_sweep_space}
+\tablesize
 \begin{tabular}{ll}
 \toprule
 Axis & Search space \\
@@ -74,10 +78,6 @@ Axis & Search space \\
 \texttt{dropout}               & $\{0.0, 0.1, 0.2\}$ \\
 \bottomrule
 \end{tabular}
-\caption[Search space for the PG-GAT architecture sweep.]{Search space for the PG-GAT architecture sweep. The ranges
-cover compact configurations through to the largest models that remain
-feasible at batch size $4$ on the experimental hardware.}
-\label{tab:arch_sweep_space}
 \end{table}
 
 \textbf{Result:}
@@ -144,7 +144,12 @@ and the plots should not be interpreted as balanced factorial ablations.
 
 \begin{table}[H]
 \centering
-\footnotesize
+\caption[Winning configuration from the PG-GAT architecture sweep.]{Winning configuration from the PG-GAT architecture sweep.
+This architecture is retained for the subsequent PG-GAT experiments,
+including the COCO fine-tuning sweep of Section~\ref{sec_res_coco_ft}
+and the final headline evaluation.}
+\label{tab:arch_sweep_winner}
+\tablesize
 \begin{tabular}{ll}
 \toprule
 Axis & Selected value \\
@@ -161,11 +166,6 @@ Source run                     & \texttt{08d0ffde} \\
 W\&B alias                     & \texttt{champion-arch} \\
 \bottomrule
 \end{tabular}
-\caption[Winning configuration from the PG-GAT architecture sweep.]{Winning configuration from the PG-GAT architecture sweep.
-This architecture is retained for the subsequent PG-GAT experiments,
-including the COCO fine-tuning sweep of Section~\ref{sec_res_coco_ft}
-and the final headline evaluation.}
-\label{tab:arch_sweep_winner}
 \end{table}
 
 \subsection{Loss sweep}

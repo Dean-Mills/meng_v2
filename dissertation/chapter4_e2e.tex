@@ -72,10 +72,21 @@ and do not enter the autonomous inference pipeline.
 
 \begin{table}[H]
 \centering
-\footnotesize
+\caption[End-to-end grouping results on COCO using detections from HigherHRNet-W32-512.]{End-to-end grouping results on COCO using detections from
+HigherHRNet-W32-512. HigherHRNet's native associative-embedding
+grouping is evaluated on the same matched detections and provides the
+detector-specific reference. The \texttt{meng-headline} PG-GAT reaches
+$0.9591$ PGA when $k$-means is given the ground-truth person count and
+$0.9644$ when the cluster count is supplied by the frozen-backbone
+K-estimation head. The latter is the fully autonomous PG-GAT
+configuration and requires no ground-truth information at inference.
+The remaining gap to HigherHRNet AE is $0.0203$ for the autonomous
+configuration.}
+\label{tab:e2e_headline}
+\tablesize
 \begin{tabular}{lcl}
 \toprule
-Configuration & COCO E2E PGA (HigherHRNet detections) & W\&B run \\
+Configuration & COCO E2E PGA & W\&B run \\
 \midrule
 HigherHRNet AE (native grouping reference)
     & 0.9847 & --- \\
@@ -93,17 +104,6 @@ Hyperbolic PG-GAT, Option~B ($d=32$, COCO fine-tuned)
     & 0.9336 & \texttt{lragtfzu} \\
 \bottomrule
 \end{tabular}
-\caption[End-to-end grouping results on COCO using detections from HigherHRNet-W32-512.]{End-to-end grouping results on COCO using detections from
-HigherHRNet-W32-512. HigherHRNet's native associative-embedding
-grouping is evaluated on the same matched detections and provides the
-detector-specific reference. The \texttt{meng-headline} PG-GAT reaches
-$0.9591$ PGA when $k$-means is given the ground-truth person count and
-$0.9644$ when the cluster count is supplied by the frozen-backbone
-K-estimation head. The latter is the fully autonomous PG-GAT
-configuration and requires no ground-truth information at inference.
-The remaining gap to HigherHRNet AE is $0.0203$ for the autonomous
-configuration.}
-\label{tab:e2e_headline}
 \end{table}
 
 \subsection{Interpretation}
@@ -336,20 +336,6 @@ or to the K-estimation head.
 
 \begin{table}[H]
 \centering
-\footnotesize
-\begin{tabular}{lccccc}
-\toprule
-Detector (family) & Recall & Native & PG-GAT (oracle $K$) &
-PG-GAT (pred.\ $K$) & Gap \\
-\midrule
-HigherHRNet-W32-512 (heatmap $+$ AE)
-    & 0.793 & 0.9847 & 0.9591 & 0.9644 & 0.0203 \\
-YOLO11x-pose (single-stage regression)
-    & 0.816 & 0.9863 & 0.9647 & 0.9653 & 0.0210 \\
-RTMO-L (one-stage bottom-up)
-    & 0.774 & 0.9961 & 0.9437 & 0.9741 & 0.0220 \\
-\bottomrule
-\end{tabular}
 \caption[Detector-swap results on COCO \texttt{val2017}.]{Detector-swap results on COCO \texttt{val2017}. Native
 denotes each detector's original person assignment evaluated on its
 matched-detection subset. The PG-GAT columns discard these assignments,
@@ -365,6 +351,21 @@ each detector row, while absolute PGA values should be compared across
 detectors with caution. The RTMO native reference uses the publicly
 released multi-dataset \texttt{body7} weights.}
 \label{tab:e2e_detector_swap}
+\tablesize
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.30\linewidth}ccccc}
+\toprule
+ & & & \multicolumn{2}{c}{PG-GAT} & \\
+\cmidrule(lr){4-5}
+Detector (family) & Recall & Native & oracle $K$ & pred.\ $K$ & Gap \\
+\midrule
+HigherHRNet-W32-512 \newline (heatmap $+$ AE)
+    & 0.793 & 0.9847 & 0.9591 & 0.9644 & 0.0203 \\
+YOLO11x-pose \newline (single-stage regression)
+    & 0.816 & 0.9863 & 0.9647 & 0.9653 & 0.0210 \\
+RTMO-L \newline (one-stage bottom-up)
+    & 0.774 & 0.9961 & 0.9437 & 0.9741 & 0.0220 \\
+\bottomrule
+\end{tabular}
 \end{table}
 
 Two findings follow from Table~\ref{tab:e2e_detector_swap}.

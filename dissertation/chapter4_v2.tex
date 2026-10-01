@@ -51,11 +51,24 @@ using the same grouping metric as the other COCO experiments.
 
 \begin{table}[H]
 \centering
-\footnotesize
-\begin{tabular}{lrrcl}
+\caption[COCO ground-truth-keypoint results for the visual-feature PG-GAT v2 experiments.]{COCO ground-truth-keypoint results for the visual-feature
+PG-GAT v2 experiments. PG-GAT v2 is based on the legacy two-layer
+architecture rather than the sweep-selected architecture used by the
+\texttt{meng-headline} checkpoint, so the experiment is not a
+controlled visual-feature ablation of the headline model. The
+20-epoch configuration reaches $0.9670$ PGA and extending training to
+50 epochs increases this only to $0.9682$. The latter remains $0.0033$
+below the no-visual-feature headline result of $0.9715$. Each v2
+configuration additionally requires the frozen MobileNetV2 backbone
+used to extract the cached visual features, contributing approximately
+$2.2\times10^{6}$ parameters beyond the PG-GAT v2 network itself.}
+\label{tab:v2_headline}
+\tablesize
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.24\linewidth}rrcl}
 \toprule
 Configuration
-    & COCO val PGA ($k$-means, GT kp)
+    & COCO val PGA
     & Grouping params.
     & Visual backbone
     & W\&B run \\
@@ -77,18 +90,6 @@ PG-GAT v2, 50 epochs
     & \texttt{o8978au7} \\
 \bottomrule
 \end{tabular}
-\caption[COCO ground-truth-keypoint results for the visual-feature PG-GAT v2 experiments.]{COCO ground-truth-keypoint results for the visual-feature
-PG-GAT v2 experiments. PG-GAT v2 is based on the legacy two-layer
-architecture rather than the sweep-selected architecture used by the
-\texttt{meng-headline} checkpoint, so the experiment is not a
-controlled visual-feature ablation of the headline model. The
-20-epoch configuration reaches $0.9670$ PGA and extending training to
-50 epochs increases this only to $0.9682$. The latter remains $0.0033$
-below the no-visual-feature headline result of $0.9715$. Each v2
-configuration additionally requires the frozen MobileNetV2 backbone
-used to extract the cached visual features, contributing approximately
-$2.2\times10^{6}$ parameters beyond the PG-GAT v2 network itself.}
-\label{tab:v2_headline}
 \end{table}
 
 \subsection{Interpretation}

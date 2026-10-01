@@ -75,8 +75,22 @@ fixed.
 
 \begin{table}[H]
 \centering
+\caption[Results for the ten DMoN and SA-DMoN configurations compared with the no-depth GAT baseline.]{Results for the ten DMoN and SA-DMoN configurations compared
+with the no-depth GAT baseline. COCO val PGA is $k$-means on ground-truth
+keypoints. Synthetic-validation PGA remains within
+$[0.7769, 0.7934]$ across all ten configurations, a total range of
+$0.0165$, and every configuration remains below the baseline value of
+$0.8783$. The same pattern is observed on COCO: applying $k$-means to
+the jointly trained embeddings produces PGA values between $0.8622$
+and $0.8684$, compared with $0.8841$ for the baseline. The DMoN heads'
+own COCO read-outs are lower still, ranging from $0.8107$ to $0.8213$.
+Across the tested configurations, neither the skeleton-aware null model,
+the treatment of $\sigma$, the spectral-loss weight, feature-based
+adjacency, nor the entropy type loss produces an improvement over the
+standard GAT baseline.}
+\label{tab:sadmon_headline}
 \tablesize
-\begin{tabular}{lp{0.42\linewidth}ccl}
+\begin{tabular}{l>{\raggedright\arraybackslash}p{0.33\linewidth}ccl}
 \toprule
 ID & Configuration & Synth val PGA & COCO val PGA & W\&B run \\
 \midrule
@@ -107,20 +121,6 @@ Exp v2d & SA-DMoN v2, feature adjacency + entropy type loss
     & 0.7910 & 0.8652 & \texttt{02jqs33r} \\
 \bottomrule
 \end{tabular}
-\caption[Results for the ten DMoN and SA-DMoN configurations compared with the no-depth GAT baseline.]{Results for the ten DMoN and SA-DMoN configurations compared
-with the no-depth GAT baseline. COCO val PGA is $k$-means on ground-truth
-keypoints. Synthetic-validation PGA remains within
-$[0.7769, 0.7934]$ across all ten configurations, a total range of
-$0.0165$, and every configuration remains below the baseline value of
-$0.8783$. The same pattern is observed on COCO: applying $k$-means to
-the jointly trained embeddings produces PGA values between $0.8622$
-and $0.8684$, compared with $0.8841$ for the baseline. The DMoN heads'
-own COCO read-outs are lower still, ranging from $0.8107$ to $0.8213$.
-Across the tested configurations, neither the skeleton-aware null model,
-the treatment of $\sigma$, the spectral-loss weight, feature-based
-adjacency, nor the entropy type loss produces an improvement over the
-standard GAT baseline.}
-\label{tab:sadmon_headline}
 \end{table}
 
 \subsection{Interpretation}

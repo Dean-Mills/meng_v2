@@ -72,7 +72,7 @@ def fig_predk_recall():
     for label, x, y in points:
         dx, dy = offsets[label]
         ax.annotate(label, (x, y), textcoords="offset points",
-                    xytext=(dx, dy), fontsize=9, ha=ha.get(label, "left"))
+                    xytext=(dx, dy), fontsize=10, ha=ha.get(label, "left"))
     ax.set_xlabel("Keypoint detection recall")
     ax.set_ylabel("Predicted-$K$ PGA advantage\nover oracle $K$")
     ax.set_xlim(0.75, 1.03)
@@ -107,11 +107,14 @@ def fig_skeleton_graph():
     for j, (x, y) in enumerate(pose):
         if j in head_offsets:
             dx, dy, ha = head_offsets[j]
+        elif j in (11, 12):   # hips: label below the joint, clear of the wrist label beside it
+            side = -1 if x < 0.5 else 1
+            dx, dy, ha = 5 * side, -12, ("left" if side > 0 else "right")
         else:
             side = -1 if x < 0.5 else 1
             dx, dy, ha = 7 * side, 3, ("left" if side > 0 else "right")
         ax.annotate(JOINT_NAMES[j], (x, y), textcoords="offset points",
-                    xytext=(dx, dy), fontsize=8, ha=ha)
+                    xytext=(dx, dy), fontsize=9.5, ha=ha)
     ax.invert_yaxis()
     ax.set_aspect("equal")
     ax.axis("off")
@@ -179,11 +182,11 @@ def fig_skeleton_graph():
         mid = pts[[a, b]].mean(axis=0)
         ax.annotate("same-type cross-person edge", mid,
                     textcoords="offset points", xytext=(10, -10),
-                    fontsize=8, color="#c23b3b")
+                    fontsize=9.5, color="#c23b3b")
     ax.invert_yaxis()
     ax.set_aspect("equal")
     ax.axis("off")
-    ax.legend(frameon=False, fontsize=9, loc="lower right")
+    ax.legend(frameon=False, fontsize=9.5, loc="lower left")
     ax.set_title("(b) $k$NN graph ($k=8$) on a two-person scene", fontsize=10)
 
     fig.savefig(FIGDIR / "skeleton_graph.pdf")
@@ -238,7 +241,7 @@ def fig_synth_examples():
         H, W = img.shape[:2]
         ax.set_xlim(max(0, x0 - mx), min(W, x1 + mx))
         ax.set_ylim(min(H, y1 + my), max(0, y0 - my))
-        ax.set_title(f"$K = {kcount}$", fontsize=10)
+        ax.set_title(f"$K = {kcount}$", fontsize=13)
         ax.axis("off")
     fig.savefig(FIGDIR / "synth_examples.pdf")
     plt.close(fig)
@@ -290,7 +293,7 @@ def fig_arch_sweep():
         ("sa_gat__dropout", "dropout"),
     ]
     rng = np.random.default_rng(0)
-    fig, axes = plt.subplots(2, 3, figsize=(9.0, 5.2), sharey=True)
+    fig, axes = plt.subplots(2, 3, figsize=(6.1, 4.4), sharey=True)
     for ax, (key, label) in zip(axes.flat, axes_spec):
         vals = sorted({row["config"][key] for row in data})
         pos = {v: i for i, v in enumerate(vals)}
@@ -316,7 +319,7 @@ def fig_arch_sweep():
 def fig_ft_sweep():
     data = _fetch_sweep_data()[FT_SWEEP]
     epoch_colors = {10: "#8fb4d9", 15: "#2b5fa3", 20: "#b58a2a", 30: "#c23b3b"}
-    fig, ax = plt.subplots(figsize=(5.6, 3.4))
+    fig, ax = plt.subplots(figsize=(4.4, 3.0))
     seen = set()
     for row in data:
         lr = row["config"]["training__lr"]
@@ -334,7 +337,10 @@ def fig_ft_sweep():
     ax.set_xscale("log")
     ax.set_xlabel("Fine-tune learning rate")
     ax.set_ylabel("Synth val PGA after fine-tune")
-    ax.legend(frameon=False, fontsize=8, loc="lower left")
+    handles, labels = ax.get_legend_handles_labels()
+    order = sorted(range(len(labels)), key=lambda i: int(labels[i].split()[0]))
+    ax.legend([handles[i] for i in order], [labels[i] for i in order],
+              frameon=False, fontsize=9, loc="lower right")
     fig.savefig(FIGDIR / "ft_sweep.pdf")
     plt.close(fig)
     print("wrote ft_sweep.pdf")
