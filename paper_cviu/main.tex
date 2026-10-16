@@ -8,6 +8,13 @@
 
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
+% (placeins section barrier removed 2026-10-15: in two-column mode it flushes like a page break and left blank columns)
+% Let tall column floats sit on a text page (rather than a float-only column, which the section barrier turns into a blank column).
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.85}
+\renewcommand{\dblfloatpagefraction}{0.85}
 \usepackage{url}
 \usepackage{xcolor}
 

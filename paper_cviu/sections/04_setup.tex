@@ -1,16 +1,131 @@
-% SECTION 4 - Experimental setup. Target 1.5 pp. Sources: chapter3_dataset (3.4), chapter3_integration (3.12), chapter3_evaluation (3.13), chapter4_e2e 4.9.4 (PGA vs AP).
-% Exemplar pattern: datasets and protocol -> metric definition in its own subsection with an equation -> implementation.
 \section{Experimental setup}
 \label{sec:setup}
+
 \subsection{Datasets}
 \label{sec:setup_data}
-% [SEED pending] - synthetic (why synthetic; K <= 5 motivation: 87.5 % of COCO val keypoint images have <= 5 people), COCO train2017/val2017, evaluation-set sizes (2,307 / 1,248 / 2,258 candidates / 2,165 scored).
+
+% --- from chapter3_dataset.tex 3.4.1 ---
+\paragraph{Synthetic data}
+Because the grouping module never sees the image, its input being a set of keypoint coordinates, joint types
+and visibility flags, a rendered scene is as valid a training example as a photograph, provided the geometry of the
+keypoints is realistic.
+Synthetic scenes also supply labels that annotation cannot.
+Every keypoint's position, person identity and visibility follow from the 3D scene,
+and a joint hidden behind another person is recorded as present but occluded rather than missing.
+The scenes are generated in Blender~\citep{blender}: a configurable number of mannequin meshes is placed, and the
+camera, viewing angle, lighting and placement are varied procedurally.
+Each scene provides the seventeen COCO keypoints per person with an image position
+and a visibility state determined by ray casting against the scene geometry.
+The dataset contains 400 training, 100 validation and 100 test scenes.
+The number of people per scene is drawn uniformly from $K \in \{1,\dots,5\}$, which gives the grouping network
+and the K-head a balanced range of crowding;
+the upper limit of five covers the bulk of the target distribution, since
+87.5\,\% of the COCO \texttt{val2017} images with keypoint annotations contain five people or fewer.
+Depth is available from the renderer but is not used.
+With exact depth the standard GATv2 baseline groups synthetic scenes almost perfectly,
+0.9990 accuracy on the validation split, yet transfers to COCO worse than without it, 0.8366 against 0.8841,
+because real images offer only monocular depth estimates~\citep{ranftl2020midas} of a different scale.
+All reported models therefore use the position-and-visibility features of Equation~\eqref{eq:node_feature_no_depth}.
+
+% --- from chapter3_dataset.tex 3.4.2 and chapter3_evaluation.tex 3.13.1 ---
+\paragraph{COCO}
+Fine-tuning uses the person-keypoint annotations of COCO \texttt{train2017}~\citep{lin2014coco},
+approximately 56\,000 images after filtering.
+Evaluation uses \texttt{val2017} in three views.
+Ground-truth keypoints: the annotated keypoints of the 2\,307 images that form a scoreable grouping instance are
+grouped directly, which isolates the grouping network from any detector.
+About half of these images contain a single person, for which grouping is trivial;
+the 1\,248-image subset with at least two people is therefore reported alongside as the stricter measure.
+End-to-end: the annotated keypoints are replaced by detections,
+on the 2\,258 images that contain at least one person with three or more visible keypoints;
+an image contributes only when at least two detections can be matched to ground truth, which leaves 2\,165, 2\,196
+and 2\,121 scored images for HigherHRNet, YOLO11x-pose and RTMO-L respectively.
+System-level: all 5\,000 \texttt{val2017} images are used for the average-precision evaluation.
+
 \subsection{Detectors and the joint-trained reference}
 \label{sec:setup_detectors}
-% [SEED pending] - HigherHRNet-W32-512 deliberately chosen (AE = joint-trained reference); YOLO11x-pose, RTMO-L (body7 caveat); zero-shot swap protocol.
-\subsection{Metric}
+
+% --- from chapter3_integration.tex 3.12.1 ---
+The primary detector is HigherHRNet-W32 at an input resolution of 512 pixels~\citep{cheng2020higherhrnet,sun2019hrnet},
+with its public COCO weights, held frozen throughout.
+It is chosen deliberately rather than swapped for a more recent estimator.
+Its associative-embedding (AE) grouping~\citep{newell2017associative} predicts a scalar tag at every keypoint,
+trained jointly with the heatmaps so that tags of the same person agree and tags of different people separate.
+AE is therefore a grouping mechanism learned together with the detector on the COCO training distribution,
+with access to the detector's features.
+It serves as the joint-trained upper reference:
+the comparison measures what is lost when grouping is separated from detection,
+not how PG-GAT ranks against the state of the art in pose estimation.
+Both groupings receive the same candidate keypoints, extracted by HigherHRNet's own non-maximum suppression,
+and their difference is therefore attributable to the grouping stage alone.
+
+% --- from chapter3_integration.tex 3.12.2 ---
+The detector swap adds two detectors from different architectural families:
+YOLO11x-pose~\citep{ultralytics2024yolo11}, a single-stage model that regresses keypoints per person instance,
+and RTMO-L~\citep{lu2024rtmo}, a one-stage bottom-up estimator.
+Both return keypoints already assembled into people.
+Their person assignments are discarded and all keypoints above a confidence of 0.1 are pooled into one detection set,
+the same threshold used for HigherHRNet, before the frozen PG-GAT and the frozen K-head are applied.
+No parameter is updated and neither detector contributed training data; the swap is therefore zero-shot.
+The discarded assignments are retained and scored as each detector's native grouping on the same matched keypoints.
+The RTMO-L weights are the public \texttt{body7} release, trained on a multi-dataset corpus rather than on COCO alone,
+which favours its native grouping.
+
+\subsection{Metrics}
 \label{sec:setup_metric}
-% [SEED pending] - PGA equation; 10 px per-joint-type Hungarian matching; graph built from matched detections in the PGA protocol (state it); relation to AP@OKS and why PGA is primary.
+
+% --- from chapter3_problem_formulation.tex 3.3.4 and chapter3_integration.tex 3.12.3 ---
+\paragraph{Pose grouping accuracy}
+The primary metric measures the grouping decision alone.
+Cluster identifiers produced by $k$-means carry no fixed meaning;
+predicted clusters are therefore first aligned with ground-truth people by the Hungarian
+algorithm~\citep{kuhn1955hungarian} on their overlap.
+With $\pi^\star$ the resulting one-to-one mapping,
+pose grouping accuracy (PGA) is the fraction of keypoints assigned to the correct person,
+\begin{equation}
+    \mathrm{PGA}(\hat{\mathbf{y}}, \mathbf{y}^\star)
+    = \frac{1}{N}
+      \sum_{i=1}^{N}
+      \mathbb{1}\!\left[
+          \pi^\star(\hat{\mathbf{y}}_i) = \mathbf{y}^\star_i
+      \right],
+    \label{eq:pga}
+\end{equation}
+averaged over images.
+On detected keypoints, detections are first matched to annotated keypoints of the same joint type by Hungarian
+assignment with a maximum distance of 10 pixels,
+and each matched detection inherits the identity of its annotation.
+PGA is computed over the matched detections only, for PG-GAT and the native grouping alike,
+which excludes detection recall and localisation error and compares the grouping stage on an identical denominator.
+In this protocol the graph given to PG-GAT is also built from the matched detections,
+and unmatched false-positive keypoints do not enter it.
+
+% --- from chapter4_e2e.tex 4.9.4 and results.md AP@OKS section ---
+\paragraph{Average precision}
+Published pose estimators are ranked by average precision under the object keypoint similarity (AP@OKS),
+which scores complete person instances and is affected by detection failures, localisation error and grouping alike.
+A fixed change in PGA has no fixed counterpart in AP;
+the two metrics answer different questions ---
+PGA isolates the component that PG-GAT replaces, while AP measures the system it becomes part of.
+To report the second, the HigherHRNet pipeline is also evaluated with pycocotools on all 5\,000 \texttt{val2017}
+images.
+In this deployable setting PG-GAT receives every pooled detection above the confidence threshold,
+including false positives, and no ground truth enters inference.
+Each $k$-means cluster becomes one person instance holding the highest-confidence detection of each joint type,
+scored by the mean confidence over the seventeen joint slots.
+The native grouping is scored on exactly the same pooled joints, and additionally on its unrestricted output.
+The detector wrapper runs single-scale without flip testing, and absolute values therefore sit below
+the published 0.671 for this configuration~\citep{cheng2020higherhrnet};
+only comparisons within the protocol are meaningful.
+
 \subsection{Implementation}
 \label{sec:setup_impl}
-% [SEED pending] - optimiser, schedule, k-means n_init = 10, hardware, W&B provenance.
+
+% --- from chapter3_baseline.tex 3.5.3 and chapter3_evaluation.tex 3.13.2-3.13.3 ---
+The networks are implemented in PyTorch Geometric~\citep{fey2019pyg};
+$k$-means uses scikit-learn~\citep{scikitlearn} with ten initialisations and a fixed seed.
+Synthetic training selects the checkpoint with the highest pose grouping accuracy on the synthetic validation split, evaluated every five epochs.
+The three hyperparameter sweeps use Bayesian optimisation with Hyperband early termination~\citep{li2018hyperband};
+the architecture and loss sweeps select on pose grouping accuracy on the synthetic validation split.
+Every reported number is linked to a logged run in a Weights \& Biases project~\citep{wandb},
+which records the configuration, metric history and checkpoint of the run.

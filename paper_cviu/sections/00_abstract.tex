@@ -1,4 +1,8 @@
-% ABSTRACT - <= 200 words (CVIU template). No references, no equations, no pointers to sections.
-% Source: dissertation/summary.tex (first, third and fifth paragraphs carry the content). Written LAST (D10).
-% [SEED pending] - the line below is a build placeholder, not content.
-Abstract pending.
+Bottom-up multi-person pose estimators assign detected keypoints to people using a grouping mechanism trained jointly with the detector.
+The grouping therefore cannot be reused once the detector changes.
+This work treats grouping as a separate module and measures the cost of that separation.
+PG-GAT is a graph attention network with a type-pair attention bias, skeleton-relative position encoding, and same-type repulsion heads; it embeds the detected keypoints so that $k$-means recovers the people, and a small head trained on the frozen embeddings estimates the number of people.
+Trained on synthetic scenes and fine-tuned on COCO, PG-GAT reaches a pose grouping accuracy of 0.9715 on annotated COCO validation keypoints and 0.9591 on HigherHRNet detections, against 0.9847 for the detector's jointly trained associative embedding on the same detections.
+Applied without retraining to YOLO11x-pose and RTMO-L, the autonomous pipeline trails the native grouping of all three detectors by 0.020 to 0.022.
+At the system level, the cost is 0.048 average precision on identical keypoints, and it concentrates in scenes with more people than the synthetic training data contained.
+The learned grouping heads and modularity-based clustering tested here did not improve on $k$-means, while changes to the embedding produced the gains that transfer to real data, identifying the embedding as the limiting component.

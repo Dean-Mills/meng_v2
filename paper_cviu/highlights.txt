@@ -1,0 +1,6 @@
+Highlights (CVIU: 3-5 bullets, max 85 characters each incl. spaces; upload as a separate file named "Highlights")
+- Keypoint grouping is separated from detection as a reusable graph attention module
+- One frozen grouping network runs zero-shot behind three pose detectors
+- Autonomous pipeline trails each detector's native grouping by about 0.02 accuracy
+- System-level cost is 0.048 AP, concentrated in scenes with six or more people
+- Better embeddings, not more complex grouping heads, drive the accuracy gains

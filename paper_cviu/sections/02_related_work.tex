@@ -1,13 +1,66 @@
-% SECTION 2 - Related work. Target 1.5 pp. Source: chapter2_* (read on demand when this batch is up).
-% Exemplar pattern: separate section, 2-3 subsections by task/family, each closing on a gap statement.
 \section{Related work}
 \label{sec:related}
+
 \subsection{Bottom-up grouping and its coupling to the detector}
 \label{sec:related_grouping}
-% [SEED pending]
+
+% --- from chapter2_grouping.tex 2.2.1-2.2.4 ---
+Most of the bottom-up grouping literature falls into four lineages.
+In the first, OpenPose~\citep{cao2017openpose} predicts a part-affinity field for every limb alongside the keypoint
+heatmaps, scores candidate joint pairs by the line integral of the field,
+and assembles the skeletons one limb at a time by greedy bipartite matching;
+PifPaf~\citep{kreiss2019pifpaf} refines the fields but keeps the greedy assembly.
+In the second, associative embedding~\citep{newell2017associative} attaches a head that predicts a tag per keypoint,
+each tag being pulled towards its person's mean and pushed away from other people's means,
+and grouping is done by clustering the tags;
+HigherHRNet~\citep{cheng2020higherhrnet} applies the mechanism to the high-resolution HRNet backbone~\citep{sun2019hrnet}.
+In the third, PersonLab~\citep{papandreou2018personlab} regresses offsets between keypoints of the same person,
+DEKR~\citep{geng2021dekr} regresses offsets from a person centre to its keypoints,
+and CenterGroup~\citep{braso2021centergroup} associates keypoints with centres through transformer attention.
+The fourth is set prediction: PETR~\citep{shi2022petr}, ED-Pose~\citep{yang2023edpose},
+GroupPose~\citep{liu2023grouppose} and QueryPose~\citep{xiao2022querypose} follow DETR~\citep{carion2020detr}
+and let each pose query predict a complete skeleton, with no separate grouping stage.
+In all four lineages the grouping representation is learned jointly with the detector's features.
+This joint training lets the grouping adapt to the detector's errors
+and explains much of the accuracy these methods reach.
+It also means that the grouping cannot be moved to another detector:
+the fields, tags and offsets are tied to the backbone's resolution, stride and features,
+and set prediction exposes no per-keypoint representation at all.
+
 \subsection{Graph-based grouping and graph networks on pose}
 \label{sec:related_graph}
-% [SEED pending]
-\subsection{The gap}
+
+% --- from chapter2_grouping.tex 2.2.5 and chapter2_gnn_pose.tex 2.3.1-2.3.4 ---
+A smaller body of work approaches grouping as a graph problem.
+Hierarchical graph grouping (HGG)~\citep{jin2020hgg} merges sub-graphs of detected keypoints with a learned discriminator,
+but the graph and the merge predictor are trained jointly with the detector.
+Yang et al.~\citep{yang2023instanceaware} supervise the self-attention of a vision transformer to encode person membership,
+which places the grouping inside the detector backbone.
+Graph edge classification (GEC)~\citep{maher2025gec} is the closest precedent to this work:
+it operates on the output of an existing detector, predicts a same-person label for pairs of keypoints
+and recovers people as connected components.
+It is detector-independent, but it produces a binary decision per edge rather than a representation per keypoint.
+
+Elsewhere in pose research, graph neural networks are used widely.
+Skeleton-based action recognition builds spatial-temporal graphs over the joints of a single person~\citep{yan2018stgcn,shi2019twostreamadaptive},
+and 3D lifting applies graph convolutions to one person's 2D skeleton~\citep{zhao2019semanticgcn,ci2019optimizing,liu2020gastnet}.
+In both cases the keypoints are already grouped,
+and the output is a label or coordinates, not an identity signal per keypoint.
+The graph and clustering literature offers learned alternatives to a plain read-out:
+deep embedded clustering~\citep{xie2016dec}, slot attention~\citep{locatello2020slotattention},
+supervised graph partitioning from face clustering~\citep{yang2019face,yang2020gcnve},
+and modularity maximisation~\citep{newman2006modularity} with its differentiable relaxation DMoN~\citep{tsitsulin2023dmon}.
+This work evaluates these alternatives to the $k$-means read-out for keypoint grouping.
+
+\subsection{Position of this work}
 \label{sec:related_gap}
-% [SEED pending]
+
+% --- from chapter2_gap.tex 2.6.1 ---
+Detectors are now strong enough that grouping is the main remaining source of error in bottom-up systems,
+yet every established grouping mechanism is tied to its detector.
+Modular grouping on detached keypoints has a single detector-independent precedent,
+and it classifies edges.
+Graph networks on pose, by contrast, have been used almost entirely on keypoints that are already grouped.
+No prior work in this modular setting trains a detector-independent graph network
+that produces a per-keypoint embedding for multi-person grouping,
+or estimates the number of people within the same pipeline.

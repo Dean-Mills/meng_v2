@@ -1,4 +1,41 @@
-% SECTION 7 - Limitations. Target 0.5 pp. Exemplar pattern: dedicated section between results and conclusion (Yin section 5, Clinckemaillie section 7).
 \section{Limitations}
 \label{sec:limitations}
-% [SEED pending] - crowded scenes beyond K <= 5 (AP gap 0.076 vs 0.029); AP cost vs PGA cost; PGA graph from matched detections; single-run ablations (no seeds); RTMO body7 weights; matched subsets differ per detector.
+
+\paragraph{Crowded scenes}
+Synthetic pre-training spans one to five people.
+COCO fine-tuning and the K-head do encounter larger scenes, but such scenes form a minority:
+12.5\,\% of the \texttt{val2017} images with keypoint annotations contain six or more people.
+On those images the K-head predicts the exact count in 22.9\,\% of scenes
+and under-counts in 69.4\,\%, and the AP gap to the native grouping widens from 0.029 to 0.076.
+Extending the person-count range of the synthetic data is one direct remedy.
+
+\paragraph{Pose grouping accuracy and system accuracy}
+The primary metric scores the grouping of matched detections,
+and in that protocol the graph handed to PG-GAT is likewise built from matched detections;
+false-positive keypoints therefore never reach it.
+The system-level AP evaluation lifts both restrictions
+and shows a larger cost than the matched-detection accuracy suggests.
+PGA remains the right instrument for locating the bottleneck in the grouping stage,
+but it is not an estimate of deployed performance.
+
+\paragraph{Extremities and the skeleton prior}
+On multi-person scenes the misassignment rate of PG-GAT with the annotated count rises from 5--6\,\% at the shoulders to 10.6--12.1\,\% at the ankles,
+while the native grouping stays within 2.6\,\% to 4.4\,\% for every joint type.
+The skeleton that supplies the edge categories and hop distances omits the links between the head and the shoulders;
+head joints are nevertheless grouped more accurately than body joints,
+and the omission therefore does not explain the deficit.
+Structure beyond individual joints, such as limbs, is not represented in the model.
+
+\paragraph{Single runs}
+The ablation, the sweeps, and the variants are single training runs,
+with no repeated seeds or confidence intervals.
+Differences of the size of the individual modification gains, or of the 0.0020 fine-tuning-sweep improvement,
+are not established as systematic.
+The graph's neighbourhood size was left out of every sweep.
+
+\paragraph{Detector comparisons}
+The matched subsets differ in size and recall from one detector to another,
+and accuracies are comparable within a detector but only with caution across detectors.
+The RTMO-L native grouping draws on weights trained over a multi-dataset corpus.
+The AP evaluation runs a single-scale HigherHRNet wrapper without flip testing,
+and its absolute values fall below the detector's published figure.

@@ -1,4 +1,22 @@
-% SECTION 8 - Conclusion. Target 0.3 pp. Source: chapter6_verdict / chapter6_contributions (condense to one paragraph + future work sentence).
 \section{Conclusion}
 \label{sec:conclusion}
-% [SEED pending]
+
+This work separated multi-person pose grouping from keypoint detection and measured what the separation costs.
+PG-GAT --- a graph attention network with a type-pair attention bias, skeleton-relative position encoding,
+and same-type repulsion heads --- embeds the detected keypoints so that a plain $k$-means read-out recovers the people.
+Trained on synthetic scenes and fine-tuned on COCO,
+it reaches a pose grouping accuracy of 0.9715 on ground-truth keypoints and 0.9591 on HigherHRNet detections,
+against 0.9847 for the detector's own jointly trained grouping.
+With a K-head trained on the frozen embeddings, the pipeline runs with no ground truth at inference,
+and the same frozen network, applied zero-shot to YOLO11x-pose and RTMO-L, trails each detector's native grouping by about 0.02.
+The cost is larger at the system level, 0.048 AP on identical joints, and it concentrates in crowded scenes.
+Across the study, changes to the embedding moved accuracy far more than changes to the grouping stage:
+learned heads and modularity-based clustering did not improve on $k$-means, while the skeleton-aware attention,
+the architecture it was sized to, and fine-tuning on real data did.
+
+The results point to three directions.
+Extending the synthetic data beyond five people addresses the largest measured deficit,
+and representing structure above the joint, so that a wrist is disambiguated through its limb,
+targets the errors that concentrate at the extremities.
+Repeating the key comparisons over multiple seeds would establish
+which of the smaller differences reported here are systematic.
