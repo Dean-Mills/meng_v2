@@ -1,0 +1,57 @@
+name: "train_pg_gat_hier_aug"
+description: "PEng: hierarchical PG-GAT + detection-realistic augmentation (joint dropout p~U(0,0.4) per graph, v forced to 1; augment.py) (joint -> bone -> triplet attention, top-down fusion to joints, no voting). Synthetic stage of the MEng-headline recipe (champion-arch widths: 4 heads / hidden 64 / output 256 / joint emb 64 / dropout 0.1; 50 ep, lr 1e-3). 16-edge skeleton for a one-change comparison with meng-headline. No W&B."
+
+pg_gat_hier:
+  num_joint_types: 17
+  joint_embedding_dim: 64
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 256
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+  use_type_pair_attention: true
+  use_position_encoding: true
+  use_repulsion_heads: true
+  n_repulsion_heads: 1
+  skeleton: coco16
+  num_pre_joint_layers: 1
+  num_post_joint_layers: 1
+  hier_dim: 128
+  type_embedding_dim: 16
+  bone_candidates: 3
+  use_triplet_level: true
+  triplet_top_r: 2
+  aux_bone_weight: 0.5
+  aux_triplet_weight: 0.5
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+
+loss:
+  contrastive_margin: 0.5
+
+training:
+  virtual_dir:   data/virtual
+  batch_size:    4
+  num_workers:   4
+  lr:            1.0e-3
+  lr_min:        1.0e-5
+  weight_decay:  1.0e-4
+  epochs:        50
+  val_every:     5
+  save_best:     true
+  joint_drop_max: 0.4
+  force_visible: true

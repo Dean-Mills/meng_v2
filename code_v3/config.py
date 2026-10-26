@@ -93,6 +93,52 @@ class TriGATConfig(BaseModel):
     l2_normalize: bool = True
 
 
+class PGGATHierConfig(BaseModel):
+    """Hierarchical PG-GAT (PEng): joint -> bone -> triplet attention levels.
+
+    Bones and triplets are built from detection candidates (never from person
+    labels), and their states are fused back into the joints, so the output is
+    a per-joint embedding and the grouping read-out is unchanged (no voting).
+    """
+    num_joint_types: int
+    joint_embedding_dim: int
+    raw_feature_dim: int
+    hidden_dim: int
+    output_dim: int
+    num_heads: int
+    dropout: float
+    use_layer_norm: bool
+    l2_normalize: bool
+    use_depth: bool = True
+    # PG-GAT modifications on the joint-level layers
+    use_type_pair_attention: bool = True
+    use_position_encoding: bool = True
+    use_repulsion_heads: bool = True
+    n_repulsion_heads: int = 1
+    # Hierarchy
+    skeleton: str = "coco16"              # "coco16" (sa_gat table) | "coco19" (+ eye-eye, ear-shoulder)
+    num_pre_joint_layers: int = 1         # joint-level PG-GAT layers before the bone level
+    num_post_joint_layers: int = 1        # joint-level PG-GAT layers after the top-down fusion
+    hier_dim: int = 128                   # bone / triplet state width
+    type_embedding_dim: int = 16          # bone-type and triplet-type embeddings
+    bone_candidates: int = 3              # m nearest detections per skeletally adjacent type
+    use_triplet_level: bool = True        # False → joint + bone levels only
+    triplet_top_r: int = 2                # bones kept per (pivot, bone type) for triplets; 0 = all
+    aux_bone_weight: float = 0.5          # BCE on bone validity (same person); 0 disables
+    aux_triplet_weight: float = 0.5       # BCE on triplet validity; 0 disables
+    # Image evidence (PEng #3; image_evidence.py). None → positions and types only.
+    image_backbone: Optional[str] = None  # e.g. "resnet18_s16" (frozen ImageNet weights)
+    image_feat_dim: int = 32              # trainable 1x1 projection of the backbone map
+    bone_image_samples: int = 5           # points sampled along each candidate bone
+    joint_image_features: bool = False    # also add the feature at each joint to its state
+
+    @computed_field
+    @property
+    def input_dim(self) -> int:
+        feat_dim = self.raw_feature_dim if self.use_depth else self.raw_feature_dim - 1
+        return feat_dim + self.joint_embedding_dim
+
+
 class SAGATV2Config(BaseModel):
     """SA-GAT v2: SA-GAT with optional visual feature input."""
     num_joint_types: int
@@ -265,6 +311,14 @@ class TrainingConfig(BaseModel):
     cached_features_val:   Optional[str] = None
     # Pre-trained checkpoint to load before training (for fine-tuning)
     pretrained:      Optional[str] = None
+    # Detection-realistic augmentation of training graphs (augment.py; PEng)
+    joint_drop_max:  Optional[float] = None   # per-graph drop prob ~ U(0, joint_drop_max)
+    force_visible:   Optional[bool]  = None   # set the v feature to 1 (as for detections)
+    pretrained_strict: Optional[bool] = None  # False → load matching keys only (new branches start fresh)
+    # Crowd over-sampling for COCO training (PEng): images with >= crowd_min_people annotated
+    # people are drawn crowd_oversample times as often (WeightedRandomSampler, same epoch size).
+    crowd_oversample: Optional[float] = None
+    crowd_min_people: Optional[int]   = None  # default 6 when crowd_oversample is set
     # Loader
     batch_size:    int   = 4
     num_workers:   int   = 4
@@ -288,6 +342,7 @@ class ExperimentConfig(BaseModel):
     sa_gat_v2:          Optional[SAGATV2Config]           = None
     sa_gat_hyperbolic:  Optional[SAGATHyperbolicConfig]   = None
     trigat:             Optional[TriGATConfig]            = None
+    pg_gat_hier:        Optional[PGGATHierConfig]         = None
     loss: LossConfig
     dec:                Optional[DECConfig]               = None
     slot_attention:     Optional[SlotAttentionConfig]     = None

@@ -74,7 +74,12 @@ def main():
     ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
     cfg = ExperimentConfig(**ckpt["config"])
 
-    if cfg.sa_gat is not None:
+    if cfg.pg_gat_hier is not None:
+        from pg_gat_hier import PGGATHierEmbedding
+        gat = PGGATHierEmbedding(cfg.pg_gat_hier).to(device)
+        embedding_dim = cfg.pg_gat_hier.output_dim
+        use_depth = cfg.pg_gat_hier.use_depth
+    elif cfg.sa_gat is not None:
         from sa_gat import SAGATEmbedding
         gat = SAGATEmbedding(cfg.sa_gat).to(device)
         embedding_dim = cfg.sa_gat.output_dim

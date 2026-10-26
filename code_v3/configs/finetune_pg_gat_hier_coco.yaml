@@ -1,0 +1,58 @@
+name: "finetune_pg_gat_hier_coco"
+description: "PEng: COCO train2017 fine-tune of the hierarchical PG-GAT synthetic stage, meng-headline fine-tune recipe (fine-tune sweep winner: 15 ep, lr 3.84e-4, val every 2 on synthetic val). Set training.pretrained to the synthetic run's best.pt (--set). No W&B."
+
+pg_gat_hier:
+  num_joint_types: 17
+  joint_embedding_dim: 64
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 256
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+  use_type_pair_attention: true
+  use_position_encoding: true
+  use_repulsion_heads: true
+  n_repulsion_heads: 1
+  skeleton: coco16
+  num_pre_joint_layers: 1
+  num_post_joint_layers: 1
+  hier_dim: 128
+  type_embedding_dim: 16
+  bone_candidates: 3
+  use_triplet_level: true
+  triplet_top_r: 2
+  aux_bone_weight: 0.5
+  aux_triplet_weight: 0.5
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+
+loss:
+  contrastive_margin: 0.5
+
+training:
+  virtual_dir:   data/virtual
+  coco_train_dir: data/coco2017/train2017
+  coco_train_ann: data/coco2017/annotations/person_keypoints_train2017.json
+  pretrained:    null
+  batch_size:    4
+  num_workers:   4
+  lr:            3.8417518776322576e-4
+  lr_min:        1.0e-5
+  weight_decay:  1.0e-4
+  epochs:        15
+  val_every:     2
+  save_best:     true

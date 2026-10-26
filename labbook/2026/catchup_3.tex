@@ -1,0 +1,652 @@
+\chapter[Catchup 3]{Catchup 3}
+
+The MEng dissertation went in for marking and the first draft of the CVIU paper is done, so this chapter picks the PEng work back up.
+The PEng goal I set is to close the gap between PG-GAT's grouping and each detector's own grouping on the same detections, ideally to zero or better.
+Two practical changes: I no longer use Weights \& Biases (the free tier shrank and I ran out of storage), so every run is recorded in its GUID output directory and in \texttt{docs/results.md}; and long runs are now launched as \texttt{systemd} user services, because VS Code (a snap) kills every process started from it when it restarts --- I lost three runs that way and one more to a power cut before I worked this out.
+
+All end-to-end (E2E) numbers below are PGA on GT-matched detections (10 px), computed on fixed cached scene sets so every row of a table sees the identical scenes.
+Confidence intervals are 95\% paired bootstrap intervals over scenes.
+
+\section[2026/10/19]{Monday, 19 October 2026}
+
+\subsection{The PEng Gap on One Fixed Scene Set}
+
+\subsubsection{Motivation}
+
+The 7 August feasibility clamp gave the best autonomous E2E number ($0.9755$), but the HigherHRNet AE reference had not been recomputed on that run's matched subset ($n\!=\!2166$ vs $2165$), so the $\sim\!0.009$ gap could not be cited.
+The $K_{lb}$-only ablation (no K-head) was also still open.
+Before any new model, I wanted one fixed benchmark on which AE and every grouping variant are scored on identical scenes.
+
+\subsubsection{Setup}
+
+\texttt{eval\_peng\_gap.py} re-scores the 2,166 HigherHRNet scenes already cached by \texttt{eval\_e2e\_per\_image.py} (detections, AE ids, matches, GT), so no detector is re-run.
+K selectors: \emph{oracle} (annotated people, the MEng protocol), \emph{eff} (GT people with at least one matched detection --- the true K of the graph; a diagnostic), \emph{pred} (K-head), $K_{lb}$ (largest per-type detection count), \emph{clamp} ($\max(\text{pred}, K_{lb})$).
+Each K is scored with k-means (kNN), COP-Kmeans and THA.
+Checkpoint \texttt{meng-headline}; on the $n \geq K_{gt}$ subset the script reproduces the per-image dump exactly (AE $0.9849$, oracle kNN $0.9589$, pred kNN $0.9644$).
+
+\subsubsection{Results}
+
+\begin{tabular}{lccccc}
+\hline
+\textbf{K selector} & \textbf{K mean} & \textbf{kNN} & \textbf{COP-KM} & \textbf{THA} & \textbf{AE $-$ best} \\
+\hline
+oracle (MEng protocol) & $2.74$ & $0.9587$ & $0.9633$ & $0.9631$ & $0.0216$ \\
+pred (K-head)          & $2.46$ & $0.9644$ & $0.9657$ & $0.9660$ & $0.0189$ \\
+$K_{lb}$ only          & $2.46$ & $0.9714$ & $0.9752$ & $\mathbf{0.9757}$ & $0.0092$ \\
+clamp                  & $2.55$ & $0.9714$ & $0.9752$ & $0.9755$ & $0.0094$ \\
+eff (true K)           & $2.59$ & $0.9749$ & $0.9796$ & $0.9797$ & $0.0052$ \\
+\hline
+HigherHRNet AE         & ---    & \multicolumn{3}{c}{$0.9849$} & --- \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. The gap is confirmed at $0.0094$.} AE $-$ clamp THA $= 0.0094$ [$0.0070$, $0.0119$] on identical scenes. Against the dissertation's autonomous number ($0.9644$, k-means with the K-head) the gap was $0.0205$, so the August PEng grouping changes (THA plus the clamp) had already halved it on the MEng embedding.
+
+\textbf{2. The K-head adds nothing over the bare bound on detections.} $K_{lb}$ alone ties the clamp (THA $-0.0001$, CI spans 0).
+
+\textbf{3. The remaining gap splits into K and embedding.} Clamp to eff (perfect K) is worth $0.0042$; eff to AE ($0.0052$) is what the embedding and assignment still lose with the right K.
+
+\textbf{4. The gap lives in multi-person scenes.} On the 983 single-person scenes every method is $\sim\!1.0$. On the 1,183 scenes with two or more people AE scores $0.9730$ against clamp THA $0.9557$.
+
+\textbf{5. A TriGAT caveat I had missed.} \texttt{trigat.build\_triplet\_graph} enumerates triplets per ground-truth person, at inference as well as in training, so TriGAT's numbers had part of the grouping handed to it --- and it still lost to PG-GAT. Any pair or triplet level in new work has to be built from detection candidates.
+
+\subsection{Grouping-Free Detections --- HigherHRNet Without the AE Refine Step}
+
+\subsubsection{Motivation}
+
+Dean's question: the bottom-up detectors we compare against are trained jointly for detection and grouping; would a detector without grouping give PG-GAT better input?
+PG-GAT reads only joint positions, types and visibility, so a detector's internal embeddings never reach it; the only route is the joint set.
+In simple-HigherHRNet the pooled joints come from the grouped output: AE tag matching, then \texttt{refine}, which adds each person's missing joints by searching the heatmap near that person's mean tag, then a redundant-pose filter.
+With refine off, the pool is just the heatmap peaks above threshold, each still carrying its AE tag-matching label.
+
+\subsubsection{Setup}
+
+Wrappers \texttt{eval\_e2e\_per\_image\_norefine.py} and \texttt{eval\_e2e\_ap\_norefine.py} patch the parser at load time (the vendor code is unchanged).
+PGA on identical joints (2,152 scenes) and COCO AP@OKS on all 5,000 val2017 images; checkpoint \texttt{meng-headline}.
+
+\subsubsection{Results}
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Joint set / grouping} & \textbf{PGA} & \textbf{AP} \\
+\hline
+refine off, AE tag matching          & $0.8666$ & $0.219$ \\
+refine off, PG-GAT (clamp THA)       & $0.9745$ & $0.386$ \\
+refine on, PG-GAT (autonomous)       & $0.9755$ & $0.492$ \\
+\textbf{refine on, HigherHRNet native} & $\mathbf{0.9849}$ & $\mathbf{0.583}$ \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. On grouping-free peaks PG-GAT groups far better than AE's tag matching}: $+0.108$ PGA [$0.102$, $0.114$], $+0.167$ AP. Without refine, AE fragments people (detector instance count $5.0$ against $2.75$ GT people).
+
+\textbf{2. Refine is also a detection step.} The joints it recovers are worth $0.106$ AP to PG-GAT ($0.386 \rightarrow 0.492$), so removing grouping from this detector lowers the system result. AE's $0.985$ belongs to its full parse, not to the tags alone.
+
+\textbf{3. PG-GAT is indifferent to refine} (clamp THA $0.9745$ vs $0.9755$), so the detector's grouping matters to PG-GAT only through which joints exist.
+
+\subsection{Hierarchical PG-GAT --- Joints, Bones and Triplets}
+
+\subsubsection{Motivation}
+
+Dean's idea: layer the attention so the first level attends over joints, the second over joint pairs and the third over triplets, keeping TriGAT's articulation signal but dropping its voting stage.
+The design had to avoid the TriGAT construction error above, so bones and triplets are built from candidates, never from person labels.
+The closest prior work is HGG \cite{jin2020hgg}, which also groups over a graph of keypoint candidates hierarchically; it needs to be positioned against this before any write-up.
+
+\subsubsection{Setup}
+
+New module \texttt{pg\_gat\_hier.py} (reuses \texttt{SAGATLayer}; \texttt{sa\_gat.py} unchanged), three levels matching the headline's three layers:
+\begin{itemize}
+    \item \textbf{Joints}: one PG-GAT layer over the kNN joint graph.
+    \item \textbf{Bones}: each joint's 3 nearest detections of every skeletally adjacent type. On the cached HigherHRNet scenes the nearest candidate is the true neighbour $96.2\%$ of the time and the 3 nearest cover $99.98\%$, at $\sim\!57$ candidate bones per scene. Bones attend over the line graph with a flag for \emph{competing} (same bone type at a joint) versus \emph{chain} edges, and each gets a validity logit.
+    \item \textbf{Triplets}: chain bone pairs meeting at a pivot (top 2 bones per pivot and bone type by validity), with TriGAT's angle and length-ratio features.
+    \item \textbf{Top-down fusion instead of voting}: each joint adds the validity-weighted mean of its incident bone and triplet states, then a final PG-GAT layer and the projection give the usual per-joint embedding, so k-means / COP-KM / THA are unchanged.
+\end{itemize}
+Auxiliary BCE (weight 0.5) on bone and triplet validity (label: same person). 16-edge skeleton, 434,450 parameters (headline 334,419). Headline recipe: synthetic 50 epochs, COCO fine-tune 15 epochs.
+
+\subsubsection{Results}
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Model} & \textbf{Synth test THA} & \textbf{COCO GT kNN / THA} & \textbf{E2E $K_{lb}$ THA} & \textbf{E2E eff THA} \\
+\hline
+meng-headline         & $0.9785$ & $0.9715$ / $0.9779$ & $\mathbf{0.9757}$ & $\mathbf{0.9797}$ \\
+PG-GAT-H              & $\mathbf{0.9884}$ & $\mathbf{0.9853}$ / $\mathbf{0.9877}$ & $0.9740$ & $0.9780$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Shift diagnostic: 1,248 multi-person COCO val GT graphs, true K, perturbed at test time only.
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Condition} & \textbf{headline kNN} & \textbf{headline THA} & \textbf{PG-GAT-H kNN} & \textbf{PG-GAT-H THA} \\
+\hline
+GT as is               & $0.9472$ & $0.9591$ & $\mathbf{0.9729}$ & $\mathbf{0.9773}$ \\
+$v$ forced to 1        & $0.9468$ & $0.9575$ & $0.9664$ & $0.9718$ \\
+jitter 3 px            & $0.9463$ & $0.9572$ & $0.9707$ & $0.9754$ \\
+drop 20\% of joints    & $0.9312$ & $0.9438$ & $0.9296$ & $0.9385$ \\
+all three              & $0.9283$ & $0.9401$ & $0.9218$ & $0.9334$ \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. Large gains on ground-truth keypoints.} COCO GT kNN $+0.0138$, THA $+0.0098$; synthetic test THA $+0.0099$. These are bigger than anything the four MEng sweeps found.
+
+\textbf{2. No gain on detections.} E2E $K_{lb}$ THA $-0.0017$ [$-0.0034$, $+0.0001$].
+
+\textbf{3. The bone level is not the failure.} On the E2E scenes bone validity has AUC $0.999$ and the top-scored candidate is correct $99.3\%$ of the time when the true neighbour was detected.
+
+\textbf{4. Missing joints erase the advantage.} Jitter costs nothing and the visibility flag a little, but dropping 20\% of joints removes the whole gain, and the combined condition reproduces the E2E sign. The model was trained on near-complete skeletons; HigherHRNet misses $\sim\!21\%$ of annotated joints.
+
+\section[2026/10/20]{Tuesday, 20 October 2026}
+
+\subsection{Detection-Realistic Augmentation --- the Hierarchy Transfers}
+
+\subsubsection{Motivation}
+
+The shift diagnostic points at missing joints. The fix should not use any detector, to keep PG-GAT modular.
+
+\subsubsection{Setup}
+
+\texttt{augment.py}: per training graph, each joint is dropped with probability $p \sim U(0, 0.4)$ and the visibility feature is set to 1 (as for detections); kNN edges are rebuilt.
+Applied to PG-GAT-H (\texttt{finetune\_pg\_gat\_hier\_aug\_coco/b59d602d}) and, as the control, to the flat PG-GAT at champion-arch widths (\texttt{finetune\_pg\_gat\_flat\_aug\_coco/8094ccec}), same recipe for both.
+
+\subsubsection{Results}
+
+\begin{tabular}{lccc}
+\hline
+\textbf{Model} & \textbf{E2E $K_{lb}$ THA} & \textbf{E2E eff THA} & \textbf{AE $-$ $K_{lb}$ THA} \\
+\hline
+meng-headline              & $0.9757$ & $0.9797$ & $0.0092$ \\
+flat + aug (control)       & $0.9753$ & $0.9799$ & $0.0096$ \\
+PG-GAT-H (no aug)          & $0.9740$ & $0.9780$ & $0.0109$ \\
+\textbf{PG-GAT-H + aug}    & $\mathbf{0.9776}$ & $\mathbf{0.9829}$ & $\mathbf{0.0074}$ \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. The hierarchy needed detection-realistic training to transfer.} PG-GAT-H + aug beats the headline at $K_{lb}$ ($+0.0019$ [$+0.0004$, $+0.0034$]) and at true K ($+0.0031$ [$+0.0013$, $+0.0049$]).
+
+\textbf{2. The gain is the hierarchy's.} The same augmentation leaves the flat model where it was ($-0.0004$ at $K_{lb}$).
+
+\textbf{3. The embedding share of the gap is nearly closed.} At true K the gap to AE is $0.0021$ [$-0.0003$, $+0.0044$]. In crowds of six or more, PG-GAT-H + aug at true K scores $0.9507$, above AE's $0.9438$.
+
+\textbf{4. K estimation is now the largest piece} ($K_{lb}$ $0.9776$ vs eff $0.9829$).
+
+\subsection{Where the Remaining Gap Sits, and K From Bone Validity}
+
+\subsubsection{Motivation}
+
+Two cheap questions before a bigger change. Is part of the gap a protocol artefact --- joints that AE's refine step placed using AE's own grouping? And can the near-perfect bone scorer count people?
+
+\subsubsection{Setup}
+
+\texttt{analyze\_gap\_sources.py} labels each matched refine-on joint as a heatmap peak (present in the refine-off cache at the same position) or refine-added, and splits the per-scene PGA gap exactly by origin.
+\texttt{eval\_k\_bones.py} counts connected pieces of the valid-bone graph of PG-GAT-H as a K estimate (several anchoring variants), max'd with $K_{lb}$.
+
+\subsubsection{Results}
+
+\begin{tabular}{lccc}
+\hline
+\textbf{Joint accuracy} & \textbf{Peak (87.2\%)} & \textbf{Refine-added (12.8\%)} & \textbf{Gap share, true K} \\
+\hline
+HigherHRNet AE         & $\mathbf{0.9847}$ & $0.8949$ & --- \\
+PG-GAT THA, true K     & $0.9747$ & $\mathbf{0.9260}$ & peak $+0.0065$, refine $-0.0014$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+\begin{tabular}{lccc}
+\hline
+\textbf{K selector} & \textbf{K = eff} & \textbf{Over} & \textbf{THA} \\
+\hline
+\textbf{$K_{lb}$}                       & $\mathbf{90.2\%}$ & $0.0\%$ & $\mathbf{0.9755}$ \\
+torso-anchored pieces ($\tau = 0.5$)   & $89.1\%$ & $3.0\%$ & $0.9722$ \\
+all pieces ($\tau = 0.5$)              & $45.2\%$ & $53.5\%$ & $0.8465$ \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. The gap is real, not a protocol artefact.} PG-GAT beats AE on the joints AE placed itself; the whole deficit is AE grouping ordinary heatmap peaks better. AE's tags come from the image, which pointed to image evidence as the next lever.
+
+\textbf{2. Bone pieces cannot count people.} They over-split (one missed shoulder cuts a torso in two) and are $1.6$--$9\%$ impure, so must-linking them would lock in errors as large as PG-GAT's whole remaining error.
+
+\textbf{3. The training/E2E coordinate frames differ but it does not matter.} Training letterboxes images to 512, while the E2E scripts divide raw pixel coordinates by 512; mapping detections into the letterbox frame changes the headline by $-0.0007$ [$-0.0015$, $+0.0001$]. The MEng E2E numbers stand. Image-evidence models must use the letterbox frame.
+
+\section[2026/10/21]{Wednesday, 21 October 2026}
+
+\subsection{Image Evidence Along Candidate Bones}
+
+\subsubsection{Motivation}
+
+The gap-source analysis says the missing information is in the image. The bone level is the natural place for it: ``is there a limb between these two joints?''
+
+\subsubsection{Setup}
+
+\texttt{image\_evidence.py}: a frozen ImageNet ResNet-18 truncated at layer3 (stride 16) runs on the same 512 letterbox image the training loader already provides; a trainable $1{\times}1$ projection to 32 channels; 5 bilinear samples along each candidate bone feed the bone state.
+The branch's output layer is zero-initialised, so the warm start reproduces the PG-GAT-H + aug model exactly (verified to $10^{-7}$).
+Same synthetic start, recipe and augmentation as \texttt{b59d602d}; run \texttt{finetune\_pg\_gat\_hier\_img\_coco/372658c6}.
+Trainable parameters 479,794 plus the frozen backbone's 2,782,784: 3.26M in total, against HigherHRNet-W32's 28.6M.
+The backbone was never trained with any grouping or detection objective, so the pipeline stays detector-agnostic.
+
+\subsubsection{Results}
+
+All columns COP-KM PGA; E2E in the letterbox frame.
+
+\vspace{0.5em}
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Model} & \textbf{COCO GT} & \textbf{E2E $K_{lb}$} & \textbf{E2E eff} & \textbf{AE $-$ eff} \\
+\hline
+PG-GAT-H + aug              & $0.9836$ & $0.9779$ & $0.9830$ & $0.0019$ \\
+\textbf{+ image evidence}   & $\mathbf{0.9858}$ & $\mathbf{0.9799}$ & $\mathbf{0.9857}$ & $\mathbf{-0.0008}$ \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. Image evidence helps on every selector}: $+0.0020$ [$+0.0011$, $+0.0030$] at $K_{lb}$ and $+0.0027$ [$+0.0015$, $+0.0039$] at true K.
+
+\textbf{2. At true K PG-GAT now matches HigherHRNet's own grouping}: gap $-0.0008$ [$-0.0028$, $+0.0014$]. In crowds of six or more it is ahead ($0.9603$ vs $0.9438$).
+
+\subsection{Augmented K-Heads}
+
+\subsubsection{Motivation}
+
+The MEng K-head was trained on complete GT graphs and selected on synthetic validation; on detections it ties $K_{lb}$.
+
+\subsubsection{Setup}
+
+\texttt{train\_k\_head\_aug.py}: the MEng K-head architecture on a frozen backbone, trained on COCO train graphs with the same augmentation; target = people still present after dropout. Selection on 2,000 held-out COCO train images, never on val2017. Run on the headline (control) and on PG-GAT-H + aug.
+
+\subsubsection{Results}
+
+\begin{tabular}{lccc}
+\hline
+\textbf{Backbone} & \textbf{$K_{lb}$ THA} & \textbf{clamp THA} & \textbf{clamp $-$ $K_{lb}$} \\
+\hline
+meng-headline       & $0.9756$ & $0.9719$ & $-0.0037$ \\
+\textbf{PG-GAT-H + aug} & $0.9774$ & $\mathbf{0.9791}$ & $+0.0016$ [$+0.0004$, $+0.0029$] \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. The augmented K-head only helps on the hierarchical embeddings.} On the headline it over-counts and the clamp falls below $K_{lb}$.
+
+\textbf{2. Held-out accuracy on augmented COCO train does not predict E2E K quality.} The headline K-head scored $0.824$ exact there and still lost to $K_{lb}$; random dropout is not what detector misses look like.
+
+\subsection{Zero-Shot Detector Swap}
+
+\subsubsection{Motivation}
+
+Before tuning K further (Dean's call): does the image-evidence model transfer to detectors it never saw?
+
+\subsubsection{Setup}
+
+\texttt{cache\_e2e\_detector.py} caches YOLO11x-pose and RTMO-L outputs on COCO val2017 once, in the HigherHRNet cache format (same 0.1 pooling and 10 px matching); the caches reproduce the MEng swap exactly (YOLO 2,196 scenes, native $0.9863$, recall $0.816$; RTMO 2,121, $0.9961$, $0.774$). Every model is then scored on identical scenes per detector.
+
+\subsubsection{Results}
+
+Gap to each detector's native grouping:
+
+\begin{tabular}{lccc}
+\hline
+\textbf{Pipeline} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+MEng dissertation (K-head, k-means)        & $0.0206$ & $0.0210$ & $0.0220$ \\
+MEng embedding + clamp + THA (August)      & $0.0094$ & $0.0103$ & $0.0141$ \\
+image evidence, $K_{lb}$, COP-KM           & $0.0050$ & $0.0070$ & $0.0097$ \\
+\textbf{image evidence, true K, THA}       & $\mathbf{-0.0004}$ & $\mathbf{+0.0008}$ & $\mathbf{0.0060}$ \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. The gains transfer zero-shot.} Every detector improves over the August best, and the image-evidence gain at true K is the same size on all three ($+0.0021$ to $+0.0026$, all CIs above zero).
+
+\textbf{2. At true K the model matches HigherHRNet and YOLO} (both CIs span zero).
+
+\textbf{3. RTMO-L is the exception.} Its one-stage regression assigns joints to instances as it predicts them (native $0.9961$), and a $0.006$ gap remains even at true K.
+
+\section[2026/10/22]{Thursday, 22 October 2026}
+
+\subsection{The Autonomous Pipeline --- Parity With HigherHRNet AE}
+
+\subsubsection{Motivation}
+
+With the embedding share closed on HigherHRNet and YOLO, the remaining autonomous gap is K. The augmented K-head helped the no-image hierarchy, so I trained it on the image-evidence embeddings.
+
+\subsubsection{Setup}
+
+\texttt{k\_head\_aug\_372658c6/4579ce0c} (held-out exact $0.894$, within one $0.982$); autonomous K $= \max(\text{K-head}, K_{lb})$; scored on all three detector caches. Nothing from ground truth is used at inference.
+
+\subsubsection{Results}
+
+\begin{tabular}{lccccc}
+\hline
+\textbf{Detector (native)} & \textbf{$K_{lb}$} & \textbf{clamp} & \textbf{true K} & \textbf{Autonomous gap} & \textbf{August gap} \\
+\hline
+HigherHRNet ($0.9849$)   & $0.9797$ & $\mathbf{0.9831}$ & $0.9855$ & $\mathbf{0.0019}$ [$-0.0003$, $+0.0040$] & $0.0094$ \\
+YOLO11x-pose ($0.9863$)  & $0.9791$ & $\mathbf{0.9829}$ & $0.9855$ & $0.0034$ [$+0.0009$, $+0.0059$] & $0.0103$ \\
+RTMO-L ($0.9961$)        & $0.9864$ & $\mathbf{0.9892}$ & $0.9901$ & $0.0069$ [$+0.0056$, $+0.0083$] & $0.0141$ \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. On HigherHRNet the fully autonomous pipeline is at parity with AE.} The gap is $0.0019$ and its CI includes zero. The dissertation's autonomous gap was $0.0206$.
+
+\textbf{2. The K-head earns its place on every detector}: clamp $-$ $K_{lb}$ $= +0.0034$, $+0.0038$, $+0.0028$, all CIs above zero; against the August pipeline $+0.007$ on all three.
+
+\textbf{3. What remains differs by detector.} YOLO keeps a small but significant autonomous gap ($0.0034$) that is mostly K (true K is at parity). On RTMO the autonomous score is within $0.001$ of the true-K score, so the remaining $0.007$ there is the embedding, against a detector whose own grouping is unusually strong.
+
+\textbf{4. Multi-person scenes still trail slightly}: clamp THA $0.9690$ vs $0.9730$ on HigherHRNet, $0.9684$ vs $0.9798$ on YOLO, $0.9804$ vs $0.9929$ on RTMO.
+
+\subsubsection{What to do next}
+
+\begin{itemize}
+    \item AP@OKS for this pipeline. PGA parity on matched joints does not imply AP parity (MEng: $0.492$ vs $0.583$); this is the system-level check.
+    \item Position the hierarchy against HGG \cite{jin2020hgg} before writing it up.
+    \item Candidate improvements, cheapest first: image features at the joints as well as along bones (an existing config flag), a stronger or finer-stride frozen backbone, the 19-edge skeleton, and the RTMO embedding gap.
+    \item Add a trainer resume option (per-epoch checkpoint) --- outages cost whole runs this week.
+\end{itemize}
+
+\subsection{The Full Pipeline on Grouping-Free Detections}
+
+\subsubsection{Motivation}
+
+Dean asked again whether the pipeline should be tried on a detector that was not trained jointly with grouping. The image-evidence pipeline already uses no detector embeddings: its image features come from a frozen ImageNet ResNet-18 that was never trained with any grouping objective. The remaining question is the joint set, so I re-scored the full pipeline on the grouping-free HigherHRNet cache from 19 October (refine off: heatmap peaks only).
+
+\subsubsection{Results}
+
+\begin{tabular}{lcc}
+\hline
+\textbf{Grouping (refine-off joints, 2,152 scenes)} & \textbf{clamp THA} & \textbf{true-K THA} \\
+\hline
+AE tag matching (no refine)                       & \multicolumn{2}{c}{$0.8666$} \\
+meng-headline + MEng K-head                       & $0.9745$ & $0.9777$ \\
+\textbf{full PEng pipeline (image evidence + aug K-head)} & $\mathbf{0.9823}$ & $\mathbf{0.9854}$ \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. The pipeline does not depend on the detector's grouping-shaped joint set.} On grouping-free peaks it scores $0.9823$ autonomous, against $0.9831$ on the standard refine-on joints, and $+0.0079$ [$+0.0059$, $+0.0099$] over the MEng embedding on the same peaks.
+
+\textbf{2. These PGA numbers are not comparable across joint sets.} The refine-off set has lower recall ($0.69$ vs $0.79$); whether a grouping-free detector plus this pipeline beats HigherHRNet end to end is an AP@OKS question, which is the first item above.
+
+\subsection{AP@OKS on Three Detectors --- System-Level Parity}
+
+\subsubsection{Motivation}
+
+PGA is computed on GT-matched joints, averaged per image. It does not see false-positive joints, duplicate instances or localisation, so PGA parity does not imply parity in the standard COCO metric. In MEng the system-level gap was large: $0.492$ AP for PG-GAT against $0.583$ for HigherHRNet (9 September). This is the check that matters for a paper.
+
+\subsubsection{Setup}
+
+AP@OKS (COCO keypoint average precision over OKS thresholds $0.50$--$0.95$) on all 5,000 val2017 images, with the 9 September protocol and helpers unchanged: PG-GAT receives every pooled detection above the threshold, false positives included and with no GT matching; one instance per cluster with the highest-confidence detection per joint type; instance score = mean joint confidence over the 17 slots for every row, the detectors' own rows included.
+New scripts: \texttt{eval\_e2e\_ap\_peng.py} scores several pipelines in one pass on identical pooled joints, and \texttt{cache\_ap\_detector.py} stores YOLO11x-pose and RTMO-L raw outputs (every person, every joint with its confidence) in the HigherHRNet AP-cache layout.
+Two pooling thresholds: $0.1$ (the PGA protocol) and $0$ (PG-GAT gets every joint the detector outputs, so the native row is the detector's standard full output).
+
+\subsubsection{Results}
+
+Threshold 0 (all joints):
+
+\begin{tabular}{lccccc}
+\hline
+\textbf{Detector} & \textbf{Native} & \textbf{MEng} & \textbf{August} & \textbf{PEng ($K_{lb}$, THA)} & \textbf{Gap} \\
+\hline
+HigherHRNet   & $0.583$ & $0.467$ & $0.546$ & $\mathbf{0.572}$ & $0.011$ \\
+YOLO11x-pose  & $0.667$ & $0.531$ & $0.641$ & $\mathbf{0.661}$ & $0.006$ \\
+RTMO-L        & $0.646$ & $0.547$ & $0.631$ & $\mathbf{0.642}$ & $0.004$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+HigherHRNet in detail (5,000 images; crowd splits by annotated people):
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Method} & \textbf{AP, $t{=}0.1$} & \textbf{AP, $t{=}0$} & \textbf{AP 1--5, $t{=}0$} & \textbf{AP $\geq 6$, $t{=}0$} \\
+\hline
+HigherHRNet native (full output)        & $0.583$ & $0.583$ & $0.659$ & $0.481$ \\
+HigherHRNet native, pooled joints       & $0.540$ & $0.583$ & ---     & ---     \\
+MEng (K-head, k-means)                  & $0.492$ & $0.467$ & ---     & $0.321$ \\
+PEng, K-head, k-means                   & $\mathbf{0.535}$ & $0.547$ & --- & $0.426$ \\
+PEng, $K_{lb}$, THA                     & $0.532$ & $\mathbf{0.572}$ & --- & $\mathbf{0.459}$ \\
+\hline
+\end{tabular}
+
+\subsubsection{Analysis}
+
+\textbf{1. The system-level gap is now $0.004$--$0.011$ AP on all three detectors}, against $0.099$--$0.136$ for the MEng pipeline at the same threshold. No model saw YOLO or RTMO during training.
+
+\textbf{2. The best K rule depends on the pooling threshold.} At threshold 0 every detector instance carries all 17 joints, so $K_{lb}$ equals the detector's own instance count. That rule uses no ground truth, but it does inherit the detector's person count. The K-head over-counts on this false-positive-heavy pool ($4.25$ people per image on HigherHRNet against $2.72$ annotated), so the clamp hurts here, the opposite of the matched-joint PGA setting. At threshold $0.1$ the K-head alone with k-means is the best HigherHRNet row.
+
+\textbf{3. The grouping change alone recovers most of the MEng deficit.} THA with $K_{lb}$ on the unchanged MEng embedding (August row) already reaches $0.546$ / $0.641$ / $0.631$; the PEng embedding adds $+0.026$ / $+0.020$ / $+0.011$.
+
+\textbf{4. RTMO is closest in AP but furthest in PGA.} AP scores whole instances by OKS; PGA scores every matched joint's assignment. They weight errors differently, so both should be reported.
+
+\textbf{5. What remains is in crowds}: AP for images with six or more people is $0.459$ vs $0.481$ on HigherHRNet and $0.620$ vs $0.634$ on YOLO, but $0.565$ vs $0.567$ on RTMO.
+
+\textbf{6. No confidence intervals yet.} Gaps this small need an image-level bootstrap through COCOeval before they are quoted.
+
+\section[2026/10/23]{Friday, 23 October 2026}
+
+\subsection{Crowd Over-Sampling}
+
+\subsubsection{Motivation}
+
+Dean asked whether training on synthetic scenes with 6, 7 and 8 people before fine-tuning would improve the result. I checked two things first. The synthetic training set contains exactly 100 scenes each of 2, 3, 4 and 5 people (and 25 each in validation and test), so the model has never seen a synthetic crowd. And the PGA breakdown by crowd size shows where the remaining gap sits:
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{People} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} & \textbf{YOLO, autonomous} \\
+\hline
+2--3   & $+0.0036$ & $+0.0033$ & $+0.0088$ & $+0.0077$ \\
+4--5   & $+0.0062$ & $+0.0058$ & $+0.0102$ & $+0.0113$ \\
+6--8   & $-0.0034$ & $+0.0164$ & $+0.0182$ & $+0.0226$ \\
+9+     & $-0.0344$ & $+0.0145$ & $+0.0152$ & $+0.0179$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+(Native minus PEng, true K unless stated.) HigherHRNet's own grouping collapses in crowds ($0.923$ at 9+ people) and PG-GAT is already ahead there; YOLO and RTMO hold $0.98$--$0.99$ at every crowd size while PG-GAT drops by about $0.013$ from 2--3 to 6+ people. Against those two detectors, crowds are where most of the gap is.
+
+Before building synthetic crowds I tested the cheaper version of the same idea: COCO train already contains crowds, they are just rare. If showing the model more real crowds does nothing, synthetic crowds are unlikely to help either; if it helps, synthetic crowds are worth the rendering effort.
+
+\subsubsection{Setup}
+
+New optional training setting (\texttt{training.crowd\_oversample}, \texttt{training.crowd\_min\_people}, off by default): a weighted sampler draws COCO train images with 6 or more annotated people 3 times as often, with the epoch size unchanged. Crowds are $12.1\%$ of the 56,599 training images and become $29.2\%$ of samples (checked by sampling); the mean number of people per sample rises from $2.65$ to $3.77$. Weight 3 was chosen to boost crowds without starving the 2--5 range, which is where most images are.
+Everything else is identical to the image-evidence run \texttt{372658c6}: same synthetic start (\texttt{a0c59235}), recipe, augmentation and image branch. Run \texttt{finetune\_pg\_gat\_hier\_img\_crowd\_coco/d4422c37} (best epoch 15), followed by the augmented K-head, the PGA tables on the three detector caches and AP at threshold 0 (\texttt{scripts/run\_crowd.sh}).
+
+\subsubsection{Results (fine-tune only; K-head and the YOLO / RTMO tables still running)}
+
+HigherHRNet detection set, no K-head, both models in the letterbox frame; all columns THA PGA:
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Model} & \textbf{COCO GT} & \textbf{E2E $K_{lb}$} & \textbf{E2E true K} & \textbf{AE $-$ true K} \\
+\hline
+image evidence (\texttt{372658c6})          & $0.9855$ & $0.9797$ & $0.9853$ & $-0.0004$ \\
+\textbf{+ crowd over-sampling}        & $\mathbf{0.9867}$ & $\mathbf{0.9811}$ & $\mathbf{0.9873}$ & $\mathbf{-0.0024}$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+True-K THA by crowd size: 2--3 people $0.9803 \rightarrow 0.9836$, 4--5 $0.9681 \rightarrow 0.9724$, 6--8 $0.9626 \rightarrow 0.9626$, 9+ $0.9571 \rightarrow 0.9661$ (AE $0.9844$ / $0.9744$ / $0.9592$ / $0.9229$).
+
+\subsubsection{Analysis (provisional)}
+
+\textbf{1. Crowd over-sampling helps overall}: $+0.0015$ [$+0.0006$, $+0.0024$] at $K_{lb}$ and $+0.0020$ [$+0.0009$, $+0.0032$] at true K on HigherHRNet, and COCO GT keypoints rise as well.
+
+\textbf{2. The gain is not confined to crowds.} The 2--3 and 4--5 rows improve as much as the 9+ row. Seeing more crowded scenes seems to sharpen the embedding in general, not only for crowds.
+
+\textbf{3. HigherHRNet is not the real crowd test}, because its own grouping already fails in crowds. The decision rests on the YOLO and RTMO crowd rows and on AP for six or more people, which the run produces after the K-head.
+
+\subsubsection{What to do next}
+
+\begin{itemize}
+    \item Finish the run: K-head, YOLO / RTMO PGA tables, AP at threshold 0 on all three detectors.
+    \item If the YOLO / RTMO crowd rows improve: render synthetic scenes with 6--8 people (Blender generator, \texttt{NUM\_CHARACTERS} in \texttt{dataset\_generator/config.py}) with tighter spacing than the current 3 m so that people overlap, and repeat the synthetic stage.
+    \item AP confidence intervals (image-level bootstrap).
+    \item Training-seed variance: every model this week is a single training run, and the confidence intervals are over scenes, not seeds. The key arms (flat control, PG-GAT-H + aug, image evidence) need 2--3 seeds before the small differences are claimed in a paper.
+\end{itemize}
+
+\subsection{Addenda --- Checks, Costs and Run Registry (19--23 October)}
+
+Items from the week that do not belong to one experiment but will be needed when this is written up.
+
+\subsubsection{Synthetic-only stage of the hierarchy}
+
+Before the COCO fine-tune, the hierarchical model was already better on synthetic and GT data but worse on detections, the first sign of the missing-joint problem:
+
+Synth val is kNN PGA; COCO GT is kNN / THA; E2E columns are THA.
+
+\vspace{0.5em}
+
+\begin{tabular}{lcccc}
+\hline
+\textbf{Synthetic-only} & \textbf{Synth val} & \textbf{COCO GT} & \textbf{E2E $K_{lb}$} & \textbf{E2E true K} \\
+\hline
+flat (champion-arch)      & $0.9634$ & $0.9010$ / $0.9341$ & $\mathbf{0.9424}$ & $\mathbf{0.9436}$ \\
+PG-GAT-H (\texttt{1cbce195})     & $\mathbf{0.9764}$ & $\mathbf{0.9179}$ / $\mathbf{0.9400}$ & $0.9329$ & $0.9338$ \\
+\hline
+\end{tabular}
+
+\subsubsection{Reproduction checks}
+
+Every new evaluation path was checked against a recorded number before use: \texttt{eval\_peng\_gap.py} reproduces the per-image dump exactly (AE $0.9849$, oracle kNN $0.9589$, pred kNN $0.9644$); the THA evaluator re-run on \texttt{meng-headline} reproduces synthetic test $0.9580$ / $0.9654$ / $0.9785$ and COCO GT $0.9715$ / $0.9774$ / $0.9779$ (kNN / COP-KM / THA); the YOLO and RTMO caches reproduce the MEng detector swap (scenes, native PGA, recall and the MEng autonomous PGA); the AP script reproduces the 9 September rows ($0.583$, $0.540$, $0.492$). Synthetic validation PGA did not predict E2E performance at any point this week (the non-augmented hierarchy scored $0.9907$ there and lost on detections), so it is only used to pick the epoch.
+
+\subsubsection{Parameter cost}
+
+\begin{tabular}{lc}
+\hline
+\textbf{Component} & \textbf{Parameters} \\
+\hline
+MEng PG-GAT (\texttt{meng-headline})                 & 334,419 \\
+PG-GAT-H (hierarchy, no image branch)               & 434,450 \\
+PG-GAT-H + image evidence, trainable                & 479,794 \\
+frozen ResNet-18 to layer3 (ImageNet weights)        & 2,782,784 \\
+K-head (MLP on the 256-d embedding)                  & 35,009 \\
+\textbf{Full PEng grouping pipeline}                 & \textbf{3.30M} \\
+HigherHRNet-W32 (full detector, for reference)      & 28.6M \\
+\hline
+\end{tabular}
+
+\subsubsection{Run registry}
+
+All under \texttt{code\_v3/outputs/}; no W\&B. Run directories are \texttt{<config name>/<GUID>}.
+
+\vspace{0.5em}
+
+{\small
+\begin{tabular}{lll}
+\hline
+\textbf{Config} & \textbf{GUID} & \textbf{What it is} \\
+\hline
+\texttt{finetune\_pg\_gat\_hier\_coco}        & \texttt{c7b02e4a} & PG-GAT-H, no augmentation \\
+\texttt{train\_pg\_gat\_hier\_aug}            & \texttt{a0c59235} & synthetic stage of every later run \\
+\texttt{finetune\_pg\_gat\_flat\_aug\_coco}   & \texttt{8094ccec} & flat PG-GAT + aug (control) \\
+\texttt{finetune\_pg\_gat\_hier\_aug\_coco}   & \texttt{b59d602d} & PG-GAT-H + aug \\
+\texttt{finetune\_pg\_gat\_hier\_img\_coco}   & \texttt{372658c6} & + image evidence (best so far) \\
+\texttt{k\_head\_aug\_372658c6}               & \texttt{4579ce0c} & its augmented K-head \\
+\texttt{finetune\_pg\_gat\_hier\_img\_crowd\_coco} & \texttt{d4422c37} & + crowd over-sampling \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+Detector caches: \texttt{e2e\_per\_image/} and \texttt{e2e\_cache\_\{yolo,rtmo\}/} (fixed PGA scenes); \texttt{e2e\_ap/hrnet\_cache} and \texttt{e2e\_ap\_\{yolo,rtmo\}/cache} (all images, for AP).
+
+\subsubsection{Process notes}
+
+Four runs were lost this week: two to a VS Code restart (a snap, which kills every process it started), one to a power cut and one stopped deliberately. Long runs now go through \texttt{systemd-run --user}, which survives both VS Code and the session; one job at a time because the GPU is shared. One evaluation had to be repeated because \texttt{systemd-run} substitutes \texttt{\$\{VAR\}} in its own command line, which sent two detectors' results to the same directory; loops now live in script files. The trainer still cannot resume mid-run.
+
+\subsection{Crowd Over-Sampling --- Final Results}
+
+\subsubsection{Setup}
+
+The run above finished with its augmented K-head (\texttt{k\_head\_aug\_d4422c37/88389153}, held-out exact $0.899$, the best of all the K-heads), the PGA tables on the three detector caches and AP at threshold 0. Comparisons are paired against the image-evidence model with its K-head on identical scenes. Both sides are GPU evaluations, which carry a small run-to-run noise; the planned CPU re-verification will confirm these deltas.
+
+\subsubsection{Results}
+
+{\small
+\begin{tabular}{lccc}
+\hline
+\textbf{Detector (native)} & \textbf{Auto. THA} & \textbf{$\Delta$ vs no crowd} & \textbf{Autonomous gap} \\
+\hline
+HigherHRNet ($0.9849$)  & $\mathbf{0.9844}$ & $+0.0013$ [$+0.0004$, $+0.0024$] & $0.0005$ [$-0.0016$, $+0.0027$] \\
+YOLO11x-pose ($0.9863$) & $\mathbf{0.9846}$ & $+0.0017$ [$+0.0006$, $+0.0029$] & $0.0017$ [$-0.0007$, $+0.0042$] \\
+RTMO-L ($0.9961$)       & $0.9897$ & $+0.0005$ [$-0.0004$, $+0.0014$] & $0.0064$ [$+0.0051$, $+0.0078$] \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+AP@OKS at threshold 0 ($K_{lb}$, THA): HigherHRNet $0.572 \rightarrow 0.574$ (native $0.583$), YOLO $0.661 \rightarrow 0.662$ ($0.667$), RTMO $0.642 \rightarrow 0.644$ ($0.646$). The K-head rows gain more: HigherHRNet K-head + k-means $0.547 \rightarrow 0.564$.
+True-K PGA for six to eight people on YOLO: $0.9641 \rightarrow 0.9656$, against native $0.9805$.
+
+\subsubsection{Analysis}
+
+\textbf{1. A small, consistent gain, and the new best pipeline.} Over-sampling crowds improves HigherHRNet and YOLO by $0.0013$--$0.0017$ autonomous PGA and is neutral on RTMO. The autonomous gap is now $0.0005$ on HigherHRNet and $0.0017$ on YOLO, and both confidence intervals include zero; at true K the model is ahead of HigherHRNet's own grouping ($-0.0024$, interval below zero).
+
+\textbf{2. It does not fix crowds against the one-stage detectors.} YOLO and RTMO keep a $0.015$--$0.018$ advantage at six to eight people, and the gains are as large in two- and three-person scenes as in crowds. More crowd exposure sharpened the embedding in general rather than solving crowds.
+
+\textbf{3. The K-head benefits most.} Its AP rows rise by $0.005$--$0.017$, more than the $K_{lb}$ rows.
+
+\textbf{4. Synthetic crowds are now a weaker bet.} Emphasising real crowds moved the crowd rows only slightly, so rendering 6--8-person synthetic scenes is unlikely to close the remaining crowd gap on its own. Verification and training-seed repeats come first.
+
+\section[2026/10/26]{Monday, 26 October 2026}
+
+\subsection{Verification of Every Reported Number}
+
+\subsubsection{Motivation}
+
+Before any of this goes into a paper, Dean asked for every number to be recomputed from the saved models to make certain they are correct.
+
+\subsubsection{Setup}
+
+\texttt{analysis/verify\_all.py} re-ran every reported evaluation from the saved checkpoints and detector caches into a fresh directory (\texttt{outputs/verify\_20261026/}, originals untouched): 26 PGA tables, 7 AP runs, 19 synthetic and COCO-GT evaluations and 7 analyses, then compared 2,282 metrics with the recorded outputs. The scripts behind four analyses had lived only in a temporary directory that was wiped; I rebuilt them in \texttt{code\_v3/analysis/} from the session record before the run.
+While building the check I found that the GPU evaluations are not bit-repeatable: the forward pass on CUDA differs by about $10^{-7}$ between runs, which is enough to flip k-means or THA in scenes with near-tied solutions, and COP-Kmeans restarts were unseeded. On the CPU the forward pass is bit-identical, so the verification ran on the CPU with a fixed seed; two such runs produce byte-identical outputs.
+
+\subsubsection{Results}
+
+\begin{tabular}{lccc}
+\hline
+\textbf{Kind} & \textbf{Metrics} & \textbf{Exact matches required} & \textbf{Largest difference} \\
+\hline
+PGA tables          & 588   & scene counts, AE, K means: all exact & $0.0007$ (COP-KM) \\
+AP@OKS              & 1,412 & native rows: all exact               & $0.0024$ AP (all images) \\
+THA synth / COCO GT & 76    & image counts: all exact              & $0.0013$ \\
+Analyses            & 206   & ---                                  & $0.0006$ \\
+\hline
+\end{tabular}
+
+\vspace{0.5em}
+
+Canonical (CPU) headline numbers, autonomous PGA gap of the best pipeline (crowd over-sampling + K-head): HigherHRNet $0.0004$ [$-0.0016$, $+0.0025$], YOLO11x-pose $0.0017$ [$-0.0007$, $+0.0042$], RTMO-L $0.0064$ [$+0.0051$, $+0.0078$]. AP@OKS at threshold 0 ($K_{lb}$, THA): $0.5758$ vs $0.5834$, $0.6616$ vs $0.6666$, $0.6436$ vs $0.6460$.
+
+\subsubsection{Analysis}
+
+\textbf{1. No recorded number is wrong beyond evaluation noise, and no conclusion changes.} Everything deterministic matches exactly; the rest moves in the third or fourth decimal.
+
+\textbf{2. GPU evaluation noise is about $\pm 0.0003$ PGA.} Two GPU repeats of the same evaluation differ by up to $0.0004$ on COP-KM rows and $0.0003$ on THA and kNN. Differences smaller than that should not be read as effects.
+
+\textbf{3. AP for crowds is the least precise number.} On the 294 images with six or more people, AP moved by up to $0.011$ between runs, so it should be quoted to two decimals.
+
+\textbf{4. From now on the canonical numbers are the CPU ones} (\texttt{docs/results.md}, ``Verification outcome''). Seven documented values moved slightly and are listed there; the earlier sections of this chapter keep the values as recorded at the time.

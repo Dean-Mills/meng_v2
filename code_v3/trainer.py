@@ -288,6 +288,11 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
         gat = SAGATV2Embedding(cfg.sa_gat_v2).to(device)
         embedding_dim = cfg.sa_gat_v2.output_dim
         use_depth = cfg.sa_gat_v2.use_depth
+    elif cfg.pg_gat_hier is not None:
+        from pg_gat_hier import PGGATHierEmbedding
+        gat = PGGATHierEmbedding(cfg.pg_gat_hier).to(device)
+        embedding_dim = cfg.pg_gat_hier.output_dim
+        use_depth = cfg.pg_gat_hier.use_depth
     elif cfg.sa_gat is not None:
         from sa_gat import SAGATEmbedding
         gat = SAGATEmbedding(cfg.sa_gat).to(device)
@@ -297,6 +302,7 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
         gat = GATEmbedding(cfg.gat).to(device)
         embedding_dim = cfg.gat.output_dim
         use_depth = cfg.gat.use_depth
+    use_hier = cfg.pg_gat_hier is not None
 
     # ── Data ──────────────────────────────────────────────────────────────────
     use_cached_features = tc.cached_features_train is not None
@@ -333,8 +339,25 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
             use_depth=use_depth,
         )
         train_dataset = PoseDataset(train_adapter)
-        train_loader = create_dataloader(train_dataset, batch_size=tc.batch_size,
-                                         shuffle=True, num_workers=tc.num_workers)
+        if tc.crowd_oversample:
+            # Crowd over-sampling (PEng): same epoch size, crowded images drawn more often
+            from torch.utils.data import DataLoader, WeightedRandomSampler
+            from dataloader import pose_collate_fn
+            min_people = tc.crowd_min_people or 6
+            counts = [len(train_adapter._get_person_anns(i)) for i in train_adapter.img_ids]
+            weights = [tc.crowd_oversample if c >= min_people else 1.0 for c in counts]
+            n_crowd = sum(c >= min_people for c in counts)
+            print(f"Crowd over-sampling: {n_crowd}/{len(counts)} images with >= {min_people} people "
+                  f"weighted x{tc.crowd_oversample}")
+            train_loader = DataLoader(
+                train_dataset, batch_size=tc.batch_size, num_workers=tc.num_workers,
+                sampler=WeightedRandomSampler(weights, num_samples=len(train_dataset), replacement=True),
+                collate_fn=pose_collate_fn, pin_memory=torch.cuda.is_available(),
+                persistent_workers=tc.num_workers > 0,
+            )
+        else:
+            train_loader = create_dataloader(train_dataset, batch_size=tc.batch_size,
+                                             shuffle=True, num_workers=tc.num_workers)
         val_loader = _make_loader(virtual_dir, "val", tc.batch_size, 0)
     else:
         train_loader = _make_loader(virtual_dir, "train", tc.batch_size, tc.num_workers)
@@ -351,7 +374,11 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
     if tc.pretrained is not None:
         pretrained_ckpt = torch.load(tc.pretrained, map_location=device,
                                      weights_only=False)
-        gat.load_state_dict(pretrained_ckpt["gat_state"])
+        strict = tc.pretrained_strict is not False
+        load_res = gat.load_state_dict(pretrained_ckpt["gat_state"], strict=strict)
+        if not strict:
+            print(f"Partial load: {len(load_res.missing_keys)} new keys start fresh, "
+                  f"{len(load_res.unexpected_keys)} checkpoint keys unused")
         if head is not None and pretrained_ckpt.get("head_state") is not None:
             head.load_state_dict(pretrained_ckpt["head_state"])
         print(f"Loaded pretrained weights from {tc.pretrained}")
@@ -440,6 +467,7 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
         epoch_loss      = 0.0
         epoch_gat_loss  = 0.0
         epoch_head_loss = 0.0
+        epoch_aux_loss  = 0.0
         n_graphs        = 0
         t0              = time.time()
 
@@ -449,6 +477,16 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
                 graphs = batch
             else:
                 graphs = preprocessor.process_batch(batch)
+                if getattr(gat, "needs_image", False):
+                    from image_evidence import attach_images
+                    graphs = attach_images(graphs, batch)
+
+            # Detection-realistic augmentation (training graphs only)
+            if tc.joint_drop_max or tc.force_visible:
+                from augment import detection_augment
+                graphs = [detection_augment(g, preprocessor, tc.joint_drop_max,
+                                            bool(tc.force_visible)) for g in graphs]
+                graphs = [g for g in graphs if g is not None]
 
             for graph in graphs:
                 # Skip scenes that exceed SCOT's k_max
@@ -485,6 +523,12 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
                 gat_out  = gat_loss_fn(embeddings, graph.person_labels)
                 total    = gat_out["total_loss"]
 
+                # PG-GAT-H: auxiliary bone / triplet validity loss
+                if use_hier:
+                    aux = gat.aux_loss(graph.person_labels)
+                    total = total + aux
+                    epoch_aux_loss += aux.item()
+
                 # Head loss
                 head_loss_val = 0.0
                 if head is not None and head_loss_fn is not None:
@@ -520,8 +564,9 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
 
         log = (f"Epoch {epoch:3d}/{tc.epochs} | "
                f"loss {avg_loss:.4f} "
-               f"(gat {avg_gat:.4f} head {avg_head:.4f}) | "
-               f"{elapsed:.1f}s")
+               f"(gat {avg_gat:.4f} head {avg_head:.4f}"
+               + (f" aux {epoch_aux_loss / max(n_graphs, 1):.4f}" if use_hier else "")
+               + f") | {elapsed:.1f}s")
 
         wandb_metrics = {
             "epoch":           epoch,
@@ -559,6 +604,7 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
             history.append({
                 "epoch": epoch, "loss": avg_loss,
                 "gat_loss": avg_gat, "head_loss": avg_head,
+                **({"aux_loss": epoch_aux_loss / max(n_graphs, 1)} if use_hier else {}),
                 "val_pga": val_pga,
             })
 
@@ -609,6 +655,9 @@ def _validate(gat, head, head_name, loader, preprocessor,
                 graphs = batch
             else:
                 graphs = preprocessor.process_batch(batch)
+                if getattr(gat, "needs_image", False):
+                    from image_evidence import attach_images
+                    graphs = attach_images(graphs, batch)
             for graph in graphs:
                 graph      = graph.to(device)
                 k          = int(graph.num_people)

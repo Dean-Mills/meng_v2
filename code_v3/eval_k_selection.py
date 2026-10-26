@@ -171,6 +171,11 @@ def _load_models(checkpoint_path: Path, k_head_path: Path, device: str):
         gat = SAGATHyperbolicEmbedding(cfg.sa_gat_hyperbolic).to(device)
         embedding_dim = cfg.sa_gat_hyperbolic.output_dim
         use_depth = cfg.sa_gat_hyperbolic.use_depth
+    elif cfg.pg_gat_hier is not None:
+        from pg_gat_hier import PGGATHierEmbedding
+        gat = PGGATHierEmbedding(cfg.pg_gat_hier).to(device)
+        embedding_dim = cfg.pg_gat_hier.output_dim
+        use_depth = cfg.pg_gat_hier.use_depth
     elif cfg.sa_gat is not None:
         from sa_gat import SAGATEmbedding
         gat = SAGATEmbedding(cfg.sa_gat).to(device)

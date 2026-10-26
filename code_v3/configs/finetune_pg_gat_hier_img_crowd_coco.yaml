@@ -1,0 +1,67 @@
+name: "finetune_pg_gat_hier_img_crowd_coco"
+description: "PEng crowd test: finetune_pg_gat_hier_img_coco + crowd over-sampling (COCO train images with >= 6 annotated people drawn 3x as often, ~29% of samples, same epoch size). A/B against finetune_pg_gat_hier_img_coco/372658c6: same synthetic start (a0c59235), recipe, augmentation and image evidence. No W&B."
+
+pg_gat_hier:
+  num_joint_types: 17
+  joint_embedding_dim: 64
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 256
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+  use_type_pair_attention: true
+  use_position_encoding: true
+  use_repulsion_heads: true
+  n_repulsion_heads: 1
+  skeleton: coco16
+  num_pre_joint_layers: 1
+  num_post_joint_layers: 1
+  hier_dim: 128
+  type_embedding_dim: 16
+  bone_candidates: 3
+  use_triplet_level: true
+  triplet_top_r: 2
+  aux_bone_weight: 0.5
+  aux_triplet_weight: 0.5
+  image_backbone: resnet18_s16
+  image_feat_dim: 32
+  bone_image_samples: 5
+  joint_image_features: false
+
+gat:
+  num_joint_types: 17
+  joint_embedding_dim: 32
+  raw_feature_dim: 4
+  hidden_dim: 64
+  output_dim: 128
+  num_layers: 2
+  num_heads: 4
+  dropout: 0.1
+  use_layer_norm: true
+  l2_normalize: true
+  use_depth: false
+
+loss:
+  contrastive_margin: 0.5
+
+training:
+  virtual_dir:   data/virtual
+  coco_train_dir: data/coco2017/train2017
+  coco_train_ann: data/coco2017/annotations/person_keypoints_train2017.json
+  pretrained:    null
+  batch_size:    4
+  num_workers:   4
+  lr:            3.8417518776322576e-4
+  lr_min:        1.0e-5
+  weight_decay:  1.0e-4
+  epochs:        15
+  val_every:     2
+  save_best:     true
+  joint_drop_max: 0.4
+  force_visible: true
+  pretrained_strict: false
+  crowd_oversample: 3.0
+  crowd_min_people: 6

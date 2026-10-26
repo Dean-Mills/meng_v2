@@ -227,3 +227,4 @@ dissertation/build_agent/
 /paper_cviu/*.fls
 /paper_cviu/figures/src/build_agent/
 /paper_cviu/draft_v*.pdf
+/paper_cviu/sections/_archive/

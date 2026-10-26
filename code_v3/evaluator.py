@@ -254,6 +254,11 @@ class Evaluator:
             self._embedding_dim = self.cfg.sa_gat_v2.output_dim
             self._use_depth = self.cfg.sa_gat_v2.use_depth
             self._needs_mobilenet = True
+        elif self.cfg.pg_gat_hier is not None:
+            from pg_gat_hier import PGGATHierEmbedding
+            self.gat = PGGATHierEmbedding(self.cfg.pg_gat_hier).to(device)
+            self._embedding_dim = self.cfg.pg_gat_hier.output_dim
+            self._use_depth = self.cfg.pg_gat_hier.use_depth
         elif self.cfg.sa_gat is not None:
             from sa_gat import SAGATEmbedding
             self.gat = SAGATEmbedding(self.cfg.sa_gat).to(device)
