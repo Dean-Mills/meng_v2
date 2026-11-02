@@ -650,3 +650,735 @@ Canonical (CPU) headline numbers, autonomous PGA gap of the best pipeline (crowd
 \textbf{3. AP for crowds is the least precise number.} On the 294 images with six or more people, AP moved by up to $0.011$ between runs, so it should be quoted to two decimals.
 
 \textbf{4. From now on the canonical numbers are the CPU ones} (\texttt{docs/results.md}, ``Verification outcome''). Seven documented values moved slightly and are listed there; the earlier sections of this chapter keep the values as recorded at the time.
+
+\subsection{Diagnostics --- Where the Remaining Errors Are}
+
+\subsubsection{Motivation}
+
+Dean asked where problems could still exist, in the way the crowd analysis found the 2--5-person limit of the synthetic data. Before spending more GPU time I measured where the best pipeline's errors are, whether the fixed graph neighbourhoods still see the right joints in crowds, and how much AP any grouping could gain on each detector.
+
+\subsubsection{Setup}
+
+All on the CPU, no training. \texttt{analysis/error\_anatomy.py} scores every matched joint for the best pipeline, the no-image model and each detector's own grouping, with joint type, person size, occlusion, local crowding, localisation error, crowd size and whether the autonomous K was right. \texttt{analysis/graph\_coverage.py} measures what each joint's 16-neighbour graph and 3-candidate bones contain. \texttt{analysis/ap\_ceiling.py} estimates AP under perfect grouping by assigning each detection to the ground-truth person with the best per-keypoint OKS term. A first version of the ceiling used the 10 px PGA matching; it dropped correct joints of large people, came out below native and was discarded.
+
+\subsubsection{Results}
+
+Error rates (\%, native / ours at true K / ours autonomous), joint-weighted:
+
+{\small
+\begin{tabular}{lccc}
+\hline
+\textbf{Slice} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+all joints                   & 2.68 / 1.67 / 2.05 & 1.37 / 1.53 / 1.81 & 0.42 / 1.14 / 1.24 \\
+autonomous K right           & 1.67 / 0.79 / 0.79 & 0.99 / 0.74 / 0.74 & 0.06 / 0.48 / 0.48 \\
+autonomous K wrong           & 7.69 / 6.01 / 8.27 & 3.46 / 5.89 / 7.67 & 3.06 / 5.93 / 6.77 \\
+person $<$ 64 px             & 3.34 / 1.33 / 2.05 & 1.40 / 1.14 / 1.62 & 0.42 / 0.85 / 1.05 \\
+person $\geq$ 256 px         & 1.08 / 1.54 / 1.42 & 1.31 / 2.10 / 2.58 & 0.34 / 1.29 / 1.35 \\
+9+ people                    & 7.65 / 3.03 / 3.97 & 1.67 / 2.51 / 3.08 & 0.96 / 2.10 / 2.33 \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+Neighbourhood coverage: the share of the other people's same-type joints inside a joint's 16-neighbour graph falls from about $0.69$ (2--3 people) to $0.22$ (9+ people); bone-candidate recall stays at or above $0.999$.
+AP under perfect grouping (threshold 0): HigherHRNet $0.627$ (native $0.583$, ours $0.576$), YOLO $0.678$ ($0.667$, $0.662$), RTMO $0.646$ ($0.646$, $0.644$).
+
+\subsubsection{Analysis}
+
+\textbf{1. With the right K the pipeline already beats HigherHRNet and YOLO.} In scenes where the autonomous K is right our error rate is $0.79\%$ against HigherHRNet's $1.67\%$, and $0.74\%$ against YOLO's $0.99\%$. Wrong K is the largest remaining cost on those two detectors.
+
+\textbf{2. We are strong on small people and weak on large ones.} Below 64 px we beat every native grouping except RTMO's; above 128 px we are worse than YOLO and HigherHRNet. The synthetic camera is fixed at 10 m, so large people are under-represented in training, the same kind of gap as the 2--5-person limit.
+
+\textbf{3. In crowds the repulsion head is nearly blind.} With 9+ people a joint's neighbourhood contains only about a fifth of the same-type joints it must be separated from, and errors against YOLO and RTMO grow with crowd size.
+
+\textbf{4. The extremities carry the residual deficit} against YOLO and RTMO (wrists, knees and ankles up to $+1.5$ percentage points); head and torso joints are at or better than native on YOLO.
+
+\textbf{5. AP headroom depends on the detector.} Perfect grouping would add about $0.04$ AP on HigherHRNet ($0.07$ in crowds), about $0.01$ on YOLO and nothing on RTMO, whose AP is limited by detection. The estimate is not a strict bound (unannotated people in crowds are merged into annotated ones), but it says where a better grouping can show up in AP at all.
+
+\subsubsection{What to do next}
+
+Candidate fixes, each aimed at a measured weakness: explicit same-type edges in the joint graph (crowds); scale augmentation during fine-tuning (large people); a K-head that sees the per-type count histogram (K); joint-level image features (extremities).
+
+\subsection{K-Head With the Per-Type Count Histogram}
+
+\subsubsection{Motivation}
+
+The diagnostics showed that with the right K the pipeline already beats HigherHRNet and YOLO, so wrong K is the largest remaining autonomous cost on those two detectors.
+On the verified best pipeline the clamp $\max(\text{K-head}, K_{lb})$ still gets K wrong in 8.8\,\% / 8.6\,\% / 6.2\,\% of scenes (HigherHRNet / YOLO / RTMO), more often too low than too high.
+Replacing the clamp's K with the true K would add at most $0.0028$ / $0.0022$ / $0.0002$ PGA, so this experiment can only matter on HigherHRNet and YOLO.
+The K-head I use sees the pooled embedding and the total joint count $n/17$, but not how the joints split across the 17 types, although the maximum of those counts is exactly $K_{lb}$, the bound the clamp applies after the head.
+
+\subsubsection{Setup}
+
+I wrote a new head, \texttt{k\_head\_hist.py} (\texttt{KHistHead}), with the same MLP widths and L1 loss on K as the MEng head, whose input adds the 17 raw per-type counts and $K_{lb}$ itself (a small ReLU MLP can only approximate a maximum).
+It is trained exactly like \texttt{k\_head\_aug\_d4422c37/88389153}: frozen \texttt{d4422c37}, COCO train with joint dropout $U(0, 0.4)$ and $v = 1$, 10 epochs, best epoch picked on the same 2,000 held-out COCO-train images (\texttt{train\_k\_head\_aug.py --head hist}, run \texttt{k\_head\_hist\_d4422c37/7b8fd7bd}).
+The old head run through the new code path reproduces its verified per-image results byte for byte.
+Evaluation is on the CPU with seed 0 against the verified \texttt{88389153} tables: PGA on all three detector caches with paired CIs, AP at pooling thresholds 0 and 0.1, and the error anatomy split by whether K is right.
+Two limits are known in advance: at threshold 0 every detector instance carries all 17 joints, so every count equals $K_{lb}$ and the $K_{lb}$ THA row, the AP headline, does not use the K-head at all; and each head is a single training run, so a difference below about $0.001$ PGA cannot be told apart from the head's own seed variance.
+
+\subsubsection{Results}
+
+The new head reached a held-out exact K accuracy of $0.912$ (old head $0.899$).
+PGA on identical scenes, CPU with seed 0 (old / new = autonomous clamp THA; $\Delta$ = new head $-$ old head with 95\% paired CIs; gap = native $-$ new):
+
+{\small
+\begin{tabular}{lcccc}
+\hline
+\textbf{Detector} & \textbf{Old / new} & \textbf{$\Delta$ clamp THA} & \textbf{$\Delta$ head alone} & \textbf{Gap} \\
+\hline
+HigherHRNet  & 0.9845 / 0.9840 & $-0.0006$ [$-0.0013$, $+0.0001$] & $+0.0013$ [$+0.0003$, $+0.0023$] & 0.0010 \\
+YOLO11x-pose & 0.9846 / 0.9835 & $-0.0011$ [$-0.0019$, $-0.0004$] & $+0.0010$ [$-0.0001$, $+0.0022$] & 0.0028 \\
+RTMO-L       & 0.9897 / 0.9888 & $-0.0009$ [$-0.0017$, $-0.0003$] & $+0.0000$ [$-0.0008$, $+0.0009$] & 0.0073 \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+How K goes wrong (share of scenes; the new head's clamp equals its own prediction):
+
+{\small
+\begin{tabular}{llccccc}
+\hline
+\textbf{Detector} & \textbf{Rule} & \textbf{K right} & \textbf{too high} & \textbf{too low} & \textbf{PGA cost, high} & \textbf{PGA cost, low} \\
+\hline
+HigherHRNet  & old head + clamp & 0.912 & 0.028 & 0.060 & 0.0010 & 0.0018 \\
+             & new head         & 0.918 & 0.017 & 0.065 & 0.0006 & 0.0027 \\
+YOLO11x-pose & old head + clamp & 0.914 & 0.029 & 0.057 & 0.0013 & 0.0010 \\
+             & new head         & 0.913 & 0.017 & 0.071 & 0.0007 & 0.0026 \\
+RTMO-L       & old head + clamp & 0.938 & 0.024 & 0.038 & 0.0011 & $-0.0009$ \\
+             & new head         & 0.938 & 0.014 & 0.049 & 0.0007 & 0.0004 \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+AP@OKS at threshold 0: the $K_{lb}$ THA row is unchanged by construction (HigherHRNet $0.5758$, YOLO $0.6616$, RTMO $0.6436$, identical in both runs); the clamp rows rise from $0.565$ to $0.569$, $0.644$ to $0.655$ and $0.625$ to $0.639$, still below $K_{lb}$ THA. At threshold 0.1 the old head with k-means stays the best HigherHRNet row ($0.545$; new head $0.532$).
+
+\subsubsection{Analysis}
+
+\textbf{1. Given $K_{lb}$, the head learned never to go below it.} It predicted less than $K_{lb}$ in no scene (old head: 1.3--2.4\%), so the clamp no longer does anything and the head inherits the bound's failure mode: it counts too low more often than the old pair.
+
+\textbf{2. The better head made the worse pipeline.} On its own the new head beats the old one (K-head-only THA $+0.0013$ on HigherHRNet) and gets K right as often or more, but the old head with the clamp wins: its occasional high predictions repair scenes where $K_{lb}$ counts too low, and a K that is too low merges two people, which costs more than splitting one. The autonomous PGA falls by $0.0006$ / $0.0011$ / $0.0009$, with the YOLO and RTMO intervals excluding zero.
+
+\textbf{3. The AP headline cannot move, and no K-head row overtakes it.} The new head over-counts less on false-positive-heavy pools, so the K-head AP rows improve, but $K_{lb}$ THA stays the best rule at threshold 0 on all three detectors.
+
+\textbf{4. Held-out K accuracy again failed to predict end-to-end quality} ($0.912$ against $0.899$, while the pipeline got worse).
+
+\textbf{5. The differences are at the scale of a K-head's own seed variance}, but the sign is the same on all three detectors and the K table shows the mechanism. A second seed could at most turn this into a tie, which would not change the decision.
+
+\subsubsection{What to do next}
+
+Keep \texttt{k\_head\_aug\_d4422c37/88389153} and do not combine the histogram head. A head that is pushed towards counting high (an asymmetric loss, or a rounding threshold chosen on held-out COCO train) is the only variant left in this direction, and its ceiling is small ($+0.0028$ / $+0.0022$ PGA), so I am parking it. Experiment 2 (same-type edges) started on the GPU at 14:00.
+
+\subsection{Same-Type Edges in the Joint Graph}
+
+\subsubsection{Motivation}
+
+The graph-coverage diagnostic showed that with 9+ people a joint's 16-neighbour graph holds only about a fifth of the other people's same-type joints, so the repulsion heads, which attend over the same-type edges of that graph, cannot see most of the joints they must push away.
+Against YOLO and RTMO our error grows with crowd size while theirs stays flat, so I tested whether linking every pair of same-type joints closes that gap.
+
+\subsubsection{Setup}
+
+A new default-off option, \texttt{same\_type\_edges}, adds every pair of same-type joints of the scene to the k-NN edges of both joint-level layers; edge features and the repulsion mask are computed on the combined edge set as before, and nothing else changes (no new parameters).
+I could not give the extra edges to the repulsion heads alone without changing \texttt{SAGATLayer}, which takes them as a mask of the same edge list, so all heads see them.
+With the option off the model reproduces its verified outputs byte for byte.
+The fine-tune (\texttt{37de5701}) is the \texttt{d4422c37} recipe and synthetic start with the option on, followed by the standard augmented K-head (\texttt{c1b9eb42}); everything is evaluated on the CPU with seed 0 against the verified \texttt{d4422c37} numbers.
+
+\subsubsection{Results}
+
+PGA on identical scenes, $\Delta$ = same-type edges $-$ \texttt{d4422c37}, 95\% paired CIs (autonomous = clamp THA; 6+ = scenes with 6 or more annotated people):
+
+{\small
+\begin{tabular}{lccc}
+\hline
+\textbf{Slice} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+autonomous     & $-0.0009$ [$-0.0020$, $+0.0001$] & $-0.0001$ [$-0.0011$, $+0.0008$] & $+0.0006$ [$-0.0002$, $+0.0014$] \\
+true K         & $-0.0016$ [$-0.0027$, $-0.0005$] & $+0.0001$ [$-0.0010$, $+0.0012$] & $+0.0006$ [$-0.0003$, $+0.0015$] \\
+true K, 6+     & $-0.0025$ [$-0.0058$, $+0.0010$] & $+0.0032$ [$+0.0005$, $+0.0059$] & $+0.0034$ [$+0.0006$, $+0.0064$] \\
+autonomous, 6+ & $-0.0009$ [$-0.0045$, $+0.0028$] & $-0.0005$ [$-0.0035$, $+0.0026$] & $+0.0033$ [$+0.0001$, $+0.0064$] \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+AP@OKS at threshold 0 ($K_{lb}$ THA): HigherHRNet $0.5758 \rightarrow 0.5767$, YOLO $0.6616 \rightarrow 0.6618$, RTMO $0.6436 \rightarrow 0.6426$; AP for 6+ people unchanged at two decimals; the K-head rows fall by $0.003$--$0.009$.
+THA on COCO ground-truth keypoints rises from $0.9867$ to $0.9877$.
+In 6+-person scenes the clamp gets K right in $60.5\%$ of YOLO scenes with the new K-head against $63.5\%$ with the old one.
+
+\subsubsection{Analysis}
+
+\textbf{1. The targeted weakness moves.} At true K in 6+-person scenes the edges gain about $0.003$ PGA on YOLO and RTMO, both intervals above zero, and the error anatomy shows the crowd rows of both detectors falling by 0.2--0.3 percentage points.
+
+\textbf{2. HigherHRNet gets worse.} At true K the loss is $0.0016$ overall with the interval below zero, and it appears at every crowd size, including 2--3 people, so it is not a crowd effect.
+
+\textbf{3. The gain does not survive into the autonomous pipeline.} Overall the autonomous differences all span zero; on YOLO the K-head trained on the new embedding gets K right in fewer crowd scenes and gives back what the embedding gained. Only RTMO keeps its crowd gain.
+
+\textbf{4. The AP headline does not move} beyond evaluation noise. (Corrected in the next subsection: the noise figure I used is HigherHRNet's; on RTMO the drop of $0.0010$ is larger than RTMO's evaluation noise, and the image intervals leave it undecided.)
+
+\textbf{5. Every overall difference is at most $0.0016$, and I do not know the fine-tune seed variance.} Each arm is a single training run; a second seed of the same recipe could plausibly move the overall numbers by this much on its own. Only the crowd rows on the one-stage detectors are larger than that.
+
+\subsubsection{What to do next}
+
+I do not adopt the same-type edges as a component and keep \texttt{d4422c37}. Dean paused experiments 3 and 4 at 15:59. Before further single-seed comparisons of this size, the fine-tune seed variance needs measuring: one repeat of the \texttt{d4422c37} recipe would tell whether differences of $0.001$--$0.002$ PGA mean anything.
+
+Dean approved that plan in the evening, and at 21:06 I started the repeat (\texttt{b2cdc656}, same recipe, own output folder) together with a second augmented K-head on \texttt{d4422c37}, which gives the K-head-only spread that experiment 1 needs.
+Experiments 3 and 4 run their first training run straight after it, so the GPU does not wait for the reading; whether each needs a second run will depend on the spread the repeat shows.
+
+\subsection{Confidence Intervals for AP}
+
+\subsubsection{Motivation}
+
+None of the AP numbers had intervals yet, which the paper needs, and I had been judging AP shifts against the GPU-versus-CPU spread alone.
+
+\subsubsection{Setup}
+
+A new script, \texttt{analysis/ap\_bootstrap.py}, runs COCO's per-image matching once per results file on all 5,000 val2017 images and then resamples images: an image drawn $k$ times has its detections and its non-ignored people weighted by $k$, and AP is recomputed with COCO's own accumulation, so nothing is re-matched.
+With every weight equal to one it reproduces the COCO AP exactly.
+Both methods of a comparison see the same 5,000 draws (seed 0), so the interval is on their difference.
+AP turned out to be biased under resampling, by different amounts per method (on HigherHRNet the native AP rises by $0.0011$ on average over the draws, ours by nothing), which shifts a plain percentile interval, so the script also reports the bias-corrected (BCa) interval.
+Half-sampling without replacement shows the same bias, so it is a property of AP on a sample, not an artefact of duplicated images.
+When the bias exceeds about one standard deviation a BCa bound comes from the extreme tail of the draws and is unstable, so I call a difference real only when the BCa and percentile intervals both exclude zero.
+The inputs are the CPU-verified AP runs at threshold 0; the whole pass takes four minutes on the CPU.
+
+\subsubsection{Results}
+
+AP gap = native grouping $-$ ours for the best pipeline at threshold 0, 95\% BCa intervals (6+ to two decimals; ``?'' = BCa and percentile intervals disagree about zero):
+
+{\small
+\begin{tabular}{lccc}
+\hline
+\textbf{Row} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+$K_{lb}$ THA, all  & $0.0076$ [$0.0035$, $0.0100$] & $0.0050$ [$0.0027$, $0.0082$] & $0.0024$ [$0.0018$, $0.0049$] \\
+$K_{lb}$ THA, 1--5 & $0.0036$ [$-0.0009$, $0.0060$] ? & $0.0017$ [$-0.0000$, $0.0029$] ? & $0.0012$ [$0.0003$, $0.0034$] \\
+$K_{lb}$ THA, 6+   & $0.01$ [$0.01$, $0.02$] & $0.01$ [$0.01$, $0.02$] & $0.00$ [$0.00$, $0.00$] \\
+clamp THA, all     & $0.0182$ [$0.0132$, $0.0208$] & $0.0225$ [$0.0185$, $0.0249$] & $0.0208$ [$0.0176$, $0.0251$] \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+AP gained by each step of the method, all images, paired, $K_{lb}$ THA (the first row is the THA + $K_{lb}$ rule on the MEng embedding against the MEng pipeline):
+
+{\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccc}
+\hline
+\textbf{Step} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+THA + $K_{lb}$ & $+0.0805$ [$+0.0711$, $+0.0888$] & $+0.1101$ [$+0.1023$, $+0.1174$] & $+0.0847$ [$+0.0767$, $+0.0900$] \\
+hierarchy + aug.  & $+0.0228$ [$+0.0194$, $+0.0280$] & $+0.0157$ [$+0.0125$, $+0.0215$] & $+0.0085$ [$+0.0044$, $+0.0116$] \\
+image evidence    & $+0.0028$ [$-0.0009$, $+0.0038$] ? & $+0.0046$ [$+0.0017$, $+0.0068$] & $+0.0027$ [$+0.0006$, $+0.0069$] \\
+crowd over-sampl. & $+0.0040$ [$+0.0036$, $+0.0066$] ? & $+0.0006$ [$-0.0016$, $+0.0016$] ? & $+0.0012$ [$+0.0002$, $+0.0044$] \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+In 6+-person scenes the hierarchy with augmentation and the image evidence are above zero on all three detectors, and crowd over-sampling on HigherHRNet only.
+For experiment 1 the count-histogram K-head raises the clamp AP by $0.004$--$0.014$ (both methods above zero) but stays below $K_{lb}$ THA; for experiment 2 the $K_{lb}$ THA differences are $+0.0009$ and $+0.0002$ (both methods include zero) and $-0.0010$ on RTMO (methods disagree).
+
+\subsubsection{Analysis}
+
+\textbf{1. The AP gap to native grouping is real on all three detectors.} At threshold 0 it is $0.0076$, $0.0050$ and $0.0024$, with both intervals above zero; on HigherHRNet the lower bound also exceeds the largest AP shift that forward-pass noise produced in the verification ($0.0024$). The PGA parity on HigherHRNet and YOLO is therefore not AP parity.
+
+\textbf{2. On HigherHRNet and YOLO it is a crowd gap.} With 6+ people it is about $0.01$ on both; with 1--5 people the two interval methods disagree. On RTMO it is small in every subset but above zero.
+
+\textbf{3. Each step of the method helps AP where it matters.} The THA + $K_{lb}$ rule and the hierarchy with augmentation are large and robust on every detector; image evidence is robust on YOLO and RTMO and in HigherHRNet crowds; crowd over-sampling is the weakest step in AP, robust only on RTMO and in HigherHRNet crowds.
+
+\textbf{4. Correction to experiment 2.} I had called its AP shifts evaluation noise using the $0.0024$ spread, which is HigherHRNet's; YOLO's is $0.0009$ and RTMO's $0.00002$. With the image intervals the RTMO drop of $0.0010$ is not established either way. The decision not to adopt the edges stands.
+
+\textbf{5. These intervals cover image sampling only.} The training-run spread comes on top and is what the seed repeat measures.
+
+\subsubsection{What to do next}
+
+Compute the same intervals for the seed repeat and experiments 3 and 4 when they land (their scripts predate the tool). How the paper reports them, BCa with the percentile interval in a footnote or the both-methods rule, is Dean's decision.
+
+
+\section[2026/10/27]{Tuesday, 27 October 2026}
+
+\subsection{Fine-Tune Seed Repeat --- the Noise Floor}
+
+\subsubsection{Motivation}
+
+Every October model is a single training run and the trainer sets no seed, so I did not know how far two runs of the same recipe differ.
+Experiments 1 and 2 and crowd over-sampling all moved the overall PGA by at most $0.0017$, and without that spread I could not tell whether differences of this size are effects.
+
+\subsubsection{Setup}
+
+I re-ran the \texttt{d4422c37} recipe unchanged (\texttt{b2cdc656}, own output folder) with its augmented K-head, and trained a second augmented K-head on \texttt{d4422c37} itself.
+The first pair differs from the best pipeline only in the training noise of the model and its K-head, the second only in that of the K-head.
+Each gives one draw of the difference between two runs of a recipe: a rough floor, not a variance estimate.
+Everything is evaluated on the CPU with seed 0 against the verified numbers, with paired PGA intervals and the AP intervals of the previous entry.
+The GPU part ran from 21:06 to 02:22 and the CPU evaluation finished at 03:05.
+
+\subsubsection{Results}
+
+PGA on identical scenes, $\Delta$ = repeat $-$ \texttt{d4422c37}, 95\% paired CIs; the recipe is the same, so every $\Delta$ is training noise (the last row is the second K-head on the same model):
+
+{\small
+\begin{tabular}{lccc}
+\hline
+\textbf{Row} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+autonomous   & $-0.0006$ [$-0.0016$, $+0.0004$] & $-0.0010$ [$-0.0020$, $+0.0001$] & $-0.0003$ [$-0.0010$, $+0.0005$] \\
+$K_{lb}$ THA & $-0.0007$ [$-0.0017$, $+0.0001$] & $-0.0010$ [$-0.0019$, $-0.0002$] & $+0.0000$ [$-0.0004$, $+0.0005$] \\
+true K       & $-0.0019$ [$-0.0031$, $-0.0008$] & $-0.0007$ [$-0.0018$, $+0.0004$] & $+0.0003$ [$-0.0006$, $+0.0011$] \\
+true K, 6+   & $-0.0030$ [$-0.0060$, $-0.0000$] & $+0.0007$ [$-0.0024$, $+0.0038$] & $+0.0016$ [$-0.0017$, $+0.0048$] \\
+true K, 9+   & $-0.0064$ [$-0.0108$, $-0.0021$] & $-0.0022$ [$-0.0068$, $+0.0022$] & $+0.0009$ [$-0.0012$, $+0.0031$] \\
+K-head only  & $-0.0001$ [$-0.0003$, $+0.0001$] & $-0.0000$ [$-0.0003$, $+0.0003$] & $+0.0000$ [$-0.0001$, $+0.0002$] \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+Gap to native grouping with each run (PGA paired CIs; AP at threshold 0, $K_{lb}$ THA, BCa):
+
+{\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccc}
+\hline
+\textbf{Gap} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+PGA auto., first   & $0.0004$ [$-0.0016$, $0.0025$] & $0.0017$ [$-0.0007$, $0.0042$] & $0.0064$ [$0.0051$, $0.0078$] \\
+PGA auto., repeat  & $0.0010$ [$-0.0012$, $0.0031$] & $0.0027$ [$0.0001$, $0.0053$] & $0.0066$ [$0.0053$, $0.0080$] \\
+PGA true K, first  & $-0.0024$ [$-0.0043$, $-0.0005$] & $-0.0005$ [$-0.0028$, $0.0017$] & $0.0062$ [$0.0048$, $0.0077$] \\
+PGA true K, repeat & $-0.0005$ [$-0.0027$, $0.0016$] & $0.0002$ [$-0.0022$, $0.0025$] & $0.0059$ [$0.0046$, $0.0073$] \\
+AP, first          & $0.0076$ [$0.0035$, $0.0100$] & $0.0050$ [$0.0027$, $0.0082$] & $0.0024$ [$0.0018$, $0.0049$] \\
+AP, repeat         & $0.0094$ [$0.0064$, $0.0130$] & $0.0053$ [$0.0030$, $0.0083$] & $0.0034$ [$0.0030$, $0.0068$] \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+In AP the repeat changes $K_{lb}$ THA by $-0.0018$, $-0.0003$ and $-0.0011$ (HigherHRNet and RTMO: the two interval methods disagree) and the clamp row by $-0.0021$, $-0.0045$ and $-0.0033$ (YOLO: both methods below zero).
+The second K-head alone moves the clamp AP by $-0.0023$, $-0.0050$ (both below zero) and $-0.0002$; its mean K at threshold 0 rises from $4.07$ to $4.16$ on HigherHRNet and from $3.14$ to $3.17$ on YOLO.
+In the error anatomy at true K the repeat moves the 9+-person row on HigherHRNet from $3.03\%$ to $3.54\%$, the rows for people of 128 pixels and more by up to 0.25 percentage points, and single joint types by up to 0.57 points.
+The repeat has the higher synthetic validation PGA ($0.9841$ against $0.9820$).
+
+\subsubsection{Analysis}
+
+\textbf{1. Training noise is about $0.001$ PGA on the overall rows}, as large as every overall difference in experiments 1 and 2. At true K it reaches $0.0019$ on HigherHRNet, and in crowds $0.003$ (6+) and $0.006$ (9+).
+
+\textbf{2. The paired intervals do not cover it.} With the recipe unchanged, three of the twelve overall PGA intervals exclude zero, and the YOLO clamp AP drops by $0.0045$ with both interval methods below zero. The image bootstrap holds each trained model fixed, so between two models an interval that excludes zero is not by itself evidence of an effect of this size.
+
+\textbf{3. K-head training noise is negligible in autonomous PGA but not in AP.} The clamp absorbs it in PGA (at most $0.0001$). At threshold 0 the clamp acts only where the K-head predicts more people than the detector returned, which splits people; the second K-head does this slightly more often and the clamp AP falls by up to $0.005$.
+
+\textbf{4. Earlier single-run results, re-judged against these draws.} Experiment 1's clamp losses are six to ten times the K-head draw, so its negative result is firmer. Experiment 2 has nothing separable from training noise: the HigherHRNet true-K loss ($-0.0016$) is the size of the noise draw on the same row ($-0.0019$), and its crowd gains on YOLO and RTMO exceed those detectors' draws but not HigherHRNet's. Crowd over-sampling ($+0.0013$, $+0.0017$, $+0.0005$ autonomous) is at most twice one draw and is not established either; the hierarchy with augmentation is far above the floor in AP, image evidence above it on YOLO and $1.5$--$2.5$ times it on the other two.
+
+\textbf{5. The headline depends on the run.} PGA parity with HigherHRNet holds in both runs. On YOLO the repeat's interval just excludes zero, so parity holds for one run of two. Being ahead of HigherHRNet AE at true K holds for the first run only. The AP gap is above zero on all three detectors in both runs. \texttt{d4422c37} was chosen as best before the repeat and is the better of the two, so single-run numbers from it are optimistic by about one draw.
+
+\textbf{6. The selection metrics do not rank runs.} The repeat has the higher synthetic validation PGA but is the weaker run on detections, and three K-heads with held-out accuracy between $0.893$ and $0.899$ give the same autonomous PGA.
+
+\subsubsection{What to do next}
+
+By the rule I set before the run, experiments 3 and 4 need a second training run each (about 4.7 GPU hours each) to be readable; I have asked Dean.
+I propose to fix the criterion before their results: a component counts on a row only if all four differences between its two runs and the two baseline runs have the same sign and their mean exceeds the baseline-to-baseline difference on that row.
+For the paper the headline should be reported for both runs, YOLO as within $0.002$--$0.003$ PGA rather than at parity, and the true-K lead over HigherHRNet AE dropped or qualified by run.
+
+\subsection{Scale Augmentation}
+
+\subsubsection{Motivation}
+
+The error anatomy showed that we are worse than YOLO and HigherHRNet on people of 128 pixels and more and better on smaller people, and the synthetic camera never moves from 10 metres.
+I tested whether training on zoomed and shifted scenes, with the image evidence warped to match, removes the large-person deficit.
+
+\subsubsection{Setup}
+
+With probability 0.5 per training graph the scene is zoomed about the frame centre by a log-uniform factor between 0.67 and 2.0 and shifted by up to 0.15 of the frame; the joint coordinates and the image are transformed together, joints that leave the frame are dropped, and the k-NN edges are rebuilt.
+Everything else is the \texttt{d4422c37} recipe (\texttt{b4866b9a}, then the standard augmented K-head), evaluated on the CPU with seed 0, and every difference is read against the seed-repeat draw on the same row.
+The first epoch took 2,144 seconds because it shared the CPU with the seed repeat's evaluation; the later epochs took about 700 seconds, so the augmentation itself costs no visible time.
+
+\subsubsection{Results}
+
+PGA on identical scenes, $\Delta$ = scale augmentation $-$ \texttt{d4422c37}, 95\% paired CIs, with the seed-repeat draw on the same row:
+
+{\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccc}
+\hline
+\textbf{Row} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+autonomous       & $-0.0002$ [$-0.0011$, $+0.0007$] & $-0.0001$ [$-0.0011$, $+0.0009$] & $+0.0000$ [$-0.0006$, $+0.0007$] \\
+\quad noise draw & $-0.0006$ & $-0.0010$ & $-0.0003$ \\
+true K           & $-0.0015$ [$-0.0026$, $-0.0004$] & $+0.0004$ [$-0.0007$, $+0.0015$] & $+0.0003$ [$-0.0005$, $+0.0011$] \\
+\quad noise draw & $-0.0019$ & $-0.0007$ & $+0.0003$ \\
+true K, 6+       & $-0.0026$ [$-0.0054$, $+0.0002$] & $+0.0013$ [$-0.0016$, $+0.0043$] & $+0.0013$ [$-0.0020$, $+0.0047$] \\
+\quad noise draw & $-0.0030$ & $+0.0007$ & $+0.0016$ \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+The targeted slice, error at true K by person height in pixels (\%, \texttt{d4422c37} $\rightarrow$ scale augmentation; seed-repeat draw in brackets):
+
+{\small
+\begin{tabular}{lccc}
+\hline
+\textbf{Height} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+128--256 px      & $1.98 \rightarrow 2.01$ [$+0.24$] & $1.90 \rightarrow 1.96$ [$+0.04$] & $1.24 \rightarrow 1.35$ [$+0.11$] \\
+256 px and more  & $1.54 \rightarrow 2.00$ [$+0.25$] & $2.10 \rightarrow 1.69$ [$-0.04$] & $1.29 \rightarrow 0.98$ [$+0.18$] \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+AP@OKS at threshold 0 ($K_{lb}$ THA) changes by $-0.0011$, $+0.0001$ and $-0.0011$ (seed-repeat draws $-0.0018$, $-0.0003$, $-0.0011$), and AP for 6+ people is unchanged at two decimals except RTMO ($0.57 \rightarrow 0.56$).
+The clamp AP falls by $0.0043$, $0.0053$ and $0.0040$, with both interval methods below zero.
+
+\subsubsection{Analysis}
+
+\textbf{1. No effect overall.} Every overall PGA and $K_{lb}$ AP difference is at or below the seed-repeat draw on the same row; the largest, the HigherHRNet true-K loss of $0.0015$, is smaller than the $0.0019$ that noise alone produced.
+
+\textbf{2. The targeted slice does not move where the deficit is.} People of 128--256 pixels hold most of the large-person joints and most of the excess errors against YOLO, and they are unchanged or worse on all three detectors. Only the 256-pixel-and-more bucket, about 6\% of the joints, moves: better on YOLO and RTMO at true K (about ten joints each), worse on HigherHRNet, near the noise draws on two of the three, and on RTMO it reverses in the autonomous row.
+
+\textbf{3. The clamp AP drop is a K-head effect, not a scale effect.} Every fresh K-head trained since \texttt{88389153} has a lower clamp AP and predicts slightly more people at threshold 0: the seed repeat, the second K-head on the same model, experiment 2 and now this one. \texttt{88389153} was the best of several K-heads, so as a baseline for the K-head AP rows it is optimistic.
+
+\textbf{4. Fine-tuning on COCO already covers the test scales.} COCO train and val have the same scale distribution, so the run could only test whether more and more varied large-person training helps; it does not.
+
+\subsubsection{What to do next}
+
+I do not adopt scale augmentation and keep \texttt{d4422c37}.
+The skip rule I proposed for second runs (first run clearly negative) does not fire, but the first run is at zero on every overall row and the targeted slice does not move, so a second run could at best find an effect below $0.001$ PGA that the four-comparison criterion could not confirm; I recommend skipping it and have asked Dean.
+
+\subsection{Joint-Level Image Features}
+
+\subsubsection{Motivation}
+
+The remaining deficit against YOLO and RTMO sits at the extremities (wrists, knees and ankles), and image evidence so far enters only along candidate bones, so I tested whether giving each joint its own image feature helps there.
+
+\subsubsection{Setup}
+
+The existing option \texttt{joint\_image\_features} adds the projected backbone feature at each joint after the first joint layer, through a zero-initialised encoder (74,240 extra parameters).
+Everything else is the \texttt{d4422c37} recipe (\texttt{ecbd7c7d}, then the standard augmented K-head), evaluated on the CPU with seed 0 and read against the seed-repeat draws.
+Because the result was negative I checked the loading: the checkpoint has the option on, the encoder trained well away from zero, and every evaluator loads the weights strictly.
+
+\subsubsection{Results}
+
+PGA on identical scenes, $\Delta$ = joint features $-$ \texttt{d4422c37}, 95\% paired CIs, with the seed-repeat draw on the same row:
+
+{\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccc}
+\hline
+\textbf{Row} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+autonomous       & $-0.0021$ [$-0.0032$, $-0.0010$] & $-0.0018$ [$-0.0031$, $-0.0006$] & $-0.0014$ [$-0.0026$, $-0.0003$] \\
+\quad noise draw & $-0.0006$ & $-0.0010$ & $-0.0003$ \\
+$K_{lb}$ THA     & $-0.0021$ [$-0.0031$, $-0.0011$] & $-0.0019$ [$-0.0030$, $-0.0009$] & $-0.0011$ [$-0.0020$, $-0.0003$] \\
+\quad noise draw & $-0.0007$ & $-0.0010$ & $+0.0000$ \\
+true K           & $-0.0032$ [$-0.0045$, $-0.0020$] & $-0.0016$ [$-0.0030$, $-0.0003$] & $-0.0017$ [$-0.0029$, $-0.0005$] \\
+\quad noise draw & $-0.0019$ & $-0.0007$ & $+0.0003$ \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+The targeted slice, change in error at true K for the extremities (percentage points, left / right):
+
+{\small
+\begin{tabular}{lccc}
+\hline
+\textbf{Joint} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+wrists & $-0.04$ / $+0.61$ & $+0.32$ / $+0.73$ & $+0.00$ / $+0.23$ \\
+knees  & $+0.46$ / $+0.49$ & $+0.08$ / $+0.00$ & $+0.67$ / $+0.52$ \\
+ankles & $+0.40$ / $+0.68$ & $+0.44$ / $+0.53$ & $+0.36$ / $+0.40$ \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+AP@OKS at threshold 0 ($K_{lb}$ THA) changes by $-0.0044$ on HigherHRNet (both interval methods below zero; seed-repeat draw $-0.0018$), $-0.0008$ on YOLO and $-0.0003$ on RTMO.
+THA on COCO ground-truth keypoints falls from $0.9867$ to $0.9855$.
+The best epoch was 8 of 15, and the new K-head has the lowest held-out accuracy so far ($0.876$).
+
+\subsubsection{Analysis}
+
+\textbf{1. It is worse everywhere.} All twelve overall PGA rows fall with intervals below zero, the autonomous rows by two to five times the seed-repeat draw, and the ground-truth THA falls too. A loss with the same sign on every row and every detector is not training noise.
+
+\textbf{2. The targeted joints get worse, not better.} Wrists, knees and ankles lose 0.3--0.7 percentage points on most of the three detectors, more than the per-type noise on YOLO and RTMO.
+
+\textbf{3. In AP only HigherHRNet loses} beyond the noise; YOLO and RTMO are within it.
+
+\textbf{4. A likely reason, not tested:} a feature at a single joint describes local appearance, which looks alike for the same body part of different people, so it gives the attention a cue that does not separate people; evidence along a bone compares the image between two joints and stays discriminative. The model fits the synthetic data no worse, so the loss appears only on real images.
+
+\subsubsection{What to do next}
+
+I do not adopt joint-level image features and keep \texttt{d4422c37}.
+I will not run a second training run: the skip rule fires on HigherHRNet and RTMO and narrowly misses YOLO (1.8 times the draw), but every row has the same negative sign.
+None of the four experiments produced a component to combine, so the next GPU time is better spent on repeat runs of the arms the paper claims, starting with the no-crowd model to settle crowd over-sampling; that is Dean's call.
+
+Dean approved it, and at 13:41 I started a second run of the \texttt{372658c6} recipe (\texttt{ce0d089d}, saved configuration identical) with its augmented K-head.
+I fixed the test before the result: crowd over-sampling counts on a row only if all four crowd-minus-no-crowd differences have the same sign and their mean exceeds the larger of the two run-to-run differences on that row.
+
+\subsection{No-Crowd Repeat --- Is Crowd Over-Sampling Real?}
+
+\subsubsection{Motivation}
+
+Crowd over-sampling is part of the best pipeline, but its single-run gain (\texttt{d4422c37} $-$ \texttt{372658c6}: $+0.0013$ / $+0.0017$ / $+0.0005$ autonomous PGA) was at most twice one training-noise draw, so one pair of runs could not tell whether it is real.
+
+\subsubsection{Setup}
+
+I trained the unchanged \texttt{372658c6} recipe a second time (\texttt{ce0d089d}, best epoch 12; K-head held-out accuracy $0.885$), which gives two crowd runs (C1 \texttt{d4422c37}, C2 \texttt{b2cdc656}) and two no-crowd runs (N1 \texttt{372658c6}, N2 \texttt{ce0d089d}).
+Every arm was evaluated on the CPU with seed 0 on identical scenes.
+The test, fixed before the result: crowd over-sampling counts on a row only if all four crowd $-$ no-crowd differences (C1$-$N1, C1$-$N2, C2$-$N1, C2$-$N2) have the same sign and their mean exceeds the larger of the two run-to-run differences (C2$-$C1, N2$-$N1) on that row.
+
+\subsubsection{Results}
+
+Mean of the four differences, PGA with THA, and whether the test passes (\checkmark) or fails ($\times$):
+
+{\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccc}
+\hline
+\textbf{Row} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+autonomous                  & $+0.0012$ \checkmark & $+0.0009$ $\times$ (draw $0.0010$) & $+0.0005$ \checkmark \\
+$K_{lb}$                    & $+0.0009$ \checkmark & $+0.0008$ $\times$ (sign) & $+0.0006$ \checkmark \\
+true K                      & $+0.0013$ $\times$ (draw $0.0019$) & $+0.0008$ \checkmark & $+0.0002$ $\times$ (sign) \\
+6+ people, autonomous       & $+0.0040$ \checkmark & $+0.0041$ \checkmark & $+0.0030$ \checkmark \\
+6+ people, $K_{lb}$         & $+0.0030$ \checkmark & $+0.0039$ \checkmark & $+0.0028$ \checkmark \\
+6+ people, true K           & $+0.0036$ \checkmark & $+0.0032$ \checkmark & $+0.0027$ \checkmark \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+AP@OKS at threshold 0 with $K_{lb}$ THA, mean of the four differences:
+
+{\small
+\begin{tabular}{lccc}
+\hline
+\textbf{Images} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+all          & $+0.0031$ \checkmark & $+0.0006$ \checkmark & $+0.0006$ $\times$ (sign) \\
+1--5 people  & $+0.0002$ $\times$ & $+0.0002$ $\times$ & $-0.0000$ $\times$ \\
+6+ people    & $+0.0051$ \checkmark & $+0.0035$ \checkmark & $+0.0007$ \checkmark \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+No single crowd $-$ no-crowd pair has an AP interval that excludes zero under both interval methods.
+The autonomous joint error rate (\%) is lower for both crowd runs than for both no-crowd runs on every detector: 2.05 / 2.12 against 2.22 / 2.29 on HigherHRNet, 1.81 / 1.80 against 1.93 / 1.97 on YOLO, and 1.24 / 1.26 against 1.35 / 1.31 on RTMO.
+
+\subsubsection{Analysis}
+
+\textbf{1. Crowd over-sampling is real where it is aimed.} In scenes with six or more people every row on every detector passes, with all twelve pairwise differences per detector positive and a mean gain of 0.003--0.004 PGA.
+
+\textbf{2. Over all scenes it is small and uneven.} Five of the nine overall rows pass, and every overall mean is between $+0.0002$ and $+0.0013$; YOLO misses the autonomous row by $0.0001$.
+
+\textbf{3. The AP gain sits in crowds.} Images with six or more people gain $+0.0051$ / $+0.0035$ / $+0.0007$ AP, images with one to five people gain nothing, and the all-image gain is $+0.0031$ on HigherHRNet only. The support is the agreement of the four pairs, not any one interval.
+
+\textbf{4. The first estimate was a good draw.} The first crowd run (C1) is above the second (C2) on every overall row on HigherHRNet and YOLO, and the single-pair AP estimate ($+0.0040$) overstates the replicated one ($+0.0031$).
+
+\textbf{5. This is the only training change so far that reproducibly moved AP}, and it moved it in the crowded scenes, which hold 39\% of the annotated people in val2017 and so carry most of the AP gap.
+
+\subsubsection{What to do next}
+
+I keep crowd over-sampling in the pipeline and \texttt{d4422c37} stays the model of record.
+For the paper the claim is a gain of 0.003--0.004 PGA in scenes with six or more people on all three detectors, replicated over two runs per arm, with an all-scene effect of at most 0.0013 PGA that is not consistent on every row.
+Because crowd emphasis is the one lever that moved AP, a stronger version of it (a higher over-sampling factor, or a crowd-only fine-tune) is a candidate for the AP work, to be judged on two runs per arm after the AP-gap decomposition.
+
+\section[2026/10/29]{Thursday, 29 October 2026}
+
+\subsection{Where the AP Gap Comes From}
+
+\subsubsection{Motivation}
+
+Four experiments chosen from PGA diagnostics did not move AP, and AP weights crowded scenes about three times more than PGA does, so before choosing another lever I measured where the remaining AP gap to the native grouping (0.0076 / 0.0050 / 0.0024 at threshold 0) comes from.
+
+\subsubsection{Setup}
+
+I compared the native grouping with ours ($K_{lb}$ THA, \texttt{d4422c37}) on every val2017 image with a new script, \texttt{analysis/ap\_gap\_anatomy.py}, and repeated it for the second training run (\texttt{b2cdc656}) and at threshold 0.1 to check that the picture is stable.
+Each detection is attributed to the annotated person whose keypoint it matches, and each person's best-matching instance is checked slot by slot: correct, another person's joint, a joint of no person, or empty.
+An instance that is no annotated person's best match I call a no-person instance; these are duplicates, unannotated people and false positives, not only low-confidence ghosts.
+At threshold 0 our instances use exactly the detector's joints in the same number of instances, so ours is a re-shuffle of the native joints within each joint type.
+The script also re-scores both methods with the true OKS (oracle ranking) and gives our instances the native instance scores, to separate grouping from ranking.
+
+\subsubsection{Results}
+
+First training run, threshold 0 (second run in brackets where it differs):
+
+{\small\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lccc}
+\hline
+\textbf{Read-out} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+AP gap                                   & 0.0076 (0.0094) & 0.0049 (0.0053) & 0.0024 (0.0034) \\
+gap at OKS 0.50                          & $-0.0015$ ($-0.0022$) & $+0.0009$ & $0.0000$ \\
+gap, OKS 0.50--0.70 / 0.75--0.95         & 0.0029 / 0.0123 & 0.0033 / 0.0066 & 0.0038 / 0.0009 \\
+gap with oracle ranking                  & 0.0031 (0.0047) & 0.0050 (0.0041) & 0.0020 (0.0030) \\
+gap with native instance scores          & 0.0082 (0.0115) & 0.0047 (0.0051) & 0.0024 (0.0034) \\
+slots lost / won against native          & 528 / 181 & 164 / 27 & 50 / 1 \\
+lost joint went to a no-person instance  & 70\% & 45\% & 12\% \\
+lost slots, native's joint more confident & 71\% & 73\% & 68\% \\
+\quad median confidence, native / ours   & 0.59 / 0.27 & 0.92 / 0.70 & 0.98 / 0.59 \\
+won slots, native's joint more confident  & 81\% & 44\% & 1 of 1 \\
+people lost / won at OKS 0.75            & 121 / 17 & 44 / 4 & 5 / 0 \\
+\quad lost, in 6+ scenes / one slot changed & 91 / 53 & 30 / 18 & 3 / 4 \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+At threshold 0.1 the pattern is the same, with one extra failure: a slot native fills correctly that ours leaves empty (144 / 109 / 38 slots).
+Oracle ranking no longer shrinks the HigherHRNet gap there (0.0068 against 0.0059).
+Swapping the native instances back in by crowd size recovers about half of the HigherHRNet gap and about two-thirds of the YOLO gap from scenes with six or more people, most of the rest from two to five people, and nothing from single-person images.
+These swaps are not additive and are unstable on RTMO, so I read them only as a ranking of the bins.
+
+\subsubsection{Analysis}
+
+\textbf{1. The gap is wrong joints in people we find, not missed people.} At OKS 0.50 ours is level with or ahead of native on all three detectors, and on HigherHRNet and YOLO the gap at the strict thresholds is 1.6--4.2 times the gap at the loose ones. Per-threshold AP moves in steps of about 0.0095, so I only read bands.
+
+\textbf{2. It is not ranking.} Giving our instances the native scores recovers nothing on any detector. Oracle ranking halves the gap only on HigherHRNet at threshold 0, where our misplaced confident joints turn no-person instances into confident false positives. A rescoring head is therefore not the lever.
+
+\textbf{3. The errors are few and one-sided.} Ours loses three to fifty times more correct slots than it gains, 0.78\% of the HigherHRNet slots. About 40--45\% of the people who drop below OKS 0.75 differ from native in a single joint, and about 70\% of them are in scenes with six or more people.
+
+\textbf{4. Where the joint goes depends on the detector}: mostly into a no-person instance on HigherHRNet, evenly split on YOLO, and into a neighbour on RTMO.
+
+\textbf{5. Detection confidence would have separated most of the errors, and the model never sees it.} In about 70\% of the lost slots the joint native kept is the more confident one, and the graph's node features are only position and a constant visibility. The signal is not free: where ours beats native, native's wrong joint was the more confident one in 81\% of the HigherHRNet slots, so a confidence rule has to be soft.
+
+\subsubsection{What to do next}
+
+I drop instance rescoring as a lever.
+The most direct test is a confidence-aware THA: a soft term in the per-type assignment cost that keeps a joint with clusters of similar confidence. It needs no retraining and runs on the CPU in one to two hours across the three detectors.
+Its single weight must be chosen without the reported numbers, either by a two-fold split of val2017 or on detector output for a train2017 subset.
+Giving the model confidence as an input would be the stronger version, but synthetic training data has no confidences, so it needs simulated or real-detector training data and two runs per arm.
+Crowd emphasis remains the third option.
+Which to run is Dean's call.
+Dean chose the confidence-aware THA.
+
+\subsection{Confidence-Aware THA}
+
+\subsubsection{Motivation}
+
+The AP-gap anatomy showed that in about 70\% of the slots our grouping gets wrong, the joint native kept is the more confident one, and the model never sees confidence, so I tested whether adding confidence to the assignment alone, with no retraining, closes part of the gap.
+
+\subsubsection{Setup}
+
+I added one term to the per-type Hungarian cost of THA: $\lambda\,|\log c_j - \log g_k|$, where $c_j$ is the detector confidence of joint $j$ and $g_k$ the geometric-mean confidence of cluster $k$'s joints of the other types (new file \texttt{tha\_conf.py}; $\lambda = 0$ is the existing THA exactly).
+I swept $\lambda$ from 0 to 0.8 on both crowd training runs, all three detectors, threshold 0, for the $K_{lb}$ and clamp rows.
+To keep the reported numbers free of tuning I split val2017 into two folds, chose one shared $\lambda$ for the three detectors on one fold and applied it to the other, and scored the combined result with paired AP intervals.
+I also checked PGA on the fixed scene sets, looking up each detection's confidence in the AP cache.
+$\lambda = 0$ reproduced the verified results exactly once I matched the thread count: k-means inside THA gives slightly different labels with 2 threads than with 4 (127 HigherHRNet images, AP $-0.00015$).
+
+\subsubsection{Results}
+
+AP change from the confidence term, cross-fitted, first / second training run (* = both interval methods exclude zero):
+
+{\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccc}
+\hline
+\textbf{Row} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+$K_{lb}$ THA                    & $+0.0007$ / $+0.0030$ & $+0.0004$ / $+0.0003$ & $-0.0010$ / $+0.0000$ \\
+clamp THA                       & $+0.0063$* / $+0.0063$* & $+0.0098$* / $+0.0114$* & $+0.0119$* / $+0.0155$* \\
+clamp with confidence $-$ $K_{lb}$ & $-0.0043$* / $-0.0047$* & $-0.0078$* / $-0.0104$* & $-0.0065$* / $-0.0052$* \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+The chosen $\lambda$ was 0.2 for the clamp row on every fold, detector and run, and varied between 0.025 and 0.2 for the $K_{lb}$ row.
+PGA at $\lambda = 0.2$ moved by at most 0.0004 overall and 0.0007 in scenes with six or more people, in both directions.
+
+\subsubsection{Analysis}
+
+\textbf{1. It does not close the gap it was aimed at.} On the $K_{lb}$ row, which is the headline AP row and the one the anatomy measured, no detector clears the interval rule in either run, the chosen $\lambda$ is unstable, and the native gap barely moves (0.0076 to 0.0070 on HigherHRNet). Small weights are too weak to undo the swaps and larger ones damage correct slots.
+
+\textbf{2. It helps where the K-head over-counts.} When the clamp asks for more clusters than the detector has instances, the extra clusters split real people; the confidence term keeps confident joints together and recovers 52--75\% of the clamp row's AP deficit to $K_{lb}$, with the same $\lambda$ everywhere. It still ends below $K_{lb}$ THA on every detector.
+
+\textbf{3. PGA is unchanged}, as expected: the PGA scenes contain only detections matched to annotated people, so confidence has little to separate there.
+
+\textbf{4. The per-slot signal did not turn into a cluster-level cost.} Native's joint being the more confident one in most lost slots is a statement about pairs of joints, and a term that compares a joint with a whole cluster's confidence does not act on those pairs strongly enough.
+
+\subsubsection{What to do next}
+
+I do not adopt confidence-aware THA for the headline; $K_{lb}$ THA stays the AP row.
+If the paper reports an autonomous AP row with the K-head, the confidence term at $\lambda = 0.2$ is a better version of it at no PGA cost, reported with the cross-fitting protocol.
+The gap on the $K_{lb}$ row now points to a model-side change, either confidence as an input or stronger crowd emphasis, both of which need GPU time and two runs per arm.
+
+\subsection{Stronger Crowd Emphasis}
+
+\subsubsection{Motivation}
+
+Crowd over-sampling at 3$\times$ is the only training change that has moved AP reproducibly, all of it in scenes with six or more people, and the AP-gap anatomy put about 70\% of the people we lose in those scenes.
+Confidence-aware THA did not touch the $K_{lb}$ row, so I tested whether doubling the crowd emphasis closes more of the gap.
+
+\subsubsection{Setup}
+
+I trained two runs with crowd over-sampling at 6$\times$ instead of 3$\times$ (crowd images go from about 29\% to about 45\% of samples, same epoch size, nothing else changed), each with its own augmented K-head.
+I compared them with the two 3$\times$ runs in a 2$\times$2 design, using the criterion I fixed before the result: 6$\times$ counts on a row only if all four 6$\times$ $-$ 3$\times$ differences share a sign and their mean exceeds the larger run-to-run difference on that row.
+The primary row was AP with $K_{lb}$ THA on all val2017 images at threshold 0, and I would adopt 6$\times$ only if it passed positive on at least two of three detectors with no PGA row passing negative.
+All evaluation ran on the CPU with four threads.
+
+\subsubsection{Results}
+
+AP, $K_{lb}$ THA, all images, threshold 0 (two 3$\times$ runs, two 6$\times$ runs, native; mean $\Delta$ = mean of the four 6$\times$ $-$ 3$\times$ differences):
+
+{\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccccccc}
+\hline
+\textbf{Detector} & \textbf{3$\times$ (1)} & \textbf{3$\times$ (2)} & \textbf{6$\times$ (1)} & \textbf{6$\times$ (2)} & \textbf{Native} & \textbf{Mean $\Delta$} & \textbf{Largest draw} \\
+\hline
+HigherHRNet  & 0.5758 & 0.5740 & 0.5779 & 0.5738 & 0.5834 & $+0.0009$ & 0.0041 \\
+YOLO11x-pose & 0.6616 & 0.6613 & 0.6624 & 0.6614 & 0.6666 & $+0.0004$ & 0.0010 \\
+RTMO-L       & 0.6436 & 0.6426 & 0.6426 & 0.6427 & 0.6460 & $-0.0005$ & 0.0011 \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+Secondary rows, mean $\Delta$ (6$\times$ $-$ 3$\times$) and whether the row passes the 2$\times$2 rule:
+
+{\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccc}
+\hline
+\textbf{Row} & \textbf{HigherHRNet} & \textbf{YOLO11x-pose} & \textbf{RTMO-L} \\
+\hline
+AP $K_{lb}$, 6+ images (294)        & $+0.0002$ & $-0.0002$ & $-0.0016$ (passes) \\
+PGA autonomous (clamp THA)          & $-0.0005$ & $+0.0001$ & $+0.0001$ \\
+PGA $K_{lb}$ THA                    & $-0.0004$ & $+0.0001$ & $+0.0003$ \\
+PGA true $K$ THA                    & $-0.0006$ & $+0.0004$ & $+0.0004$ \\
+PGA autonomous, $K_{gt} \geq 6$     & $-0.0004$ & $+0.0010$ & $+0.0011$ \\
+\hline
+\end{tabular}
+}
+
+\vspace{0.5em}
+
+The primary row passes on none of the three detectors, and no PGA row passes on any detector.
+The correct joints we lose to native barely change: 528 and 564 for the two 3$\times$ runs on HigherHRNet against 509 and 561 for the two 6$\times$ runs.
+
+\subsubsection{Analysis}
+
+\textbf{1. Doubling the crowd emphasis does nothing.} Every primary mean is smaller than the difference between two runs of the same recipe, and the AP-gap anatomy shows the same per-joint swaps as before, so the gain from crowd over-sampling is already used up at 3$\times$.
+
+\textbf{2. The only crowd row that passes goes the wrong way.} RTMO AP on 6+ images drops by 0.0016 in all four pairs; it is small and RTMO has no grouping headroom, but it is the opposite of the intent.
+
+\textbf{3. AP training noise on HigherHRNet is about 0.004.} The two 6$\times$ runs differ by 0.0041 AP, and the four runs together span 0.5738--0.5779, so the HigherHRNet AP gap to native is 0.0055--0.0096 depending on the run: always above zero, but one run does not fix its size. On YOLO and RTMO the spread is about 0.001.
+
+\textbf{4. PGA is unchanged}, within the run-to-run spread on every row and detector.
+
+\subsubsection{What to do next}
+
+I keep 3$\times$ (\texttt{d4422c37}) as the model of record.
+The paper should give the HigherHRNet AP gap as a range over runs rather than a single number.
+Crowd emphasis is exhausted as a lever; the remaining model-side option is detector confidence as an input, which needs detections with confidences on the training images and is a substantially larger change.

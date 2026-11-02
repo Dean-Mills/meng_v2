@@ -131,6 +131,8 @@ class PGGATHierConfig(BaseModel):
     image_feat_dim: int = 32              # trainable 1x1 projection of the backbone map
     bone_image_samples: int = 5           # points sampled along each candidate bone
     joint_image_features: bool = False    # also add the feature at each joint to its state
+    # Joint graph (PEng exp 2). False → the preprocessor's kNN edges only.
+    same_type_edges: bool = False         # joint layers also link every pair of same-type joints
 
     @computed_field
     @property
@@ -319,6 +321,13 @@ class TrainingConfig(BaseModel):
     # people are drawn crowd_oversample times as often (WeightedRandomSampler, same epoch size).
     crowd_oversample: Optional[float] = None
     crowd_min_people: Optional[int]   = None  # default 6 when crowd_oversample is set
+    # Scale augmentation of training graphs (augment.scale_augment; PEng exp 3): with probability
+    # scale_aug_prob, zoom s ~ logU(scale_aug_min, scale_aug_max) about the frame centre + shift
+    # U(+-scale_aug_shift) frame units, applied to coordinates and graph.image; off when None / 0.
+    scale_aug_prob:  Optional[float] = None
+    scale_aug_min:   float = 0.67
+    scale_aug_max:   float = 2.0
+    scale_aug_shift: float = 0.15
     # Loader
     batch_size:    int   = 4
     num_workers:   int   = 4

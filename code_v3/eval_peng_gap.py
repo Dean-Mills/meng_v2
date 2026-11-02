@@ -52,6 +52,7 @@ from preprocessor import PosePreprocessor
 from evaluator import compute_pga, predict_knn
 from eval_cop_kmeans import predict_cop_kmeans
 from eval_hungarian_grouping import predict_tha
+from k_head_hist import predict_k
 
 SELECTORS = ["oracle", "eff", "pred", "lb", "clamp", "kdet"]
 METHODS = {
@@ -78,12 +79,17 @@ def load_models(checkpoint: Path, k_head_path, device: str):
                            use_depth=mcfg.use_depth)
     k_head = None
     if k_head_path is not None:
-        from k_head import KEstimationHead
-        k_head = KEstimationHead(embedding_dim=mcfg.output_dim).to(device)
-        k_head.load_state_dict(torch.load(k_head_path, map_location=device, weights_only=False)["k_head_state"])
+        kh_ckpt = torch.load(k_head_path, map_location=device, weights_only=False)
+        if kh_ckpt.get("k_head_type") == "hist":
+            from k_head_hist import KHistHead
+            k_head = KHistHead(embedding_dim=mcfg.output_dim).to(device)
+        else:
+            from k_head import KEstimationHead
+            k_head = KEstimationHead(embedding_dim=mcfg.output_dim).to(device)
+        k_head.load_state_dict(kh_ckpt["k_head_state"])
         k_head.eval()
     print(f"Loaded {type(gat).__name__} (epoch {ckpt.get('epoch', '?')})"
-          + (" + K-head" if k_head is not None else ", no K-head"))
+          + (f" + {type(k_head).__name__}" if k_head is not None else ", no K-head"))
     return gat, k_head, pre
 
 
@@ -175,7 +181,7 @@ def main():
                 "kdet": len(np.unique(ae_ids[m_idx])),
             }
             if k_head is not None:
-                k_pred = max(1, k_head.predict(emb))
+                k_pred = max(1, predict_k(k_head, emb, jt))
                 ks.update(pred=k_pred, clamp=max(k_pred, k_lb))
             rec = {
                 "image_id": int(f.stem), "n": int(len(m_idx)), "K_gt": int(d["K_gt"]),

@@ -165,6 +165,23 @@ def rank_within_groups(group: torch.Tensor, score: torch.Tensor) -> torch.Tensor
 # Model
 # ─────────────────────────────────────────────────────────────────────────────
 
+def add_same_type_edges(edge_index: torch.Tensor, jt: torch.Tensor, n_types: int,
+                        batch: Optional[torch.Tensor] = None) -> torch.Tensor:
+    """Union of edge_index with every ordered pair of distinct same-type joints of one graph.
+
+    The kNN-16 joint graph holds only ~22 % of the other people's same-type joints at 9+ people
+    (diagnostics 2026-10-26), so the repulsion heads (same-type subset of these edges) miss most of
+    the joints they must separate from. Pairs never cross graphs of a batch.
+    """
+    n = jt.numel()
+    group = jt if batch is None else batch * n_types + jt
+    same = group.unsqueeze(0) == group.unsqueeze(1)
+    same.fill_diagonal_(False)
+    s, d = same.nonzero(as_tuple=True)
+    key = torch.unique(torch.cat([edge_index[0] * n + edge_index[1], s * n + d]))
+    return torch.stack([key // n, key % n])
+
+
 class PGGATHierEmbedding(nn.Module):
     """Hierarchical PG-GAT embedding network (drop-in for SAGATEmbedding)."""
 
@@ -320,6 +337,8 @@ class PGGATHierEmbedding(nn.Module):
         jt = data.joint_types
         pos = data.x[:, :2]
         edge_index = data.edge_index
+        if c.same_type_edges:
+            edge_index = add_same_type_edges(edge_index, jt, c.num_joint_types, getattr(data, "batch", None))
         x = torch.cat([data.x, self.joint_embedding(jt)], dim=-1)
         jef, st_mask = self._joint_edge_features(edge_index, jt, pos)
 

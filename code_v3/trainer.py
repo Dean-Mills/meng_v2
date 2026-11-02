@@ -481,6 +481,13 @@ def train(cfg: ExperimentConfig, device: str, config_path: Path = None,
                     from image_evidence import attach_images
                     graphs = attach_images(graphs, batch)
 
+            # Scale augmentation (training graphs only; before joint dropout)
+            if tc.scale_aug_prob:
+                from augment import scale_augment
+                graphs = [scale_augment(g, preprocessor, tc.scale_aug_prob, tc.scale_aug_min,
+                                        tc.scale_aug_max, tc.scale_aug_shift) for g in graphs]
+                graphs = [g for g in graphs if g is not None]
+
             # Detection-realistic augmentation (training graphs only)
             if tc.joint_drop_max or tc.force_visible:
                 from augment import detection_augment

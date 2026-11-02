@@ -38,6 +38,7 @@ from eval_end_to_end import build_graph_from_detections
 from eval_hungarian_grouping import predict_tha
 from eval_k_selection import k_lower_bound
 from eval_peng_gap import letterbox, load_models
+from k_head_hist import predict_k
 from evaluator import predict_knn
 
 
@@ -118,7 +119,7 @@ def main():
                     k_lb = min(k_lower_bound(jt), n)
                     ks = {"lb_tha": k_lb, "oracle_tha": max(1, min(n_gt, n))}
                     if k_head is not None:
-                        k_pred = max(1, min(int(k_head.predict(emb)), n))
+                        k_pred = max(1, min(int(predict_k(k_head, emb, jt)), n))
                         ks.update(pred_knn=k_pred, clamp_tha=max(k_pred, k_lb))
                     labels, cache = {}, {}
                     for r, k in ks.items():

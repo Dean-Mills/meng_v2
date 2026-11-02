@@ -39,6 +39,7 @@ from dataloader import create_dataloader
 from dataset import PoseDataset
 from eval_peng_gap import load_models
 from k_head import KEstimationHead
+from k_head_hist import KHistHead, k_head_output, predict_k
 
 
 def graphs_of(batch, pre, gat, drop_max, generator=None):
@@ -61,6 +62,9 @@ def main():
     ap.add_argument("--n_val", type=int, default=2000, help="held-out COCO train images for selection")
     ap.add_argument("--epochs", type=int, default=10)
     ap.add_argument("--lr", type=float, default=1e-3)
+    ap.add_argument("--head", choices=["mlp", "hist"], default="mlp",
+                    help="mlp = KEstimationHead (MEng); hist = KHistHead (+ per-type counts and K_lb)")
+    ap.add_argument("--max_images", type=int, default=None, help="smoke test: cap train / held-out images")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     a = ap.parse_args()
 
@@ -81,13 +85,15 @@ def main():
     full = PoseDataset(CocoAdapter(img_dir=a.coco_train_dir, ann_file=a.coco_train_ann, use_depth=False))
     perm = torch.randperm(len(full), generator=torch.Generator().manual_seed(0)).tolist()
     val_idx, train_idx = perm[:a.n_val], perm[a.n_val:]
+    if a.max_images:
+        val_idx, train_idx = val_idx[:a.max_images], train_idx[:a.max_images]
     train_loader = create_dataloader(Subset(full, train_idx), batch_size=4, shuffle=True, num_workers=4)
     val_loader = create_dataloader(Subset(full, val_idx), batch_size=4, shuffle=False, num_workers=4)
 
-    k_head = KEstimationHead(embedding_dim=emb_dim).to(a.device)
+    k_head = (KHistHead if a.head == "hist" else KEstimationHead)(embedding_dim=emb_dim).to(a.device)
     opt = torch.optim.Adam(k_head.parameters(), lr=a.lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=a.epochs, eta_min=1e-5)
-    print(f"K-head (aug) on frozen {type(gat).__name__} from {a.checkpoint}")
+    print(f"K-head (aug, {type(k_head).__name__}) on frozen {type(gat).__name__} from {a.checkpoint}")
     print(f"Run ID {run_id}; train {len(train_idx)} / held-out {len(val_idx)} COCO train images; "
           f"joint drop U(0, {a.joint_drop_max}), v = 1; {a.epochs} epochs")
 
@@ -100,7 +106,8 @@ def main():
                 g = g.to(a.device)
                 with torch.no_grad():
                     emb = gat(g)
-                loss = F.l1_loss(k_head(emb), torch.tensor(float(g.num_people), device=a.device))
+                loss = F.l1_loss(k_head_output(k_head, emb, g.joint_types),
+                                 torch.tensor(float(g.num_people), device=a.device))
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
@@ -115,7 +122,7 @@ def main():
             for batch in val_loader:
                 for g in graphs_of(batch, pre, gat, a.joint_drop_max, gen):
                     g = g.to(a.device)
-                    kp, kg = k_head.predict(gat(g)), int(g.num_people)
+                    kp, kg = predict_k(k_head, gat(g), g.joint_types), int(g.num_people)
                     exact += kp == kg
                     off1 += abs(kp - kg) <= 1
                     nv += 1
@@ -127,7 +134,7 @@ def main():
         state = {"epoch": epoch, "val_k_accuracy": rec["val_exact"], "gat_state": ckpt["gat_state"],
                  "k_head_state": k_head.state_dict(), "head_state": ckpt.get("head_state"),
                  "config": ckpt["config"], "backbone_checkpoint": str(a.checkpoint),
-                 "joint_drop_max": a.joint_drop_max}
+                 "joint_drop_max": a.joint_drop_max, "k_head_type": a.head}
         if rec["val_exact"] > best:
             best = rec["val_exact"]
             torch.save(state, save_dir / "best.pt")
