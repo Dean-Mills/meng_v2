@@ -23,7 +23,7 @@ whose grouping mechanism is tied to the features of the detector it was trained 
     and only the keypoint coordinates, visibility flags and joint types cross the interface (dashed line).
     The frozen PG-GAT embeds the detections, the frozen K-head estimates the person count $\hat K$,
     and $k$-means produces the partition.
-    Ground truth is used only for evaluation: detections are matched to the annotated keypoints,
+    Ground truth (GT) is used only for evaluation: detections are matched to the annotated keypoints,
     and both the PG-GAT partition and the detector's retained native assignment are scored on the matched set.}
     \label{fig:pipeline}
 \end{figure*}

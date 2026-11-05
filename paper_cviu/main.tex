@@ -24,13 +24,13 @@
 
 \begin{frontmatter}
 
-%% WORKING TITLE - Dean decides (dissertation title tension: "skeleton-aware" vs the action-recognition collision, guide section 9).
-\title{Detector-independent multi-person pose grouping with a skeleton-aware graph attention network}
+%% Title changed 2026-11-03: "skeleton-aware" dropped because of the name collision with skeleton-based action recognition (guide D15).
+\title{Detector-independent keypoint grouping for multi-person pose estimation with a graph attention network}
 
 \author[1]{Dean \snm{Mills}\corref{cor1}}
 \cortext[cor1]{Corresponding author.}
 \ead{deansmills@gmail.com}
-%% Co-author(s): Dean decides (supervisor Mr H. Grobler?).
+\author[1]{Hans \snm{Grobler}}
 \address[1]{Department of Electrical, Electronic and Computer Engineering, University of Pretoria, Pretoria, South Africa}
 
 %% Journal-set dates; leave commented until acceptance.
@@ -61,9 +61,9 @@
 \input{sections/08_conclusion}
 \input{sections/09_backmatter}
 
-%% Bibliography: the dissertation's verified file (2026-09-03) via the symlink diss_thesis.bib (TeX Live blocks ".." paths), reused as-is for now.
-%% A paper-specific subset with DOIs (paper.bib) replaces it once the cited set is settled (guide section 5, item 2).
+%% Bibliography: paper.bib = the 46 cited entries copied from the dissertation's verified file (via the symlink diss_thesis.bib), plus the DOIs found on Crossref (guide D14).
+%% A newly cited entry goes into paper.bib, not into the dissertation's file.
 \bibliographystyle{model2-names}
-\bibliography{diss_thesis}
+\bibliography{paper}
 
 \end{document}

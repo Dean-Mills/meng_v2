@@ -79,7 +79,7 @@ The main contributions are as follows.
     associative embedding on the same detections.
     \item \textbf{Evidence that the embedding, not the grouping head, limits accuracy}: three learned
     grouping heads and ten modularity-based clustering variants did not improve on $k$-means
-    once the model is applied to real data, while changes to the embedding produced the gains
+    once the model is applied to real data, while changes to the embedding produced gains
     that transfer to real data. Attention analysis shows that PG-GAT directs its attention along
     same-person skeletal edges and away from same-type edges.
     \item \textbf{A measured cost of modularity}: with the K-head trained on the frozen embeddings,
@@ -87,7 +87,7 @@ The main contributions are as follows.
     and RTMO-L~\citep{lu2024rtmo}, it trails the native grouping of all three detectors
     by 0.020 to 0.022 on matched detections.
     At the system level the cost is 0.048 AP on identical joints,
-    concentrated in scenes with more people than the synthetic training data contained.
+    rising to 0.076 in scenes with six or more people, beyond the synthetic training range.
     \item \textbf{Documented negative results}, in the configurations tested,
     for a hyperbolic embedding, a triplet-based graph primitive and appearance features,
     and the mechanism of failure in each case.

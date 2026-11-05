@@ -64,7 +64,9 @@
 \node[plain] (knn) at ($(kp.south east |- cat.south) + (-9mm,-3mm)$) [anchor=east]
   {$k$NN edge $(i,j)$\\ ($k = 16$)};
 
-\node[cc] (edgecat) at ($(cat.east)!0.5!(geo.east) + (10mm,0)$) {$\|$};
+%% concat circle clear of the widest box, halfway between the two rows, so each input enters on its own side
+\coordinate (emid) at ($(cat.east)!0.5!(geo.east)$);
+\node[cc] (edgecat) at ($(geo.east |- emid) + (8mm,0)$) {$\|$};
 
 \node[box, right=6mm of edgecat] (enc)
   {edge encoder $\phi_{\mathrm{edge}}$\\ $\mathbb{R}^{7} \to \mathbb{R}^{d_e}$};
@@ -72,11 +74,9 @@
 %% bottom-row arrows: knn feeds both feature constructors; both concat into the encoder
 \draw[arr] (knn.east) -- ++(3mm,0) |- (cat.west);
 \draw[arr] (knn.east) -- ++(3mm,0) |- (geo.west);
-%% single junction so only one arrowhead meets the concat circle
-\coordinate (ej) at ($(geo.east |- edgecat) + (2mm,0)$);
-\draw[semithick, black!75] (cat.east) -- ++(2mm,0) |- (ej);
-\draw[semithick, black!75] (geo.east) -- ++(2mm,0) |- (ej);
-\draw[arr] (ej) -- (edgecat);
+%% each input has its own entry: one-hot from above, geometric features from below
+\draw[arr] (cat.east) -| (edgecat.north);
+\draw[arr] (geo.east) -| (edgecat.south);
 \draw[arr] (edgecat) -- (enc);
 
 %% edge features enter the attention of every GAT layer

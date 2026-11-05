@@ -41,7 +41,7 @@ and cross-person similarity becomes uniform.
     \label{fig:embedding}
 \end{figure*}
 
-Where the modifications act can be read from the attention itself (Figure~\ref{fig:attention}).
+The attention itself shows where the modifications act (Figure~\ref{fig:attention}).
 Across the 1\,248 multi-person validation scenes, the standard heads of PG-GAT place less than 0.001 of their attention
 on same-type edges --- against 0.041 for uniform attention over the neighbourhood --- and 0.292 on skeletal-neighbour
 edges, against a uniform share of 0.173.
@@ -51,8 +51,9 @@ The edge categories therefore let PG-GAT route information along the skeleton of
 The baseline here is the synthetic-only two-layer model, and the comparison with it accordingly reflects the complete
 final model rather than the three modifications alone; the comparison of each model with uniform attention does not
 depend on this.
-The dedicated repulsion head behaves less as intended: 0.675 of its attention falls on the node itself, against 0.589
-under uniform attention, and it passes a node's own representation through more than it compares same-type neighbours.
+The dedicated repulsion head places 0.675 of its attention on the node itself, against 0.589 under uniform attention,
+and 0.325 on same-type neighbours, against 0.411; it therefore passes a node's own representation through more than
+it compares same-type neighbours.
 
 \begin{figure*}[!t]
     \centering
@@ -107,8 +108,8 @@ What the cost buys is reuse --- the same frozen network groups the output of thr
 retraining, which the native mechanisms, embedded in their own detectors, do not offer.
 For a fixed detector whose native grouping is available, the results favour the native grouping; the modular design is
 useful where detectors are exchanged, upgraded, or developed independently of the grouping stage.
-The system-level measurement sharpens the point: on identical joints the cost is 0.048 AP, concentrated in scenes with
-more people than the synthetic training data contained (Section~\ref{sec:results_ap}), and the matched-detection
+The system-level measurement sharpens the point: on identical joints the cost is 0.048 AP, rising to 0.076 in scenes with
+six or more people, beyond the synthetic training range (Section~\ref{sec:results_ap}), and the matched-detection
 accuracy therefore understates what a deployed system loses.
 
 The K-head behaves unexpectedly.
