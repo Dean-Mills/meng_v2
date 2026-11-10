@@ -1,0 +1,64 @@
+%% Cover letter for the CVIU submission (portal: required file "Cover letter", uploaded as PDF).
+%% CVIU's guide for authors sets no content requirements for the cover letter.
+%% Layout and fixed fields only: the body is Dean's to write against the content points (red \point markers).
+%% Agent builds: ./build.sh -> build_agent/ (never in this directory; the IDE compiles here on save).
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage{newtxtext,newtxmath}
+\usepackage[a4paper,margin=25mm]{geometry}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage[british]{babel}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.8em}
+\pagestyle{empty}
+%% Content-point marker: prints in red so an unfinished letter is obvious. Remove every \point before upload.
+\newcommand{\point}[1]{\textcolor{red}{[#1]}}
+
+\begin{document}
+
+%% Letterhead (postal address: use the same one as the manuscript's affiliation once confirmed)
+{\large\bfseries Dean Mills}\\
+Department of Electrical, Electronic and Computer Engineering\\
+University of Pretoria, Pretoria, South Africa\\
+\url{deansmills@gmail.com}/\url{u13081650@tuks.co.za}
+
+\vspace{1em}
+\today
+
+\vspace{1em}
+%% Name of the Editor-in-Chief from the journal's editorial-board page, if wanted
+The Editor-in-Chief\\
+\textit{Computer Vision and Image Understanding}
+
+\vspace{1em}
+\textbf{Re: Submission of the manuscript ``Detector-independent keypoint grouping for multi-person pose estimation with a graph attention network''}
+
+Dear Editor,
+
+On behalf of my supervisor, I submit the manuscript ``Detector-independent keypoint grouping for multi-person pose estimation with a graph attention network'' by Dean Mills and Hans Grobler for consideration as an original research article in \textit{Computer Vision and Image Understanding}.
+
+Bottom-up multi-person pose estimators assign detected keypoints to people using a grouping mechanism trained jointly with the detector, so the grouping cannot be reused once the detector changes.
+The manuscript treats grouping as a separate module and measures the cost of that separation.
+The proposed grouping module, PG-GAT, is a graph attention network that embeds keypoints so that $k$-means recovers the people.
+Trained on synthetic scenes and fine-tuned on COCO, it is applied to HigherHRNet detections and, without retraining, to YOLO11x-pose and RTMO-L; the autonomous pipeline trails the native grouping of all three detectors by 0.020 to 0.022 in pose grouping accuracy; at the system level, the cost is 0.048 average precision on identical keypoints, rising to 0.076 in scenes with six or more people.
+Learned grouping heads and modularity-based clustering did not improve on $k$-means, whereas embedding changes produced gains that transfer to real data, identifying the embedding as the limiting component.
+
+The work falls within the journal's research area of matching and recognition and follows recent keypoint and skeleton work published in the journal (Yin et al., 2024; Tanaka et al., 2024; Simoni et al., 2025; Clinckemaillie et al., 2026).
+
+The manuscript is original, has not been published previously, and is not under consideration for publication elsewhere.
+Both authors have read and approved the submitted version.
+The manuscript builds on my MEng dissertation at the University of Pretoria, which is currently under examination; an academic thesis does not constitute prior publication under Elsevier's policy.
+
+The authors declare no competing interests, and the use of generative AI in preparing the manuscript is declared in the manuscript.
+The code, the trained checkpoints and the synthetic dataset can be made publicly available once the examination of the dissertation is complete; until then, they can be made available to the editor and reviewers on request.
+
+Thank you for considering the manuscript.
+
+Yours sincerely,
+
+\vspace{2.5em}
+Dean Mills\\
+Corresponding author, on behalf of both authors
+
+\end{document}
